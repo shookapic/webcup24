@@ -131,6 +131,12 @@ Same-camera before/after: `docs/qa-captures/street-before/` (963b08b) vs `street
 
 Regression: world-checks 15/15 (60 Hz), building-check 22/22 on this build.
 
+## Bench NPCs checkpoint (2026-10-03 ~19:40)
+
+Nine benches (data in `layout.js`, rendered by `Plaza.jsx`, with thin colliders) with two seats each. NPCs (`Npcs.jsx`) now run a state machine: walk > (18 % at a node) reserve the nearest free seat within 14 m > `approach` (walk to the point 0.8 m in front of the seat) > `turn` (to face the bench direction) > `sitDown` (0.8 s, backs into the seat from wherever the turn ended, hips lowered, kit `sit` clip) > `sit` (8-22 s) > `standUp` (0.8 s) > release the seat > resume the route. Ownership is a module-level reservation array: a seat belongs to one walker from selection until it has stood up and left, so no two NPCs share or overlap a seat. The kit's blocky leg is one 1 m block, so seated legs stick out horizontally over the seat front (stylised, from the asset's own clip).
+
+`tools/qa/bench-check.mjs` (10 checks, PASS in normal and in reduced motion): forced cycle in the exact order, seated pose (y = -0.09, sit clip), seat released, largest single-frame move 0.047 m forced / 0.063 m over 6 simulated minutes (an earlier version snapped 0.22 m at the start of sitting down, fixed), 54-71 natural sit episodes in 6 min with zero double ownership / overlap / NaN, walkers keep travelling (4.2-4.5 km total) under reduced motion. Captures: `docs/qa-captures/bench/1-approach ... 6-resumed.png` (`tools/qa/bench-view.mjs`).
+
 ## Wave 6 triage (15:25, H+7h) — A, with B support
 
 D13 plain wording (310), D20 inclusive platform (930), F41 keyboard-only (620), F42 assistive-tech forms/errors (930), F43 colour distinction (310), F44 zoom without breaking layout (620). All portal/UI shaped: **Session A**. B support only: world HUD/phone must stay keyboard-operable (movement keys are ignored inside dialogs, T/V/Escape documented), colour must not be the only signal (alert badge has text), world HUD must survive 200% zoom (A's CSS). The world is not a substitute for the portal route; "Version accessible" link stays visible.

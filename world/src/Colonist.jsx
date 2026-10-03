@@ -119,7 +119,7 @@ export function Colonist({ avatar, getState, visible = true, reducedMotion, ...p
   }, [object, material, scene, colorKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mixer = useMemo(() => new AnimationMixer(object), [object]);
-  const actions = useMemo(() => Object.fromEntries(['idle', 'walk', 'sprint'].map((name) => {
+  const actions = useMemo(() => Object.fromEntries(['idle', 'walk', 'sprint', 'sit'].map((name) => {
     const action = mixer.clipAction(animations.find((clip) => clip.name === name), object);
     action.setLoop(LoopRepeat, Infinity);
     return [name, action];
@@ -131,9 +131,9 @@ export function Colonist({ avatar, getState, visible = true, reducedMotion, ...p
   useEffect(() => () => mixer.stopAllAction(), [mixer]);
 
   useFrame((_, delta) => {
-    const { speed, air } = getState?.() ?? idleState;
+    const { speed, air, sit } = getState?.() ?? idleState;
     // Airborne: hold a mid-stride pose; otherwise pick the clip from horizontal speed.
-    const name = speed < 0.4 && !air ? 'idle' : speed > 5.5 ? 'sprint' : 'walk';
+    const name = sit ? 'sit' : speed < 0.4 && !air ? 'idle' : speed > 5.5 ? 'sprint' : 'walk';
     const action = actions[name];
     if (current.current !== action) {
       action.reset().fadeIn(0.2).play();

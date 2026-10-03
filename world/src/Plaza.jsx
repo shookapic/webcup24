@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Color, MeshStandardMaterial } from 'three';
 import { Prop, kitMaterial } from './kit.jsx';
+import { benches } from './layout.js';
 
 // Spawn plaza + Mairie, built from Kenney Space Kit pieces re-coloured to the colony palette.
 // Collision footprints for these pieces live in layout.js (keep in sync).
@@ -50,6 +51,7 @@ export function Plaza() {
   return (
     <group>
       <Paving />
+      {benches.map((b) => <Bench key={`${b.x},${b.z}`} position={[b.x, 0, b.z]} rotation={b.ry} />)}
       {/* Mairie (hall and wings come from layout.buildings): entrance canopy, antenna, beacon masts */}
       <Prop name="platform_large" position={[0, 3.9, -16.5]} scale={[2.6, 3, 2.1]} />
       {pillars.map(([x, z]) => <Prop key={`${x},${z}`} name="supports_high" position={[x, 0, z]} scale={[1.1, 3.9, 1.1]} />)}
@@ -59,10 +61,6 @@ export function Plaza() {
       <Prop name="chimney" position={[12, 0, -16]} scale={[2, 3, 2]} />
       <mesh material={mats.amber} position={[12, 6.1, -16]}><sphereGeometry args={[0.35, 12, 8]} /></mesh>
       {/* Plaza furniture: benches facing the fountain-less centre, planters, lamps */}
-      <Bench position={[-8.5, 0, -2]} rotation={Math.PI / 2} />
-      <Bench position={[8.5, 0, -2]} rotation={-Math.PI / 2} />
-      <Bench position={[-5, 0, 4.5]} rotation={Math.PI * 0.85} />
-      <Bench position={[5, 0, 4.5]} rotation={-Math.PI * 0.85} />
       {[[-13, -3], [13, -3], [-6, -11], [6, -11], [0, 14]].map(([x, z]) => <Lamp key={`${x},${z}`} position={[x, 0, z]} />)}
       <Prop name="rock_largeA" position={[-9, 0, 9]} scale={2.4} rotation-y={1} />
       <Prop name="rocks_smallA" position={[10, 0, 8]} scale={3} />

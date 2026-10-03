@@ -99,6 +99,18 @@ export const trees = [
   T('tree_fat_fall', -8, 40, 4.6), T('tree_oak_fall', 8, 44, 4.4, 1), T('tree_default_fall', -20, 34, 4.4, 2), T('tree_fat_fall', 21, 42, 4.6, 3), T('tree_oak_fall', 28, 34, 4.4, 1),
 ];
 
+// Benches: `ry` multiple of PI/2, sitters face (sin ry, cos ry). Two seats per bench; seats are the NPC sit targets (Npcs.jsx).
+export const benches = [
+  { x: -8.5, z: -2, ry: Math.PI / 2 }, { x: 8.5, z: -2, ry: -Math.PI / 2 }, { x: -5, z: 4.5, ry: Math.PI }, { x: 5, z: 4.5, ry: Math.PI },
+  { x: -4, z: 47.2, ry: 0 }, { x: 4, z: 47.2, ry: 0 }, { x: 31.5, z: -6, ry: -Math.PI / 2 }, { x: -26, z: -6.5, ry: 0 }, { x: -36, z: -27.2, ry: Math.PI },
+];
+// Seat centre = hip position of a seated colonist (0.1 m in front of the backrest); `approach` = where the walker stands first.
+export const seats = benches.flatMap((b, bi) => [-0.55, 0.55].map((o) => {
+  const f = [Math.sin(b.ry), Math.cos(b.ry)];
+  const right = [f[1], -f[0]];
+  return { bench: bi, x: b.x + right[0] * o - f[0] * 0.1, z: b.z + right[1] * o - f[1] * 0.1, ry: b.ry, f, approach: [b.x + right[0] * o + f[0] * 0.8, b.z + right[1] * o + f[1] * 0.8] };
+}));
+
 // Planting beds (bushes, flowers, grass scattered deterministically inside each, plus a stone border).
 export const beds = [
   [-11, -8, 1.5], [11, -8, 1.5], [-12, 3, 1.5], [12, 3, 1.5], [-4.5, -12.5, 1.3], [4.5, -12.5, 1.3],
@@ -109,7 +121,7 @@ export const beds = [
   [-47, -20.5, 1.4], [-40, -20.5, 1.4], [-26, -38, 1.3],
 ];
 
-export const footprints = [...buildings.map(footprintOf), ...pillars, ...trees.map(({ x, z }) => ({ shape: 'box', x, z, w: 0.5, d: 0.5, h: 3, thin: true })), ...supports.map(({ x, z, y }) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: y, thin: true }))];
+export const footprints = [...buildings.map(footprintOf), ...pillars, ...benches.map((b) => { const turned = Math.round(Math.abs(b.ry) / (Math.PI / 2)) % 2 === 1; return { shape: 'box', x: b.x, z: b.z, w: turned ? 0.6 : 2.2, d: turned ? 2.2 : 0.6, h: 0.9, thin: true }; }), ...trees.map(({ x, z }) => ({ shape: 'box', x, z, w: 0.5, d: 0.5, h: 3, thin: true })), ...supports.map(({ x, z, y }) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: y, thin: true }))];
 
 // Roads [cx, cz, w, d] (w along x, d along z); drawn as paving and walked by the NPC graph below.
 export const roads = [
