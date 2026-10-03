@@ -1,6 +1,6 @@
 {
   "mode": "node",
-  "runtime": "node:22",
+  "runtime": "node:24",
   "startup": "server.mjs",
   "persist": ["data/"],
   "env": { "required": ["TERRA_NOVA_API_KEY"] }
