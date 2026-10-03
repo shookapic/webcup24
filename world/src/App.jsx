@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import { Sky } from './Sky.jsx';
@@ -10,10 +10,29 @@ import { Npcs } from './Npcs.jsx';
 import { Phone, useAnnouncements } from './Phone.jsx';
 import { defaultAvatar } from './Avatar.jsx';
 import { api } from './api.js';
+import { debug } from './debug.js';
 
 const PlayableCity = lazy(() => import('./PlayableCity.jsx'));
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ?debug&fps=N: frames are driven by window.__tn.run(seconds, input) at exactly N Hz.
+function SimDriver() {
+  const advance = useThree((state) => state.advance);
+  const clock = useThree((state) => state.clock);
+  useEffect(() => {
+    debug.run = async (seconds, input = null) => {
+      debug.input = input;
+      for (let i = 0; i < Math.round(seconds * debug.simFps); i++) {
+        // frameloop="never": advance() takes seconds and derives delta from clock.elapsedTime.
+        advance(clock.elapsedTime + 1 / debug.simFps);
+        if (i % 30 === 29) await new Promise((resolve) => setTimeout(resolve));
+      }
+      debug.input = null;
+    };
+  }, [advance, clock]);
+  return null;
+}
 
 export function App() {
   const [user, setUser] = useState();
@@ -64,14 +83,15 @@ export function App() {
 
   return (
     <>
-      <Canvas aria-hidden="true" dpr={[1, 1.5]} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
+      <Canvas aria-hidden="true" dpr={[1, 1.5]} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
         <fog attach="fog" args={['#5a2238', 70, 230]} />
         <hemisphereLight args={['#ffb38a', '#3a1424', 0.6]} />
         <directionalLight position={[60, 40, 50]} intensity={2.2} color="#ffd9b8" />
+        {debug.simFps > 0 && <SimDriver />}
         <Sky reducedMotion={reducedMotion} />
         <Ground />
-        <Rocks />
-        <Npcs reducedMotion={reducedMotion} />
+        {!debug.floorOnly && <Rocks />}
+        {!debug.floorOnly && <Npcs reducedMotion={reducedMotion} />}
         {user ? (
           <Suspense fallback={<City />}>
             <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} />
@@ -79,10 +99,10 @@ export function App() {
         ) : <City />}
         <LabelProjector />
         {/* Glow materials use toneMapped={false} and intensity > 1, so only they cross the bloom threshold. */}
-        <EffectComposer multisampling={4}>
+        {!debug.simFps && <EffectComposer multisampling={4}>
           <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
           <Vignette offset={0.3} darkness={0.55} />
-        </EffectComposer>
+        </EffectComposer>}
         {!user && <OrbitControls target={[0, 4, 0]} maxPolarAngle={1.45} minDistance={15} maxDistance={140} autoRotate={!reducedMotion} autoRotateSpeed={0.3} />}
       </Canvas>
       <LabelLayer />
