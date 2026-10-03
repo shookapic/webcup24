@@ -4,3 +4,5 @@ node_modules/
 .DS_Store
 dist/
 api-requests.md
+__pycache__/
+*.pyc
