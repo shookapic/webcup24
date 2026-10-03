@@ -1,0 +1,13 @@
+{
+  "name": "terra-nova",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.15"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "create-staff": "node --env-file-if-exists=.env create-staff.mjs"
+  }
+}

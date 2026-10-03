@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#07152c">
+    <meta name="description" content="Terra Nova, les services numériques de la cité.">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+    <title>Terra Nova — Le portail de la cité</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#contenu">Aller au contenu</a>
+    <header class="site-header" id="haut">
+      <a class="brand" href="#haut" aria-label="Terra Nova, accueil">
+        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span class="brand-name">TERRA <strong>NOVA</strong><small>LE PORTAIL DE LA CITÉ</small></span>
+      </a>
+      <nav aria-label="Navigation principale"><a href="#services">Services</a><a href="#actualites">Actualités</a><a href="#espace">Mon espace</a></nav>
+      <div class="header-tools">
+        <div class="accessibility-tools" role="group" aria-label="Options d’affichage">
+          <button id="font-down" type="button" aria-label="Réduire la taille du texte">A−</button>
+          <button id="font-up" type="button" aria-label="Agrandir la taille du texte">A+</button>
+          <button id="contrast-toggle" type="button" aria-pressed="false">Contraste</button>
+        </div>
+        <a class="account-link" href="#espace">Mon espace</a>
+      </div>
+    </header>
+
+    <main id="contenu">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <span class="eyebrow"><span class="eyebrow-line"></span> PREMIÈRE CITÉ D’UN NOUVEAU MONDE</span>
+          <h1 id="hero-title">Une ville à construire <em>ensemble.</em></h1>
+          <p>Découvrez les services de Terra Nova, restez informé et échangez avec les équipes municipales depuis un espace personnel.</p>
+          <div class="hero-actions"><a class="button button-primary" href="#services">Explorer les services <span aria-hidden="true">↗</span></a><a class="text-link" href="#espace">Accéder à mon espace <span aria-hidden="true">↓</span></a></div>
+          <p class="hero-footnote"><span aria-hidden="true">✦</span> Les premiers services numériques de la cité.</p>
+        </div>
+        <div class="hero-art" aria-hidden="true"><div class="orbit orbit-outer"></div><div class="orbit orbit-inner"></div><div class="planet"><div class="planet-sheen"></div></div><div class="moon"></div><div class="art-label label-top">TERRA NOVA <span>PORTAIL</span></div><div class="art-label label-bottom">NOUVEL HORIZON <span>◎ EN DIRECT</span></div></div>
+      </section>
+
+      <section class="overview" id="services" aria-labelledby="services-title">
+        <nav class="breadcrumb" aria-label="Fil d’Ariane des services"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Services</span></nav>
+        <div class="section-heading"><div><span class="section-kicker">01 / VIE QUOTIDIENNE</span><h2 id="services-title">Les services de la cité</h2></div><p>Choisissez le service qui répond à votre besoin et retrouvez les informations utiles.</p></div>
+        <div id="services-list" class="service-grid"></div>
+        <p id="services-status" class="section-status" role="status"></p>
+      </section>
+
+      <section class="requests-section" id="actualites" aria-labelledby="news-title">
+        <nav class="breadcrumb" aria-label="Fil d’Ariane des actualités"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Actualités</span></nav>
+        <div class="section-heading"><div><span class="section-kicker">02 / INFORMATIONS</span><h2 id="news-title">Actualités municipales</h2></div><p>Les annonces et informations pratiques publiées par la ville.</p></div>
+        <div id="news-list" class="news-grid"></div>
+        <p id="news-status" class="section-status" role="status"></p>
+      </section>
+
+      <section class="account-section" id="espace" aria-labelledby="account-title">
+        <nav class="breadcrumb" aria-label="Fil d’Ariane de l’espace personnel"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Mon espace</span></nav>
+        <div class="section-heading"><div><span class="section-kicker">03 / VOTRE ESPACE</span><h2 id="account-title">Un espace pour chacun</h2></div><p>Retrouvez vos échanges et les outils adaptés à votre rôle.</p></div>
+        <div id="guest-area" class="auth-grid">
+          <form id="login-form" class="panel">
+            <h3>Se connecter</h3><p>Retrouvez votre espace personnel.</p>
+            <label>Adresse e-mail <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+            <label>Mot de passe <input name="password" type="password" autocomplete="current-password" required></label>
+            <button class="button button-primary" type="submit">Se connecter</button>
+            <p id="login-status" class="form-status" role="status" aria-live="polite"></p>
+          </form>
+          <form id="register-form" class="panel">
+            <h3>Créer un compte</h3><p>Inscrivez-vous pour contacter la ville.</p>
+            <label>Nom affiché <input name="name" type="text" autocomplete="name" required minlength="2" maxlength="80"></label>
+            <label>Adresse e-mail <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+            <label>Mot de passe <input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" aria-describedby="password-help"></label>
+            <small id="password-help">12 caractères minimum.</small>
+            <button class="button button-primary" type="submit">Créer mon compte</button>
+            <p id="register-status" class="form-status" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+
+        <div id="member-area" hidden>
+          <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name"></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
+          <div id="citizen-area" hidden>
+            <div class="workspace-grid">
+              <form id="message-form" class="panel">
+                <h3>Contacter ou signaler</h3><p>Posez une question ou signalez un problème dans la ville. Vous recevrez une confirmation et pourrez suivre son état ici.</p>
+                <label>Type de demande <select name="kind" id="message-kind"><option value="contact">Question aux services municipaux</option><option value="incident">Signaler un problème</option></select></label>
+                <label>Sujet <input name="subject" type="text" required minlength="4" maxlength="120"></label>
+                <label id="location-field" hidden>Lieu du problème <input name="location" type="text" minlength="5" maxlength="180" placeholder="Rue, quartier ou repère précis"></label>
+                <label>Votre message <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label>
+                <button class="button button-primary" type="submit">Envoyer mon message</button>
+                <p id="message-status" class="form-status" role="status" aria-live="polite"></p>
+              </form>
+              <div class="panel"><h3>Mes messages</h3><p>Suivez les réponses de la ville.</p><div id="citizen-messages" class="message-list"></div></div>
+            </div>
+          </div>
+
+          <div id="staff-area" hidden>
+            <div class="section-heading staff-heading"><div><span class="section-kicker">ESPACE AGENT</span><h3>Suivi de l’activité</h3></div><p>Demandes citoyennes et flux officiel, dans un espace réservé aux agents.</p></div>
+            <div class="workspace-grid">
+              <div class="panel"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p><div id="staff-messages" class="message-list"></div></div>
+              <div class="panel"><div class="panel-title-row"><h3>Flux officiel Terra Nova</h3><button id="refresh-button" type="button">Actualiser ↻</button></div><p id="feed-status" role="status" aria-live="polite">Connexion au flux…</p><div class="mini-stats"><span id="visible-count">— demandes</span><span id="current-wave">Vague —</span><span id="next-wave">Prochaine vague —</span></div></div>
+            </div>
+            <div class="feed-panel"><div class="section-heading"><div><span class="section-kicker">BESOINS PUBLIÉS</span><h3>Demandes du concours</h3></div><p>Seules les demandes déjà diffusées figurent ici.</p></div><label class="search-field"><span class="visually-hidden">Rechercher dans les demandes officielles</span><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Rechercher un besoin ou un code…"></label><div id="requests-list" class="requests-grid"></div><p id="requests-empty" class="section-status"></p></div>
+          </div>
+
+          <div id="admin-area" class="admin-grid" hidden>
+            <form id="service-form" class="panel"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <form id="news-form" class="panel"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer"><span>TERRA <strong>NOVA</strong></span><span>Une cité qui grandit avec ses habitants.</span><a href="#haut">Retour en haut ↑</a></footer>
+  </body>
+</html>
