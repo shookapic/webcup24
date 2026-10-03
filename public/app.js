@@ -417,6 +417,12 @@ function clearIdentity() {
   renderServices();
 }
 
+// F50: the staff list can be narrowed by state, type and the resident's profile district; the dashboard numbers open it already filtered.
+let staffMessages = [];
+const staffFilter = () => ({ status: $('#staff-filter-status').value, kind: $('#staff-filter-kind').value, district: $('#staff-filter-district').value });
+const staffMatches = (item, { status, kind, district }) => (!status || item.status === status) && (!kind || item.kind === kind) && (!district || (district === 'none' ? !item.citizen_district : item.citizen_district === district));
+for (const id of ['#staff-filter-status', '#staff-filter-kind', '#staff-filter-district']) $(id).addEventListener('change', () => renderMessages(staffMessages));
+
 function renderMessages(messages) {
   const staff = ['agent', 'admin'].includes(user?.role);
   const list = staff ? $('#staff-messages') : $('#citizen-messages');
@@ -424,12 +430,18 @@ function renderMessages(messages) {
   messageCount = messages.length;
   renderGuide();
   if (staff) $('#pending-count').textContent = t('{n} à traiter', { n: messages.filter((item) => item.status === 'new').length });
+  if (staff) staffMessages = messages;
+  const shown = staff ? messages.filter((item) => staffMatches(item, staffFilter())) : messages;
   if (!messages.length) {
     list.append(element('p', 'list-empty', t(staff ? 'Aucun message reçu pour le moment.' : 'Vous n’avez pas encore envoyé de message.')));
     return;
   }
+  if (!shown.length) {
+    list.append(element('p', 'list-empty', t('Aucun message ne correspond à ces filtres.')));
+    return;
+  }
   const priority = { new: 0, in_progress: 1, resolved: 2 };
-  for (const item of [...messages].sort((a, b) => priority[a.status] - priority[b.status] || b.id - a.id)) {
+  for (const item of [...shown].sort((a, b) => priority[a.status] - priority[b.status] || b.id - a.id)) {
     const card = element('article', 'message-card');
     const heading = element('div', 'message-heading');
     heading.append(element('h4', '', item.subject));
@@ -566,6 +578,18 @@ $('#notices-read').addEventListener('click', async () => {
 
 // ---- F50: the staff dashboard. The server counts everything from the database; here we only lay it out.
 let dashboard = null;
+// A dashboard number that counts messages opens the staff list already narrowed to exactly those messages.
+$('#dashboard-panel').addEventListener('click', (event) => {
+  const anchor = event.target.closest('a[data-filter]');
+  if (!anchor) return;
+  const filter = JSON.parse(anchor.dataset.filter);
+  $('#staff-filter-status').value = filter.status || '';
+  $('#staff-filter-kind').value = filter.kind || '';
+  $('#staff-filter-district').value = filter.district || '';
+  renderMessages(staffMessages);
+  $('#staff-messages-panel').focus();
+});
+
 async function loadDashboard() {
   if (!['agent', 'admin'].includes(user?.role)) return;
   try {
@@ -593,19 +617,52 @@ function renderDashboard() {
   if (d.transports.disrupted.length) todo.push(t('Lignes perturbées : {names}.', { names: d.transports.disrupted.join(', ') }));
   if (d.security.blocked_attempts || d.security.failed_logins >= 10) todo.push(t('Connexions : {failed} échecs et {blocked} tentatives bloquées (voir Sécurité).', { failed: d.security.failed_logins, blocked: d.security.blocked_attempts }));
   $('#dashboard-todo').replaceChildren(...(todo.length ? todo : [t('Rien d’urgent : aucune demande n’attend et rien n’est perturbé.')]).map((line) => element('li', '', line)));
+  // Every number opens what it counts: the message ones open the staff list already filtered, the others jump to their panel.
   const tiles = [
-    ['Messages à traiter', d.messages.new], ['Messages en cours', d.messages.in_progress], ['Messages résolus', d.messages.resolved],
-    ['Inquiétudes à lire', d.concerns.received], ['Signalements publiés', d.public.requests], ['Soutiens donnés', d.public.supports], ['Messages reçus aujourd’hui', d.messages.received_today], ['Messages reçus sur 7 jours', d.messages.received_week],
-    ['Rendez-vous réservés aujourd’hui', d.appointments.booked_today], ['Rendez-vous réservés sur 7 jours', d.appointments.booked_week], ['Horaires libres sur 7 jours', d.appointments.open_week],
-    ['Habitants inscrits', d.residents.total], ['Nouveaux habitants sur 7 jours', d.residents.new_week],
-    ...(d.residents.deactivated === undefined ? [] : [['Comptes désactivés', d.residents.deactivated]]),
-    ['Services', d.services.total], ['Services indisponibles', d.services.unavailable.length], ['Alertes urgentes affichées', d.alerts.active], ['Lignes perturbées', d.transports.disrupted.length], ['Lieux de la ville', d.places],
-    ['Échecs de connexion (15 min)', d.security.failed_logins], ['Tentatives bloquées (15 min)', d.security.blocked_attempts],
+    ['Messages à traiter', d.messages.new, { status: 'new' }], ['Messages en cours', d.messages.in_progress, { status: 'in_progress' }], ['Messages résolus', d.messages.resolved, { status: 'resolved' }],
+    ['Inquiétudes à lire', d.concerns.received, '#concerns-panel'], ['Signalements publiés', d.public.requests], ['Soutiens donnés', d.public.supports],
+    ['Messages reçus aujourd’hui', d.messages.received_today, {}], ['Messages reçus sur 7 jours', d.messages.received_week, {}],
+    ['Rendez-vous réservés aujourd’hui', d.appointments.booked_today, '#slots-panel'], ['Rendez-vous réservés sur 7 jours', d.appointments.booked_week, '#slots-panel'], ['Horaires libres sur 7 jours', d.appointments.open_week, '#slots-panel'],
+    ['Habitants inscrits', d.residents.total, '#citizens-panel'], ['Nouveaux habitants sur 7 jours', d.residents.new_week, '#citizens-panel'],
+    ...(d.residents.deactivated === undefined ? [] : [['Comptes désactivés', d.residents.deactivated, '#citizens-panel']]),
+    ['Services', d.services.total, '#availability-form'], ['Services indisponibles', d.services.unavailable.length, '#availability-form'], ['Alertes urgentes affichées', d.alerts.active, '#actualites'], ['Lignes perturbées', d.transports.disrupted.length, '#traffic-form'], ['Lieux de la ville', d.places, '#lieux'],
+    ['Échecs de connexion (15 min)', d.security.failed_logins, '#security-panel'], ['Tentatives bloquées (15 min)', d.security.blocked_attempts, '#security-panel'],
   ];
-  $('#dashboard-tiles').replaceChildren(...tiles.map(([label, value]) => {
+  const numberLink = (label, value, target) => {
+    const anchor = element('a', '', String(value));
+    anchor.href = typeof target === 'string' ? target : '#staff-messages-panel';
+    if (typeof target === 'object') anchor.dataset.filter = JSON.stringify(target);
+    anchor.setAttribute('aria-label', `${value} · ${t(label)} · ${t('voir la liste')}`);
+    return anchor;
+  };
+  $('#dashboard-tiles').replaceChildren(...tiles.map(([label, value, target]) => {
     const tile = element('div', 'dashboard-tile');
-    tile.append(element('dt', '', t(label)), element('dd', '', String(value)));
+    tile.append(element('dt', '', t(label)), element('dd', '', target ? '' : String(value)));
+    if (target) tile.querySelector('dd').append(numberLink(label, value, target));
     return tile;
+  }));
+  const hours = d.messages.avg_resolution_hours;
+  $('#dashboard-average').textContent = hours === null
+    ? t('Temps moyen de résolution : aucune demande résolue pour le moment.')
+    : t('Temps moyen de résolution : {value} (de la réception au dernier changement d’état des demandes résolues).', { value: hours < 1 ? t('{n} min', { n: Math.round(hours * 60) }) : hours < 48 ? t('{n} h', { n: String(hours).replace('.', lang === 'en' ? '.' : ',') }) : t('{n} jours', { n: String(Math.round(hours / 2.4) / 10).replace('.', lang === 'en' ? '.' : ',') }) });
+  const peak = Math.max(1, ...d.activity.map((row) => row.received));
+  $('#dashboard-activity').replaceChildren(...d.activity.map((row) => {
+    const day = new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' }).format(new Date(`${row.day}T00:00:00Z`));
+    const line = element('li', 'activity-row');
+    const bar = element('meter', '', String(row.received));
+    Object.assign(bar, { min: 0, max: peak, value: row.received });
+    bar.setAttribute('aria-label', `${day} : ${t('Reçus')} ${row.received}`);
+    line.append(element('span', 'activity-day', day), bar, element('span', 'activity-values', `${t('Reçus')} ${row.received} · ${t('Résolus')} ${row.resolved}`));
+    return line;
+  }));
+  $('#dashboard-districts').replaceChildren(...(d.messages.incidents_by_district.length ? d.messages.incidents_by_district : [null]).map((row) => {
+    if (!row) return element('li', 'list-empty', t('Aucun signalement pour le moment.'));
+    const line = element('li');
+    const anchor = element('a', '', t('{district} : {total} (non résolus : {open})', { district: row.district || t('Quartier non précisé'), total: row.total, open: row.open }));
+    anchor.href = '#staff-messages-panel';
+    anchor.dataset.filter = JSON.stringify({ kind: 'incident', district: row.district || 'none' });
+    line.append(anchor);
+    return line;
   }));
   $('#dashboard-recent').replaceChildren(...(d.recent.length ? d.recent : [null]).map((row) => element('li', row ? '' : 'list-empty', row ? `${row.at.replace('T', ' ').slice(0, 16)} · ${row.actor_name} ${row.summary}` : t('Aucune action enregistrée.'))));
 }

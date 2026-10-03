@@ -391,6 +391,50 @@ try {
   check('F50 the dashboard lists a service with a current outage and not one whose announced return time has passed', outageBoard.services.unavailable.includes(outageNow.title) && !outageBoard.services.unavailable.includes(outagePast.title), JSON.stringify(outageBoard.services));
   await agent.call(`/api/services/${outageNow.id}/availability`, 'PATCH', { availability: 'available' });
   await agent.call(`/api/services/${outagePast.id}/availability`, 'PATCH', { availability: 'available' });
+  // F50: the documented figures: reports per district, average resolution time, seven-day activity
+  const enrol = async (name, email) => { const client = new Client(); await client.call('/api/auth/register', 'POST', { name, email, password: 'kpi-password-1234' }); return client; };
+  const kb0 = (await agent.call('/api/admin/dashboard')).data;
+  const bucket = (board, district) => board.messages.incidents_by_district.find((row) => row.district === district) || { total: 0, open: 0 };
+  const north = await enrol('Habitant Nord', 'nord@smoke.test');
+  const south = await enrol('Habitant Sud', 'sud@smoke.test');
+  const nowhere = await enrol('Habitant Sans Quartier', 'sans@smoke.test');
+  await north.call('/api/me', 'PATCH', { name: 'Habitant Nord', district: 'Quartier nord' });
+  await south.call('/api/me', 'PATCH', { name: 'Habitant Sud', district: 'Quartier sud' });
+  const file2 = (client, subject) => client.call('/api/messages', 'POST', { subject, body: 'Un signalement pour compter les quartiers.', kind: 'incident', location: 'Rue de test' });
+  const n1 = await file2(north, 'Signalement nord un');
+  await file2(north, 'Signalement nord deux');
+  await file2(south, 'Signalement sud un');
+  await file2(nowhere, 'Signalement sans quartier');
+  await agent.call(`/api/messages/${n1.data.id}`, 'PATCH', { status: 'resolved' });
+  const kb1 = (await agent.call('/api/admin/dashboard')).data;
+  check('F50 reports per district: counted by the resident\'s profile district, with the number still open; no district is its own group', bucket(kb1, 'Quartier nord').total === bucket(kb0, 'Quartier nord').total + 2 && bucket(kb1, 'Quartier nord').open === bucket(kb0, 'Quartier nord').open + 1 && bucket(kb1, 'Quartier sud').total === bucket(kb0, 'Quartier sud').total + 1 && bucket(kb1, 'Quartier sud').open === bucket(kb0, 'Quartier sud').open + 1 && bucket(kb1, null).total === bucket(kb0, null).total + 1, JSON.stringify(kb1.messages.incidents_by_district));
+  check('F50 the district counts carry no names, e-mails or message text', !/Habitant (Nord|Sud)|nord@|sud@|sans@|Signalement|Rue de test/.test(JSON.stringify(kb1.messages.incidents_by_district)));
+  const northRow = (await agent.call('/api/messages')).data.messages.find((m) => m.subject === 'Signalement nord deux');
+  check('F50 staff can filter their list by that district: the staff message list carries the resident\'s district', northRow.citizen_district === 'Quartier nord' && (await agent.call('/api/messages')).data.messages.find((m) => m.subject === 'Signalement sans quartier').citizen_district === null && !('citizen_district' in (await north.call('/api/messages')).data.messages[0]));
+  const kpi = new DatabaseSync(env.DATA_PATH);
+  const resolvedIds = kpi.prepare("SELECT id FROM messages WHERE status = 'resolved'").all().map((row) => row.id);
+  const resolvedCount = resolvedIds.length;
+  kpi.prepare("UPDATE messages SET created_at = datetime('now', '-5 hours'), updated_at = datetime('now', '-3 hours') WHERE status = 'resolved'").run();
+  kpi.prepare("UPDATE messages SET created_at = datetime('now', '-30 hours'), updated_at = datetime('now', '-6 hours') WHERE id = (SELECT MIN(id) FROM messages WHERE status = 'resolved')").run();
+  const expectedAverage = Math.round(((resolvedCount - 1) * 2 + 24) / resolvedCount * 10) / 10;
+  const kb2 = (await agent.call('/api/admin/dashboard')).data;
+  check('F50 average resolution time is computed from receipt to resolution (known timestamps: expected ' + expectedAverage + ' h over ' + resolvedCount + ' resolved)', kb2.messages.avg_resolution_hours === expectedAverage, String(kb2.messages.avg_resolution_hours));
+  kpi.prepare("UPDATE messages SET status = 'new' WHERE status = 'resolved'").run();
+  check('F50 with nothing resolved the average is null (the page says so instead of showing zero)', (await agent.call('/api/admin/dashboard')).data.messages.avg_resolution_hours === null);
+  kpi.prepare("UPDATE messages SET status = 'resolved' WHERE status = 'new' AND subject LIKE 'Signalement%' AND id % 2 = 0").run();
+  const ka1 = (await agent.call('/api/admin/dashboard')).data;
+  check('F50 activity has seven city days, oldest first, ending today, and the received figures add up to the 7-day count', ka1.activity.length === 7 && ka1.activity.every((d, i) => i === 0 || d.day > ka1.activity[i - 1].day) && ka1.activity[6].received === ka1.messages.received_today && ka1.activity.reduce((sum, d) => sum + d.received, 0) === ka1.messages.received_week, JSON.stringify(ka1.activity));
+  const fresh = kpi.prepare("SELECT id FROM messages WHERE created_at > datetime('now', '-1 hour') AND id NOT IN (SELECT MIN(id) FROM messages WHERE created_at > datetime('now', '-1 hour')) ORDER BY id").all().map((row) => row.id);
+  const kmoved = fresh[0];
+  const kold = fresh[fresh.length - 1];
+  kpi.prepare("UPDATE messages SET created_at = datetime(created_at, '-3 days') WHERE id = ?").run(kmoved);
+  kpi.prepare("UPDATE messages SET created_at = datetime(created_at, '-9 days') WHERE id = ?").run(kold);
+  const ka2 = (await agent.call('/api/admin/dashboard')).data;
+  check('F50 activity follows the data: a message kmoved three days back counts on that day, one older than a week counts nowhere', ka2.activity[3].received === ka1.activity[3].received + 1 && ka2.activity[6].received === ka1.activity[6].received - 2 && ka2.messages.received_week === ka1.messages.received_week - 1, JSON.stringify(ka2.activity));
+  // put the statuses back so later checks see the data they expect
+  kpi.prepare("UPDATE messages SET status = 'new' WHERE status = 'resolved' AND id NOT IN (" + resolvedIds.join(',') + ')').run();
+  kpi.prepare("UPDATE messages SET status = 'resolved' WHERE id IN (" + resolvedIds.join(',') + ')').run();
+  kpi.close();
   check('F50 the outage list is empty again once both are marked available', (await agent.call('/api/admin/dashboard')).data.services.unavailable.length === 0);
 
   // F51: concerns about data use, and the personal export

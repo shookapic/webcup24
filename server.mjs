@@ -483,16 +483,31 @@ async function route(request, response) {
     const oldest = one("SELECT MIN(created_at) AS at FROM messages WHERE status = 'new'").at;
     const waitingHours = oldest ? Math.max(0, Math.floor((Date.now() - Date.parse(oldest.replace(' ', 'T') + 'Z')) / 3_600_000)) : null;
     const week = addMinutes(`${today}T00:00`, 7 * 1440);
+    // Average time to resolve: from receipt to the last status change of each resolved request (resolved is the end state; reopening removes it from the average).
+    const averageHours = one("SELECT AVG((julianday(updated_at) - julianday(created_at)) * 24) AS h FROM messages WHERE status = 'resolved'").h;
+    const incidentsByDistrict = db.prepare("SELECT users.district AS district, COUNT(*) AS total, SUM(CASE WHEN messages.status != 'resolved' THEN 1 ELSE 0 END) AS open FROM messages JOIN users ON users.id = messages.user_id WHERE messages.kind = 'incident' GROUP BY users.district ORDER BY total DESC, users.district").all();
+    // seven city days, oldest first: requests received and requests resolved on that day (city time = UTC+4)
+    const activity = Array.from({ length: 7 }, (_, index) => {
+      const day = addMinutes(`${today}T00:00`, (index - 6) * 1440).slice(0, 10);
+      return {
+        day,
+        received: one("SELECT COUNT(*) AS n FROM messages WHERE substr(datetime(created_at, '+4 hours'), 1, 10) = ?", day).n,
+        resolved: one("SELECT COUNT(*) AS n FROM messages WHERE status = 'resolved' AND substr(datetime(updated_at, '+4 hours'), 1, 10) = ?", day).n,
+      };
+    });
     const unavailable = db.prepare("SELECT title, availability, available_again FROM services WHERE availability = 'unavailable'").all().map(serviceView).filter((row) => row.availability === 'unavailable').map((row) => row.title);
     const dashboard = {
       generated_at: now,
       messages: {
         new: byStatus.new || 0, in_progress: byStatus.in_progress || 0, resolved: byStatus.resolved || 0,
         waiting_hours: waitingHours,
+        avg_resolution_hours: averageHours === null ? null : Math.round(averageHours * 10) / 10,
+        incidents_by_district: incidentsByDistrict,
         received_today: one('SELECT COUNT(*) AS n FROM messages WHERE created_at >= ?', dayStart).n,
         received_week: one('SELECT COUNT(*) AS n FROM messages WHERE created_at >= ?', weekStart).n,
         incidents_open: one("SELECT COUNT(*) AS n FROM messages WHERE kind = 'incident' AND status != 'resolved'").n,
       },
+      activity,
       appointments: {
         booked_today: one("SELECT COUNT(*) AS n FROM appointments WHERE status = 'booked' AND substr(starts_at, 1, 10) = ? AND starts_at > ?", today, now).n,
         booked_week: one("SELECT COUNT(*) AS n FROM appointments WHERE status = 'booked' AND starts_at > ? AND starts_at < ?", now, week).n,
@@ -815,7 +830,7 @@ async function route(request, response) {
     const user = requireUser(request);
     const all = ['agent', 'admin'].includes(user.role);
     const messages = all
-      ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
+      ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, users.district AS citizen_district, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
       : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT public_title FROM public_requests WHERE message_id = messages.id) AS public_title, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
     return sendJson(response, 200, { messages });
   }

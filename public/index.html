@@ -210,11 +210,22 @@
               <h4>À faire maintenant</h4>
               <ul id="dashboard-todo" class="dashboard-todo" data-content></ul>
               <dl id="dashboard-tiles" class="dashboard-tiles" data-content></dl>
+              <p id="dashboard-average" class="dashboard-average" data-content></p>
+              <h4>Activité des 7 derniers jours</h4>
+              <ol id="dashboard-activity" class="dashboard-activity" data-content></ol>
+              <h4>Signalements par quartier de l’habitant</h4>
+              <ul id="dashboard-districts" class="dashboard-districts" data-content></ul>
               <h4>Dernières actions</h4>
               <ol id="dashboard-recent" class="dashboard-recent" data-content></ol>
             </section>
             <div class="workspace-grid">
-              <div class="panel" id="staff-messages-panel" tabindex="-1"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p><div id="staff-messages" class="message-list" data-content></div></div>
+              <div class="panel" id="staff-messages-panel" tabindex="-1"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p>
+                <div class="filter-row">
+                  <label>État <select id="staff-filter-status"><option value="">Tous</option><option value="new">À traiter</option><option value="in_progress">En cours</option><option value="resolved">Résolu</option></select></label>
+                  <label>Type <select id="staff-filter-kind"><option value="">Tous</option><option value="incident">Signalements de problème</option><option value="contact">Questions aux services</option></select></label>
+                  <label>Quartier de l’habitant <select id="staff-filter-district"><option value="">Tous</option><option>Centre-ville</option><option>Quartier nord</option><option>Quartier est</option><option>Quartier ouest</option><option>Quartier sud</option><option value="none">Non précisé</option></select></label>
+                </div>
+                <div id="staff-messages" class="message-list" data-content></div></div>
               <div class="panel"><div class="panel-title-row"><h3>Flux officiel Terra Nova</h3><button id="refresh-button" type="button">Actualiser ↻</button></div><p id="feed-status" role="status" aria-live="polite">Connexion au flux…</p><div class="mini-stats"><span id="visible-count">— demandes</span><span id="current-wave">Vague —</span><span id="next-wave">Prochaine vague —</span></div></div>
             </div>
             <form id="traffic-form" class="panel traffic-form" tabindex="-1">
