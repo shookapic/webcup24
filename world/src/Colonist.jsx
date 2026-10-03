@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { AnimationMixer, LoopRepeat, MeshStandardMaterial, Source } from 'three';
+import { AnimationMixer, BoxGeometry, Group, LoopRepeat, Mesh, MeshStandardMaterial, Source } from 'three';
 import { debug } from './debug.js';
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 // Rigged colonist: Kenney Blocky Characters "character-c" (CC0, see docs/ASSETS.md), clips idle / walk / sprint.
 // Origin = feet, faces +z, ~1.6 m tall. Skin / outfit / accent recolour the shared atlas per colour set (cached).
-const URL = `${import.meta.env.BASE_URL}assets/models/chars/character-c.glb`;
+// Stable look ids -> Kenney model letters (same rig, same clips; different hair, face and clothing painted in the atlas).
+export const LOOKS = { colon: 'c', lunettes: 'i', bandeau: 'n' };
+export const ACCESSORIES = ['none', 'sac', 'visiere'];
+export const lookUrl = (letter) => `${import.meta.env.BASE_URL}assets/models/chars/character-${letter}.glb`;
+const URL = lookUrl(LOOKS.colon);
+// The kit's character is 2.7 m tall (legs 1.0 + torso 0.9 + head 0.8, measured); scaled to a 1.7 m colonist.
+export const HEIGHT_SCALE = 0.64;
 export const FEET_BELOW_BODY = 0.96; // ecctrl body centre above the floor at rest (measured, docs/QA_B.md)
 
 useGLTF.preload(URL);
@@ -29,8 +35,8 @@ const textures = new Map(); // colour key -> Promise<Texture>
 
 // Recolour the atlas: skin-coloured pixels (head, hands) -> skin; torso + sleeves -> outfit; legs -> accent.
 // Shading is kept by scaling the new colour with each pixel's luminance relative to the region's mean.
-function recolored(original, { skin, outfit, accent }) {
-  const key = `${skin}${outfit}${accent}`;
+function recolored(original, { skin, outfit, accent }, letter) {
+  const key = `${letter}${skin}${outfit}${accent}`;
   if (textures.has(key)) return textures.get(key);
   const pending = build(original, key, { skin, outfit, accent });
   textures.set(key, pending);
@@ -86,10 +92,11 @@ async function build(original, key, { skin, outfit, accent }) {
 const idleState = { speed: 0, air: false };
 
 // `getState()` is read every frame: { speed (m/s horizontal), air }. Physics owns displacement; clips play in place.
-export function Colonist({ avatar, getState, visible = true, reducedMotion, ...props }) {
-  const { scene, animations } = useGLTF(URL);
+export function Colonist({ avatar, getState, visible = true, reducedMotion, letter: letterOverride, ...props }) {
+  const letter = letterOverride ?? LOOKS[avatar?.look] ?? LOOKS.colon; // unknown / missing look ids fall back to the default model
+  const { scene, animations } = useGLTF(lookUrl(letter));
   const colors = clean(avatar);
-  const colorKey = `${colors.skin}${colors.outfit}${colors.accent}`;
+  const colorKey = `${letter}${colors.skin}${colors.outfit}${colors.accent}`;
   const object = useMemo(() => {
     const root = clone(scene);
     root.traverse((child) => {
@@ -109,14 +116,45 @@ export function Colonist({ avatar, getState, visible = true, reducedMotion, ...p
     scene.traverse((child) => { if (child.isMesh && !original) original = child.material.map; });
     if (!original) return undefined;
     let live = true;
-    recolored(original, colors).then((map) => {
+    recolored(original, colors, letter).then((map) => {
       if (!live) return;
       material.map = map;
       material.needsUpdate = true;
-      object.traverse((child) => { if (child.isMesh) child.material = material; });
+      object.traverse((child) => { if (child.isMesh && !child.userData.accessory) child.material = material; });
     });
     return () => { live = false; };
   }, [object, material, scene, colorKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Optional accessory, built from primitives and parented to the rig's own head / torso nodes so it follows every clip.
+  const accessory = ACCESSORIES.includes(avatar?.accessory) ? avatar.accessory : 'none';
+  useEffect(() => {
+    const added = [];
+    const attach = (parent, mesh) => { mesh.traverse((o) => { o.userData.accessory = true; }); parent?.add(mesh); added.push(mesh); };
+    const tint = new MeshStandardMaterial({ color: colors.accent, roughness: 0.6 });
+    const glow = new MeshStandardMaterial({ color: colors.accent, emissive: colors.accent, emissiveIntensity: 0.7, roughness: 0.3 });
+    const dark = new MeshStandardMaterial({ color: '#27363f', roughness: 0.7 });
+    // Rig metrics (measured): torso box x +-0.4, y 0.3..1.2 above its node, z +-0.3; the head node is scaled 0.1 with a
+    // +-4 x 0..8 x +-4 mesh, so head accessories live in a x10 pivot to be written in metres.
+    if (accessory === 'sac') {
+      const torso = object.getObjectByName('torso');
+      const pack = new Mesh(new BoxGeometry(0.5, 0.55, 0.18), tint);
+      pack.position.set(0, 0.75, -0.39);
+      pack.castShadow = true;
+      attach(torso, pack);
+      for (const x of [-0.18, 0.18]) { const strap = new Mesh(new BoxGeometry(0.07, 0.6, 0.03), dark); strap.position.set(x, 0.75, -0.315); attach(torso, strap); }
+    }
+    if (accessory === 'visiere') {
+      const pivot = new Group();
+      pivot.scale.setScalar(10);
+      const visor = new Mesh(new BoxGeometry(0.78, 0.14, 0.06), glow);
+      visor.position.set(0, 0.4, 0.45);
+      const brim = new Mesh(new BoxGeometry(0.9, 0.06, 0.7), dark);
+      brim.position.set(0, 0.87, 0.3);
+      pivot.add(visor, brim);
+      attach(object.getObjectByName('head'), pivot);
+    }
+    return () => { added.forEach((m) => { m.parent?.remove(m); m.traverse((o) => o.geometry?.dispose()); }); tint.dispose(); glow.dispose(); dark.dispose(); };
+  }, [object, accessory, colors.accent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mixer = useMemo(() => new AnimationMixer(object), [object]);
   const actions = useMemo(() => Object.fromEntries(['idle', 'walk', 'sprint', 'sit'].map((name) => {
@@ -147,7 +185,9 @@ export function Colonist({ avatar, getState, visible = true, reducedMotion, ...p
 
   return (
     <group {...props} visible={visible}>
-      <primitive object={object} />
+      <group scale={HEIGHT_SCALE}>
+        <primitive object={object} />
+      </group>
     </group>
   );
 }

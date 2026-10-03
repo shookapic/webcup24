@@ -14,6 +14,7 @@ import { defaultAvatar } from './Avatar.jsx';
 import { SPAWN, nearestStop, playerPos } from './layout.js';
 import { Sun } from './Sun.jsx';
 import { PhoneHost, PhoneRig } from './PhoneRig.jsx';
+import { AvatarPreview } from './AvatarPreview.jsx';
 import { api } from './api.js';
 import { debug } from './debug.js';
 
@@ -50,6 +51,10 @@ function SimDriver() {
   }, [advance, clock]);
   return null;
 }
+
+// QA only (?debug&look=lunettes&acc=sac): shows look / accessory before the editor and API can persist them.
+const debugParams = new URLSearchParams(location.search);
+const debugAvatar = debug.enabled ? Object.fromEntries([['look', debugParams.get('look')], ['accessory', debugParams.get('acc')]].filter(([, v]) => v)) : {};
 
 export function App() {
   const locale = getLocale();
@@ -177,7 +182,7 @@ export function App() {
         {!debug.floorOnly && <Npcs reducedMotion={reducedMotion} />}
         {user ? (
           <Suspense fallback={<City reducedMotion={reducedMotion} />}>
-            <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} inputEnabled={!editing && !phoneUp} />
+            <PlayableCity avatar={{ ...avatar, ...debugAvatar }} view={view} reducedMotion={reducedMotion} inputEnabled={!editing && !phoneUp} />
           </Suspense>
         ) : <City reducedMotion={reducedMotion} />}
         <LabelProjector />
@@ -230,7 +235,7 @@ export function App() {
           ? phoneUp && <PhoneHost screenProps={{ ...screenProps, dialogLabel: t(locale, 'phone.label') }} />
           : <PhoneFallback open={phoneUp} {...screenProps} />;
       })()}
-      {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} locale={locale} />}
+      {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} locale={locale} preview={editing ? <AvatarPreview avatar={avatar} /> : null} />}
       {user && help && <p className="controls-help">{t(locale, 'help.controls')}</p>}
     </>
   );

@@ -16,7 +16,8 @@ await page.evaluate(async () => {
 });
 await page.goto(base + '/monde/?debug&fps=30' + (process.env.EXTRA || ''), { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => window.__tn?.run, { timeout: 60000 });
-await page.evaluate(async (dist) => { const tn = window.__tn; for (let i = 0; i < 60 && !tn.ecctrl; i++) await tn.run(0.5); await tn.run(2); tn.controls.rotateAzimuthTo(Math.PI + 0.5, false); tn.controls.dollyTo(Number(dist), false); await tn.run(1); }, dist);
+const AZ = Number(process.env.AZ ?? Math.PI + 0.5);
+await page.evaluate(async ({ dist, AZ }) => { const tn = window.__tn; for (let i = 0; i < 60 && !tn.ecctrl; i++) await tn.run(0.5); await tn.run(2); tn.controls.rotateAzimuthTo(AZ, false); tn.controls.dollyTo(Number(dist), false); await tn.run(1); }, { dist, AZ });
 for (const k of keys.split(',').filter(Boolean)) await page.keyboard.down(k);
 await page.evaluate((s) => window.__tn.run(Number(s)), seconds);
 await page.screenshot({ path: out });

@@ -11,7 +11,7 @@ const COUNT = 12;
 const TURN = 4; // rad/s: smooth corners, no snapping
 const ARRIVE = 1.2; // m from the target counts as reached
 const SEAT_RANGE = 14; // a walker only considers benches this close to its current node
-const SEAT_Y = -0.09; // avatar origin height while seated: thighs rest on the 0.56 m seat top (sit clip lowers the hips by 0.2)
+const SEAT_Y = 0.176; // avatar origin height while seated: thigh underside = (0.8 - 0.2) x HEIGHT_SCALE (0.64) rests on the 0.56 m seat top
 const SIT_MS = 0.8; // s to back into / out of the seat
 
 // Seat reservation: seats[i] is owned by at most one bot from the moment it is chosen until that bot has stood up and left.

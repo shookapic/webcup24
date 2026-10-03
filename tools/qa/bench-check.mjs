@@ -44,7 +44,7 @@ const modes = forced.log.map((l) => l.mode);
 const tail = modes.slice(modes.indexOf('approach'));
 check('state order approach > turn > sitDown > sit > standUp > walk', JSON.stringify(tail.slice(0, 6)) === JSON.stringify(['approach', 'turn', 'sitDown', 'sit', 'standUp', 'walk']), { modes: tail });
 const sitEntry = forced.log.find((l) => l.mode === 'sit');
-check('seated: hips at seat height (y = -0.09) with the sit clip active', sitEntry && Math.abs(sitEntry.y + 0.09) < 0.001 && sitEntry.sit === true, sitEntry);
+check('seated: thighs on the seat (y = 0.176) with the sit clip active', sitEntry && Math.abs(sitEntry.y - 0.176) < 0.001 && sitEntry.sit === true, sitEntry);
 check('no teleport: largest single-frame move <= 0.2 m', forced.maxStep <= 0.2, { maxStep: forced.maxStep.toFixed(3) });
 check('seat released after standing up', forced.owner0 === null, { owner: forced.owner0 });
 
