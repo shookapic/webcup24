@@ -4,6 +4,8 @@
 
 ## Correction release candidate (not pushed yet)
 
+**Final gate17:57:** exact b365f28 passed build, API138, original-schema migration10, physical-phone22 and flat-phone17. Clean tree/no source changes, disposable DBs. Saved proof is under release-evidence-2026-10-03/correction-b365f28/. PM accepts the identical application source for the authorized normal test-release push; live proof and user Firefox retest still pending. Final evidence commit adds only docs/logs over the validated candidate.
+
 PM merged reviewed A through52468bd and B963b08b as application source6b017a4, then cherry-picked A's QA-only c79083a to support valid affine screen placement. Wave8 application work remains separate on A's sessionA-wave8 branch. B is to validate the exact final integration HEAD, then perform the already-authorized normal push and live GET-only checks after PM accepts the proof.
 
 - **Model/rail correction PASS local:** B reproduced all22 buildings off their colliders, normalized cloned kit root offsets;22 building checks now pass (centres and all dimensions). Representative Mairie collision edge is.35m from visible wall (capsule radius).22 tram checks pass (rail contact/centres, spacing, rounded turns, stops/reversal, no body beyond ends, outward-facing cabs). PM inspected corrected straight/end captures. T1/T2 guideways are separate to avoid overlap.

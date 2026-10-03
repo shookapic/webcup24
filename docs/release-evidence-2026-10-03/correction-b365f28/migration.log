@@ -1,0 +1,14 @@
+PASS  old schema (1afe494) database created with a user and a message
+(node:36568) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS  the old user still signs in with the old password
+PASS  the old message is kept (new service_id column is NULL)
+PASS  old services are all available (new availability columns default to available)
+PASS  places table created and seeded
+PASS  appointment routes answer on the migrated database
+PASS  transports unaffected
+PASS  new tables exist: appointments, places, audit_log (+ append-only triggers)
+PASS  users gained avatar, district, active additively; nothing was dropped
+PASS  a second boot on the migrated database is harmless and keeps the same places
+
+old-database migration: all checks passed

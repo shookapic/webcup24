@@ -1,0 +1,29 @@
+mode: physical
+PASS  npm run build succeeds
+PASS  production /monde/ renders the A HUD (WorldHud)
+PASS  urgent alert raises the phone (role=alert takeover with full text)
+PASS  focus is inside the dialog when it is raised
+PASS  acknowledging an alert-raised phone puts it away
+PASS  acknowledged IDs stored per user (not the shared legacy key)
+PASS  F38 in production: the outage reaches the phone (reason, return time, alternative)
+PASS  F36 in production: lines, departures, nearest stop from the player position, disruption
+PASS  physical phone: the screen is the DOM host placed by an upright affine (translate+scale) or a projective (matrix3d) transform, lit, labelled, modal
+PASS  physical phone: exactly one focusable screen instance, no flat sheet beside it, and it is on the viewport
+NOTE  placement: affine (matrix(0.709, 0, 0, 0.709, 580, 142))
+NOTE  physical screen drawn 255x543px for a 360x740 layout: text scale about 0.71 (16px body text reads as about 11.3px)
+PASS  physical phone: every tab button is hit-testable at its projected centre (6 tabs)
+PASS  physical phone: a real mouse click on the projected "Services" tab opens the Services page
+PASS  physical phone: clicking the first tab returns to Home (click coordinates stay accurate after the page change)
+PASS  F46 in production: the phone home answers an emergency first (call 112 and the closest care, by the player position)
+PASS  F45 in production: the Places page lists the seeded places, emergency and hospital first, with a 112 call link and a nearest tag
+PASS  HUD shows the district of the nearest stop
+PASS  Escape closes the manual phone
+PASS  axe on the HUD in production: no violations
+PASS  app and physics chunks are served gzip with immutable caching
+PASS  no 4xx/5xx for world assets
+PASS  /monde/ CSP is the contract one and the page ran under it with no violations
+NOTE  6 presence POST(s) aborted client-side under software rendering (not a server error)
+PASS  no page errors / failed requests / console errors in production
+
+all production world checks passed
+screenshots: C:/Users/shookapic/Documents/webcup/coordination/reports/correction-b365f28/shots
