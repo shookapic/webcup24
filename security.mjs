@@ -47,7 +47,7 @@ export function currentUser(request) {
   const user = db.prepare(`
     SELECT users.id, users.email, users.name, users.role, users.avatar, users.district
     FROM sessions JOIN users ON users.id = sessions.user_id
-    WHERE sessions.token_hash = ? AND sessions.expires_at > ?
+    WHERE sessions.token_hash = ? AND sessions.expires_at > ? AND users.active = 1
   `).get(tokenHash(token), Date.now());
   return user ? publicUser(user) : null;
 }

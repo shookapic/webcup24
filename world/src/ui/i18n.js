@@ -1,0 +1,197 @@
+// Strings for the world UI (phone, HUD, avatar editor). French is the source language, English the second.
+// Content from the API (alerts, news, services) is localized by `localized()`: a missing English field
+// falls back to French and says so, so the screen reader switches voice and the reader sees an FR tag.
+import { readStored } from './storage.js';
+
+export const normalizeLocale = (value) => (value === 'en' ? 'en' : 'fr');
+// Same 'lang' preference the portal's language switch writes.
+export const getLocale = () => normalizeLocale(readStored('lang'));
+
+const strings = {
+  fr: {
+    'phone.label': 'Téléphone',
+    'phone.close': 'Ranger',
+    'phone.closeLabel': 'Ranger le téléphone',
+    'phone.nav': 'Navigation du téléphone',
+    'phone.content': 'Contenu du téléphone',
+    'page.home': 'Accueil',
+    'page.alerts': 'Alertes',
+    'page.news': 'Actualités',
+    'page.services': 'Services',
+    'page.transports': 'Transports',
+    'state.loading': 'Chargement…',
+    'state.error': 'Impossible de charger ces informations.',
+    'state.errorHint': 'Vérifiez la connexion, puis réessayez.',
+    'state.stale': 'Informations enregistrées à {time} : l’actualisation est impossible pour le moment.',
+    'state.retry': 'Réessayer',
+    'state.updated': 'Mis à jour à {time}',
+    'alerts.title': 'Alertes en cours',
+    'alerts.none': 'Aucune alerte en cours.',
+    'alerts.newOne': 'Nouvelle alerte',
+    'alerts.newMany': 'Nouvelles alertes',
+    'alerts.ack': 'J’ai compris',
+    'alerts.badge': 'Alerte · {audience}',
+    'alerts.audience': 'Public concerné : {audience}',
+    'alerts.countOne': '{n} alerte en cours',
+    'alerts.countMany': '{n} alertes en cours',
+    'alerts.unread': '{n} non lue(s)',
+    'home.nearest': 'Arrêt le plus proche',
+    'home.latest': 'Dernières actualités',
+    'home.portal': 'Ouvrir le portail accessible',
+    'news.title': 'Actualités municipales',
+    'news.none': 'Aucune actualité publiée.',
+    'news.back': 'Retour aux actualités',
+    'news.all': 'Toutes les annonces sur le portail',
+    'services.title': 'Services de la cité',
+    'services.search': 'Rechercher un service',
+    'services.placeholder': 'Santé, signalement…',
+    'services.none': 'Aucun service publié pour le moment.',
+    'services.noMatch': 'Aucun service ne correspond à votre recherche.',
+    'services.countOne': '{n} service trouvé.',
+    'services.countMany': '{n} services trouvés.',
+    'services.featured': 'À la une',
+    'services.more': 'Informations',
+    'services.portal': 'Tous les services sur le portail',
+    'services.request': 'Faire une demande sur le portail',
+    'services.newTab': '(s’ouvre dans un nouvel onglet)',
+    'transports.title': 'Transports',
+    'transports.nearest': 'Arrêt le plus proche',
+    'transports.normal': 'Trafic normal',
+    'transports.disrupted': 'Perturbé',
+    'transports.next': 'Prochains passages',
+    'transports.none': 'Aucune information de transport.',
+    'transports.line': 'Ligne {code}',
+    'transports.noTimes': 'Pas de passage prévu',
+    'lang.fallback': 'Disponible en français uniquement',
+    'hud.nav': 'Commandes du monde',
+    'hud.district': 'Quartier',
+    'hud.phone': 'Téléphone',
+    'hud.phoneUnread': '{n} alerte(s) non lue(s)',
+    'hud.viewFps': 'Vue 1re personne',
+    'hud.viewTps': 'Vue 3e personne',
+    'hud.avatar': 'Mon colon',
+    'hud.help': 'Aide',
+    'hud.portal': 'Version accessible',
+    'help.controls': 'ZQSD / WASD ou flèches pour marcher · Maj pour courir · Espace pour sauter · glisser pour tourner la caméra · T téléphone · V vue',
+    'editor.title': 'Votre colon',
+    'editor.skin': 'Peau',
+    'editor.outfit': 'Combinaison',
+    'editor.accent': 'Visière et sac',
+    'editor.cancel': 'Annuler',
+    'editor.save': 'Enregistrer',
+    'editor.saving': 'Enregistrement…',
+    'editor.saved': 'Colon enregistré.',
+    'editor.error': 'Enregistrement impossible : {message}',
+    'editor.preview': 'Aperçu',
+    'editor.hint': 'Annuler rétablit les couleurs enregistrées.',
+  },
+  en: {
+    'phone.label': 'Phone',
+    'phone.close': 'Put away',
+    'phone.closeLabel': 'Put the phone away',
+    'phone.nav': 'Phone navigation',
+    'phone.content': 'Phone content',
+    'page.home': 'Home',
+    'page.alerts': 'Alerts',
+    'page.news': 'News',
+    'page.services': 'Services',
+    'page.transports': 'Transport',
+    'state.loading': 'Loading…',
+    'state.error': 'Couldn’t load this information.',
+    'state.errorHint': 'Check your connection, then try again.',
+    'state.stale': 'Showing information saved at {time}: refreshing isn’t possible right now.',
+    'state.retry': 'Retry',
+    'state.updated': 'Updated at {time}',
+    'alerts.title': 'Active alerts',
+    'alerts.none': 'No active alerts.',
+    'alerts.newOne': 'New alert',
+    'alerts.newMany': 'New alerts',
+    'alerts.ack': 'I understand',
+    'alerts.badge': 'Alert · {audience}',
+    'alerts.audience': 'Audience: {audience}',
+    'alerts.countOne': '{n} active alert',
+    'alerts.countMany': '{n} active alerts',
+    'alerts.unread': '{n} unread',
+    'home.nearest': 'Nearest stop',
+    'home.latest': 'Latest news',
+    'home.portal': 'Open the accessible portal',
+    'news.title': 'City news',
+    'news.none': 'No news published.',
+    'news.back': 'Back to news',
+    'news.all': 'All announcements on the portal',
+    'services.title': 'City services',
+    'services.search': 'Search for a service',
+    'services.placeholder': 'Health, report…',
+    'services.none': 'No service published yet.',
+    'services.noMatch': 'No service matches your search.',
+    'services.countOne': '{n} service found.',
+    'services.countMany': '{n} services found.',
+    'services.featured': 'Featured',
+    'services.more': 'Information',
+    'services.portal': 'All services on the portal',
+    'services.request': 'Make a request on the portal',
+    'services.newTab': '(opens in a new tab)',
+    'transports.title': 'Transport',
+    'transports.nearest': 'Nearest stop',
+    'transports.normal': 'Normal service',
+    'transports.disrupted': 'Disrupted',
+    'transports.next': 'Next trams',
+    'transports.none': 'No transport information.',
+    'transports.line': 'Line {code}',
+    'transports.noTimes': 'No departure scheduled',
+    'lang.fallback': 'Available in French only',
+    'hud.nav': 'World controls',
+    'hud.district': 'District',
+    'hud.phone': 'Phone',
+    'hud.phoneUnread': '{n} unread alert(s)',
+    'hud.viewFps': 'First-person view',
+    'hud.viewTps': 'Third-person view',
+    'hud.avatar': 'My colonist',
+    'hud.help': 'Help',
+    'hud.portal': 'Accessible version',
+    'help.controls': 'ZQSD / WASD or arrows to walk · Shift to run · Space to jump · drag to turn the camera · T phone · V view',
+    'editor.title': 'Your colonist',
+    'editor.skin': 'Skin',
+    'editor.outfit': 'Suit',
+    'editor.accent': 'Visor and backpack',
+    'editor.cancel': 'Cancel',
+    'editor.save': 'Save',
+    'editor.saving': 'Saving…',
+    'editor.saved': 'Colonist saved.',
+    'editor.error': 'Couldn’t save: {message}',
+    'editor.preview': 'Preview',
+    'editor.hint': 'Cancel restores the saved colours.',
+  },
+};
+
+// The server stores audiences as free French text; these are the ones the portal translates too.
+const audiences = { Tous: 'Everyone', 'Quartier sud': 'South district', 'Personnes vulnérables': 'Vulnerable people' };
+
+export function t(locale, key, vars = {}) {
+  const table = strings[normalizeLocale(locale)];
+  return (table[key] ?? strings.fr[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => vars[name] ?? '');
+}
+
+export const audience = (locale, value) => (normalizeLocale(locale) === 'en' ? audiences[value] ?? value : value);
+
+// Item field in the requested language; `lang` is what the text is really written in.
+export function localized(item, field, locale) {
+  const translated = normalizeLocale(locale) === 'en' && typeof item?.[`${field}_en`] === 'string' && item[`${field}_en`].trim();
+  return translated ? { text: item[`${field}_en`], lang: 'en', fallback: false } : { text: String(item?.[field] ?? ''), lang: 'fr', fallback: normalizeLocale(locale) === 'en' };
+}
+
+const intl = (locale) => (normalizeLocale(locale) === 'en' ? 'en-GB' : 'fr-FR');
+
+// SQLite stores UTC as "YYYY-MM-DD HH:MM:SS"; a bad value gives '' instead of "Invalid Date".
+export function formatDate(value, locale) {
+  const date = new Date(typeof value === 'string' ? `${value.replace(' ', 'T')}Z` : value);
+  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(intl(locale), { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+export function formatTime(value, locale) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(intl(locale), { hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+// Case- and accent-insensitive search, like the portal.
+export const fold = (value) => String(value ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('fr');
