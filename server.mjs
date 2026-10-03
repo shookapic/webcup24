@@ -27,6 +27,36 @@ const worldTypes = {
 };
 const worldCsp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' blob: data:; worker-src 'self' blob:; base-uri 'none'; object-src 'none'";
 const presence = new Map();
+// Times are in minutes after midnight, city time. Trams leave each terminus every `every` minutes
+// from `first` to `last`, taking `hop` minutes between stops.
+const cityTimeZone = 'Indian/Reunion';
+const stopDistricts = { Mairie: 'Centre-ville', Habitat: 'Quartier nord', Santé: 'Quartier est', Marché: 'Quartier ouest', 'Quartier sud': 'Quartier sud' };
+const transportLines = [
+  { code: 'T1', name: 'Habitat ↔ Quartier sud', color: '#b8336a', first: 330, last: 1350, every: 10, hop: 4, stops: ['Habitat', 'Mairie', 'Quartier sud'] },
+  { code: 'T2', name: 'Marché ↔ Santé', color: '#1d6fa5', first: 360, last: 1320, every: 15, hop: 5, stops: ['Marché', 'Mairie', 'Santé'] },
+].map((line) => ({
+  ...line,
+  // Every passage at each stop in both directions, sorted, computed once.
+  passages: line.stops.map((_, index) => {
+    const times = new Set();
+    for (let trip = line.first; trip <= line.last; trip += line.every) {
+      times.add(trip + index * line.hop);
+      times.add(trip + (line.stops.length - 1 - index) * line.hop);
+    }
+    return [...times].sort((a, b) => a - b);
+  }),
+}));
+
+function cityMinutes(date = new Date()) {
+  const [hours, minutes] = new Intl.DateTimeFormat('en-GB', { timeZone: cityTimeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date).split(':');
+  return Number(hours) * 60 + Number(minutes);
+}
+
+// The next three passages from `now`, rolling over to tomorrow's first trams after the last one.
+function nextPassages(passages, now) {
+  return [...passages.filter((minute) => minute >= now), ...passages.map((minute) => minute + 1440)].slice(0, 3)
+    .map((minute) => `${String(Math.floor(minute / 60) % 24).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`);
+}
 const loginAttempts = new Map();
 let cachedFeed;
 let pendingFeed;
@@ -304,6 +334,31 @@ async function route(request, response) {
     if (typeof body.urgent !== 'boolean') fail(400, 'Le niveau d’urgence est invalide.');
     const result = db.prepare('UPDATE announcements SET urgent = ? WHERE id = ?').run(body.urgent ? 1 : 0, Number(announcementMatch[1]));
     if (!result.changes) fail(404, 'Actualité introuvable.');
+    return sendJson(response, 200, { ok: true });
+  }
+
+  if (path === '/api/transports' && method === 'GET') {
+    const now = cityMinutes();
+    const statuses = new Map(db.prepare('SELECT * FROM transport_status').all().map((row) => [row.code, row]));
+    const lines = transportLines.map((line) => ({
+      code: line.code,
+      name: line.name,
+      color: line.color,
+      status: statuses.get(line.code)?.status || 'normal',
+      message: statuses.get(line.code)?.message || null,
+      stops: line.stops.map((name, index) => ({ name, district: stopDistricts[name], next: nextPassages(line.passages[index], now) })),
+    }));
+    return sendJson(response, 200, { lines });
+  }
+  const transportMatch = /^\/api\/transports\/(T\d)$/.exec(path);
+  if (transportMatch && method === 'PATCH') {
+    requireUser(request, ['agent', 'admin']);
+    if (!transportLines.some((line) => line.code === transportMatch[1])) fail(404, 'Ligne introuvable.');
+    const body = await readJson(request);
+    if (!['normal', 'perturbé'].includes(body.status)) fail(400, 'Statut invalide.');
+    const message = body.status === 'perturbé' || body.message ? text(body.message, 5, 200, 'Le message') : null;
+    db.prepare('INSERT INTO transport_status (code, status, message) VALUES (?, ?, ?) ON CONFLICT(code) DO UPDATE SET status = excluded.status, message = excluded.message')
+      .run(transportMatch[1], body.status, message);
     return sendJson(response, 200, { ok: true });
   }
 

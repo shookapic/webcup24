@@ -46,6 +46,11 @@ db.exec(`
     body TEXT NOT NULL,
     published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS transport_status (
+    code TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'normal' CHECK (status IN ('normal', 'perturbé')),
+    message TEXT
+  );
   CREATE INDEX IF NOT EXISTS messages_user_id ON messages(user_id);
   CREATE INDEX IF NOT EXISTS messages_status ON messages(status);
 `);
@@ -116,5 +121,8 @@ if (!announcementColumns.has('title_en')) {
   translate.run('Rising water in the south district', 'The water level is rising unusually in the south district.\nDo this now: keep away from riverbanks and underpasses, do not drive through flooded streets, move valuables and documents up high, and be ready to leave your home if city staff ask you to.\nIn immediate danger, call 112.', 'Montée des eaux dans le quartier sud');
   translate.run('Extreme heatwave', 'Extreme heat is hitting several parts of the city. Older people, sick people, pregnant women and young children are most at risk.\nDo this now: drink water regularly without waiting to feel thirsty, stay somewhere cool between 11 am and 5 pm, keep shutters and windows closed during the day, avoid physical effort and check on isolated relatives.\nIf you feel unwell, call 112.', 'Vague de chaleur extrême');
 }
+// Traffic info as of opening day; agents update it from their space afterwards.
+db.prepare("INSERT OR IGNORE INTO transport_status (code, status, message) VALUES ('T1', 'perturbé', ?), ('T2', 'normal', NULL)")
+  .run('Montée des eaux : ralentissements entre Mairie et Quartier sud. Prévoyez 10 minutes de plus.');
 
 db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
