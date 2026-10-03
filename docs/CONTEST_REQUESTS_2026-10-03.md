@@ -1,15 +1,19 @@
 # Terra Nova — contest request snapshot
 
-Source: existing authorized official API watcher snapshot copied on 2026-10-03 at approximately 16:14 Europe/Paris. The captured publisher timestamp, current wave and request count appear below. This is an inventory, not a declaration of feature completion; FEATURE_MATRIX.md records acceptance evidence.
+Source: existing authorized official API watcher snapshot copied on 2026-10-03 at approximately 16:28 Europe/Paris. The publisher timestamp, wave and count appear below. This is a request inventory, not a declaration of completion; FEATURE_MATRIX.md and PM_STATUS.md record the handoff and acceptance state.
 
 Endpoint: https://24h.webcup.fr/wp-json/webcup/v1/requests. Credentials remain server/local environment only; none are included here.
 
 # Terra Nova — demandes API
 
-Mis à jour : 03/10/2026 16:04:01 · vague 6 · 42 demandes · H+7h39 · prochaine vague (7) dans 21 min
+Mis à jour : 03/10/2026 16:29:00 · vague 7 · 46 demandes · H+8h04 · prochaine vague (8) dans 56 min
 
 | Code | Vu le | Vague | Difficulté | XP | Demandeur | Demande |
 |---|---|---|---|---|---|---|
+| F48 | 16:25 | 7 | Moyenne | 640 | Institution | Les agents doivent savoir qui a modifié quoi dans l’administration. Dans l’espace de travail des agents, cette information doit être facile à retrouver et suffisamment claire pour faciliter le suivi quotidien. |
+| F47 | 16:25 | 7 | Difficile | 960 | Institution | La ville doit pouvoir justifier clairement les actions réalisées sur la plateforme. Certaines opérations doivent rester consultables et traçables dans le temps. Dans l’espace de travail des agents, cette information doit être facile à retrouver et suffisamment claire pour faciliter le suivi quotidien. |
+| F46 | 16:25 | 7 | Facile | 320 | Citoyen | Où se trouvent les hôpitaux et services d’urgence ? L’habitant doit pouvoir comprendre rapidement l’information utile à sa situation et agir sans devoir parcourir plusieurs écrans. |
+| F45 | 16:25 | 7 | Difficile | 960 | Institution | Les habitants ont du mal à localiser certains services physiques dans la ville. L’habitant doit pouvoir comprendre rapidement l’information utile à sa situation et agir sans devoir parcourir plusieurs écrans. |
 | F44 | 15:25 | 6 | Moyenne | 620 | Citoyen | J’aimerais pouvoir grossir le contenu sans casser l’affichage. L’objectif est que ce besoin améliore réellement l’usage de la plateforme, sans isoler ces utilisateurs dans un parcours incomplet. |
 | F43 | 15:25 | 6 | Facile | 310 | Citoyen | J’ai du mal à distinguer certaines couleurs sur la plateforme. L’objectif est que ce besoin améliore réellement l’usage de la plateforme, sans isoler ces utilisateurs dans un parcours incomplet. |
 | F42 | 15:25 | 6 | Difficile | 930 | Institution | Nos équipes d’inclusion ont testé plusieurs formulaires et composants interactifs de la plateforme. Certains restent difficiles à comprendre ou à utiliser avec des technologies d’assistance. Vérifiez que les actions essentielles, champs et messages d’erreur sont réellement accessibles. |

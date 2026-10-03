@@ -26,7 +26,22 @@ The user explicitly authorizes combining every completed A+B delivery and a norm
 | F36 world | IN PROGRESS | API/portal/phone already present; B finishing stations and moving tram. |
 | Production | UNVERIFIED | Push authorized after B final handoff and release checks. Actual host URL, build result, assets/CSP and persistence still need checking. |
 
-Official inventory: Wave 6, 42 requests in the existing watcher snapshot, refreshed into the committed contest record during this release review. `FEATURE_MATRIX.md` contains exact current wording: 26 PASS / 14 PARTIAL / 2 UNVERIFIED at A's last checkpoint. Next wave expected around 16:25; A owns the single watcher and flags new requests for triage. Reminders are in-app/opt-in browser/calendar; no email or SMS implementation exists.
+Official inventory: Wave 7, **46 requests**, from the existing B watcher snapshot at 16:27. The contest snapshot contains all exact wording. A's `FEATURE_MATRIX.md` currently covers 42 through Wave 6; its remaining four rows are queued to A after quota recovery. Reminders are in-app/opt-in browser/calendar; no email or SMS implementation exists.
+
+### Wave 7 coverage ledger (16:25 arrival)
+
+| Code | Request | Owner | Status |
+| --- | --- | --- | --- |
+| F45 | Locate physical municipal services easily | A location information; B world markers/context prompt | NOT STARTED for the new requirement; existing districts are not sufficient proof |
+| F46 | Locate hospitals and emergency services | A information; B supporting health signage | NOT STARTED; existing health district is only a starting point |
+| F47 | Justify platform actions and preserve traceability over time | A server audit/history and staff access | NOT STARTED |
+| F48 | Staff can readily find who changed what in administration | A staff audit view | NOT STARTED |
+
+Queue task `A-wave7-1` preserves these requests for A after its Claude quota resets at 16:50. This test release contains completed work through Wave 6 and B's districts/tram/phone milestone; Wave 7 remains explicit backlog, not silently excluded or claimed complete.
+
+### Validation update, 16:20
+
+A committed `4f3cd39` before hitting its quota; PM merged it and remote `f06be69` (README only) cleanly. A's exact archive of combined source `b1f2751` passed build, API104, portal60, world-UI75, portal-browser15, accessibility91, world-browser113, physical-world20, flat-world15, B movement at60/30+jitter, phone clicks and alert flow. Its old-host GET baseline passed existing HTML/assets/CSP/404 behavior; nine expected version failures remain until the new release deploys. B confirmed the rapid close/reopen defect (2 failures before fix), fixed it with one cancellable timer, and reports12 phone-race checks passing,8 tram checks and movement at60/30+jitter/144 passing on its current source. Final B commit and combined final build/runtime/host checks remain pending.
 
 ## Release sequence
 

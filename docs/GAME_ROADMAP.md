@@ -151,3 +151,9 @@ Reserve final event hour for production smoke, fixes and accurate declarations. 
 Wave 4 smoke: verify tram movement/stations and both transport lists; first-use tips/dismissal; delete a dedicated test citizen with password confirmation; staff deactivate/reactivate/reset/delete a different test citizen and verify session revocation and staff-account protection. Never use a real participant account for destructive test fixtures.
 
 Deliver `FEATURE_MATRIX.md`, `ASSETS.md`, `QA_A.md`, `QA_B.md` with evidence paths and explicit pass/fail/unverified results. Movement, civic flows, alert delivery, authentication and production asset-loading failures block a ready declaration.
+
+## Wave 7 follow-up — 2026-10-03 16:25
+
+The authorized watcher now lists 46 requests. Preserve F45 physical-service locations, F46 hospital/emergency locations, F47 retained action traceability/justification and F48 staff access to who changed what. Exact official text is in `CONTEST_REQUESTS_2026-10-03.md`; acceptance is pending, not implied by the presence of districts or existing message history.
+
+A owns real location information in API/portal/phone plus server-recorded administrative audit/history and the staff view. B supports location markers and the nearby service prompt from section 6 after A supplies a documented additive data contract. Derive actor identity/authorization server-side, preserve stored data and document retention/deletion choices. Do not treat caller-supplied actor labels as an audit trail. Keep these requests as a separate milestone after the already-authorized combined user test release; A's quota is temporarily exhausted until 16:50, and the delivery is queued.

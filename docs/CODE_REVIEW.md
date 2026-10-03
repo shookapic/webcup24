@@ -103,3 +103,14 @@ Production build passed: main JS approximately 1.253 MB (344 KB gzip); playable-
 No local `data/` snapshot was available and the authenticated live contest feed was not retrieved. Exact current-wave completeness is unverified. Movement root cause, browser focus behavior, performance and deployed-host behavior require the roadmap's runtime gates. Application code was not changed by this review.
 
 Handoff update: a refreshed `CLAUDE.md` contained Wave 4 F33–F36 and transport API/watcher instructions added since the initial review read. These have been preserved in the assignments/spec. Their implementation has not been independently audited here; the initial review findings refer to the earlier inspected source snapshot. Both sessions must recheck changed files before applying a finding.
+
+## Combined release review — 2026-10-03 16:29
+
+The original findings above describe the prototype, not the current acceptance state. A's completed delivery through `4f3cd39` and B's committed plaza/rig through `ffec17b` are merged in the isolated integration worktree; remote `f06be69` README work is preserved. See `PM_STATUS.md` for the exact release sequence and pending B final commit.
+
+- Movement diagnosis is now measured by B: missing ground rigid-body detection, frame/physics update mismatch and controller rocking/yaw were isolated and corrected. Deterministic local checks at multiple rates are reported passing; real hardware and low-frame-rate experience remain unverified.
+- Authored CC0 local models, rigged recolorable characters, skeletal gait, moving NPCs, scoped distant curvature and a projected physical phone now exist. The captured plaza/device confirm substantial changes; final art/performance acceptance is still partial.
+- PM source review found a close/reopen timer race. B reproduced two failures on `ffec17b` and corrected it with one cancellable timer; its 12 checks now pass, including withdrawal and urgent arrivals during manual use. This correction is pending the final B commit/merge.
+- A independently validated archive `b1f2751`: build, API/portal/accessibility and both physical/flat phone modes passed, including projected real mouse clicks. Additive migrations preserve an original database fixture across two boots. This proof does not cover uncommitted later B code automatically.
+- The old live host baseline answers correctly for assets, CSP and navigation. Wave 5/6 routes and new chunks are absent there until the authorized combined push; those nine baseline version-check failures are expected, not waived for the final release.
+- Wave 7 introduces four further requests (46 total). Exact wording is captured and A's implementation is queued after its quota recovery. No claim of complete contest coverage or deployed acceptance is made by this test release.
