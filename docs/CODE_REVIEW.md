@@ -114,3 +114,27 @@ The original findings above describe the prototype, not the current acceptance s
 - A independently validated archive `b1f2751`: build, API/portal/accessibility and both physical/flat phone modes passed, including projected real mouse clicks. Additive migrations preserve an original database fixture across two boots. This proof does not cover uncommitted later B code automatically.
 - The old live host baseline answers correctly for assets, CSP and navigation. Wave 5/6 routes and new chunks are absent there until the authorized combined push; those nine baseline version-check failures are expected, not waived for the final release.
 - Wave 7 introduces four further requests (46 total). Exact wording is captured and A's implementation is queued after its quota recovery. No claim of complete contest coverage or deployed acceptance is made by this test release.
+
+## Live user review — 2026-10-03 17:16
+
+Release de791f3 is deployed;51 GET-only host checks PASS. User captures now demonstrate two visual FAIL results and invalidate a broad world-ready claim. Evidence is preserved outside the repository in coordination/evidence/user-world-2026-10-03/; B/A received exact paths.
+
+### R13 — High: model export offsets move geometry away from routes and colliders
+
+PM decoded all19 kit GLB JSON chunks. Scene root node1 has translation[2,0,1.5]. `world/src/kit.jsx` Prop clones the scene and changes materials, retaining that transform; `world/src/Tram.jsx:107` positions the containing car group on the route and scales the model3.3. Thus visible cars are offset6.6m laterally and4.95m along their local route axes. This is concrete mechanism evidence for the user's floating/off-rail train captures. Ground contact height/orientation still needs runtime verification.
+
+The same root translation exists in hangars. At Mairie scale6 it adds[12,0,9] before yaw, whereas `layout.js` footprints remain centered on configured coordinates. Render/collision/entrance/label alignment must be audited, not merely the tram. Normalize the responsible asset instance origin while preserving child-relative transforms and ground pivot. B owns this fix.
+
+### R14 — High: trailing tram cars collapse at endpoint-clamped arc positions
+
+`Tram.jsx:26` clamps each sampled arc to[0,total]; line106 requests `s-dir*i*CAR`. At an endpoint multiple cars sample identical points. Motion/dwell tests can pass while the visible consist overlaps. B must provide safe consist bounds, connected turns/reversal and rendered evidence for both lines.
+
+### R15 — High: physical-phone glyph rendering fails in Firefox
+
+User reports Firefox at default zoom: text appears for a split second while raising the phone, then vanishes/fragments, although backgrounds/borders remain. Screenshot confirms a visual failure. Root cause remains **UNPROVEN**. PhoneHost's per-frame projective CSS matrix3d, clipped/rounded ancestors and scrolling DOM are investigation leads. A/B must distinguish projection/host responsibility from CSS/content and reproduce on Firefox. Chrome DOM/interaction checks do not pass Firefox rendered readability. Require readable real HTML and working focus/click/scroll/alerts in the physical and flat modes.
+
+### R16 — Product coverage: world detail/customization is incomplete
+
+User explicitly requires more planting, sidewalks/intersection markings, seated NPCs and richer avatar customization. Existing NPCs walk/pause; no seated cycle exists. AvatarEditor offers only skin/outfit/accent colors. These are required follow-up product work, separate from exact official request codes. Add visible local vegetation and pedestrian design, bench reservations/sit/stand cycles and a small agreed persisted variant/accessory contract; preserve all civic features.
+
+Portal completeness remains partial: last committed42-row matrix reports26 local PASS,14 PARTIAL,2 UNVERIFIED, with4 Wave7 requirements in progress. Production serving PASS does not prove authenticated workflows, notifications or assistive technology. A is assigned focused coverage reconciliation and missing workflow checks.

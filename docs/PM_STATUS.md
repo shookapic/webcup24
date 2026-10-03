@@ -1,6 +1,19 @@
 # Terra Nova coordination checkpoint
 
-2026-10-03, 16:47 Europe/Paris. PM integration/review only; no application code edited by Codex.
+2026-10-03, 17:16 Europe/Paris. PM integration/review only; no application code edited by Codex.
+
+## Latest: live user test found visual failures
+
+The combined release **de791f3** was normally pushed to main and deployed at16:56. GitHub Hodifly status success;51 live GET-only checks passed with matching hashed entry assets. These prove deployment/serving, not visual or authenticated production acceptance.
+
+User screenshots now establish **FAIL** for tram alignment and physical-phone text rendering. Browser: **Firefox, default zoom; text appears briefly while opening then disappears**. PM saved evidence under `coordination/evidence/user-world-2026-10-03/` and dispatched tasks to both sessions. A and B accepted at17:13.
+
+- **B first:** fix measured exported model origin offsets and tram consist bounds; reproduce/fix Firefox phone rendering with A for any CSS changes. All19 kit models have root translation[2,0,1.5], retained by Prop; train scale3.3 produces6.6m lateral and4.95m longitudinal displacement. Building visuals likewise drift from layout colliders. Existing tram motion tests did not cover actual rendered alignment.
+- **B next:** user-required vegetation, continuous pedestrian detail/sidewalks, crossing markings, visible bench sit/stand NPC cycles, then richer avatar variants with A's editor/persistence. First convincing spawn slice, then all districts; measured performance remains required.
+- **A:** complete separate Wave7 milestone, reconcile full46-request matrix and close focused portal workflow evidence gaps. Last committed42-row matrix:26 local PASS,14 PARTIAL,2 UNVERIFIED. Do not claim all portal features work on production. A's server Wave7 b83ca3d is committed locally and source merged with release as30db1bf; UI/checks still in progress, not deployed.
+- **Contract:** A's /api/places now has stable code/kind/district/stop/address/hours/contact fields, no world coordinates; B maps positions. A's phone places page is pending confirmation. Staff reason requirements are deliberate request changes and need regression evidence. Avatar currently persists three colors only; new variant/accessory schema must be agreed before either owner implements it.
+
+Critical visual corrections may be released independently of unfinished Wave7. Require exact fix commit, rendered captures (Firefox explicitly), geometric asset/collider checks, phone interactions and focused regressions before another normal push. No application change by PM. Sections below retain the earlier release record and are superseded by this checkpoint where dated statements differ.
 
 ## Authorized test release
 

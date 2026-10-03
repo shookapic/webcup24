@@ -157,3 +157,25 @@ Deliver `FEATURE_MATRIX.md`, `ASSETS.md`, `QA_A.md`, `QA_B.md` with evidence pat
 The authorized watcher now lists 46 requests. Preserve F45 physical-service locations, F46 hospital/emergency locations, F47 retained action traceability/justification and F48 staff access to who changed what. Exact official text is in `CONTEST_REQUESTS_2026-10-03.md`; acceptance is pending, not implied by the presence of districts or existing message history.
 
 A owns real location information in API/portal/phone plus server-recorded administrative audit/history and the staff view. B supports location markers and the nearby service prompt from section 6 after A supplies a documented additive data contract. Derive actor identity/authorization server-side, preserve stored data and document retention/deletion choices. Do not treat caller-supplied actor labels as an audit trail. Keep these requests as a separate milestone after the already-authorized combined user test release; A's quota is temporarily exhausted until 16:50, and the delivery is queued.
+
+## User test revision — 2026-10-03 17:16
+
+de791f3 is deployed; host serving checks passed. User screenshots fail train/rail alignment and physical-phone text in Firefox (default zoom, text flashes during opening then disappears). These block visual readiness. They precede optional art expansion in the next milestone. See current CODE_REVIEW R13–R16 and PM_STATUS; original dated roadmap assumptions do not supersede this evidence.
+
+### Immediate correction gate (B, with A for owned CSS)
+
+- Correct exported kit origins, prove actual rendered building bounds match layout colliders/entrances and train cars match rails. Check both lines on straights, corners, stations and reversal; no stacked cars or disconnected consist. Use visual captures and measured geometry, not only route progress.
+- Reproduce the phone in Firefox. Preserve the physical device and interactive accessible HTML; identify host/compositor vs content/CSS cause. Inspect readable headings/body/buttons on home/alerts/services/transports, FR/EN, focus, scrolling, large text/high contrast and flat fallback. Preserve existing camera/input/urgent-alert race checks. Report environment limitations rather than substituting Chrome PASS.
+- Deliver minimal correction commit for PM review/release independently of unfinished Wave7 where possible. No independent main push during PM integration.
+
+### Required world-detail slice (B)
+
+The following are explicit user requirements, not inferred new official codes:
+
+1. Spawn plaza/street: coherent paving, continuous pedestrian edges/curbs and sidewalks, contrasting crossings at real intersections, planting beds and varied locally licensed shrubs/trees/planters in intentional clusters. Keep circulation and entrances clear. Extend the language across all five districts with meaningful differences. Compare before/after from identical cameras and provide a complete route plus measured draw calls/frame time.
+2. Living benches: reserve seats, approach along walkable routes, sit with a visible grounded humanoid pose, idle, stand and resume route. No overlapping occupants or teleport through bench geometry. Other NPCs keep walking; reduced motion preserves essential travel/behavior. Provide a complete cycle capture.
+3. Avatar choice: retain three recolors, add at least two visibly distinct rig-compatible outfit/model appearances and one optional accessory, with live preview and saved persistence. B proposes feasible licensed local assets and stable IDs; A implements accessible editor/API/storage after agreement. Old color-only avatars retain backward-compatible defaults, role/auth checks and presence rendering.
+
+### Civic coverage gate (A)
+
+Reconcile the full latest authorized official feed (46 at Wave7) with feature evidence and implementation. Separate local authenticated browser/API checks from live GET-only serving proof. Close specific old assertion gaps (history/steps, breadcrumb, workload count, official feed UI, featured services and alert audience/opt-in), preserve core accounts/roles/messages/incidents/services/announcements/profile/language/accessibility/admin/appointments/transport/tips. Mark notifications, real assistive technology and authenticated host checks honestly. Complete F45/F46 real location information and F47/F48 audit with existing-data migration proof; B consumes stable place codes once A's phone places page is confirmed.
