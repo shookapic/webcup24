@@ -472,7 +472,7 @@ async function route(request, response) {
     const oldest = one("SELECT MIN(created_at) AS at FROM messages WHERE status = 'new'").at;
     const waitingHours = oldest ? Math.max(0, Math.floor((Date.now() - Date.parse(oldest.replace(' ', 'T') + 'Z')) / 3_600_000)) : null;
     const week = addMinutes(`${today}T00:00`, 7 * 1440);
-    const unavailable = db.prepare("SELECT title FROM services WHERE availability = 'unavailable'").all().map(serviceView).filter((row) => row.availability === 'unavailable').map((row) => row.title);
+    const unavailable = db.prepare("SELECT title, availability, available_again FROM services WHERE availability = 'unavailable'").all().map(serviceView).filter((row) => row.availability === 'unavailable').map((row) => row.title);
     const dashboard = {
       generated_at: now,
       messages: {

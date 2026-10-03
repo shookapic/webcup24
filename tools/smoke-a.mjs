@@ -363,7 +363,21 @@ try {
   check('F50 the payload carries no citizen e-mail, full name or password data', !/citizen@smoke\.test|doomed@|neighbour@|doomed@|rdv1@|Citoyen Test|Victime Test|scrypt|password/i.test(JSON.stringify(board3)));
   check('F50 only administrators see the count of deactivated accounts', board3.residents.deactivated === undefined && (await admin.call('/api/admin/dashboard')).data.residents.deactivated === count("SELECT COUNT(*) AS n FROM users WHERE role = 'citizen' AND active = 0"));
   check('F50 recent actions come from the journal (last five, newest first)', board3.recent.length === 5 && board3.recent.every((r, i) => i === 0 || r.at <= board3.recent[i - 1].at));
+  // F50: the outage list must show a current outage and hide one whose return time has passed (review finding: the query lacked the columns serviceView reads)
+  const allServices = (await visitor.call('/api/services')).data.services;
+  const [outageNow, outagePast] = allServices.filter((svc) => svc.availability === 'available').slice(0, 2);
+  const cityTime = (minutes) => new Date(Date.now() + 4 * 3600_000 + minutes * 60_000).toISOString().slice(0, 16);
+  await agent.call(`/api/services/${outageNow.id}/availability`, 'PATCH', { availability: 'unavailable', reason: 'Panne en cours pour le tableau de bord', until: cityTime(180), alternative: 'Écrivez aux services de la ville.' });
+  await agent.call(`/api/services/${outagePast.id}/availability`, 'PATCH', { availability: 'unavailable', reason: 'Panne terminée pour le tableau de bord', until: cityTime(180), alternative: 'Écrivez aux services de la ville.' });
   dbc.close();
+  const outageDb = new DatabaseSync(env.DATA_PATH);
+  outageDb.prepare('UPDATE services SET available_again = ? WHERE id = ?').run(cityTime(-5), outagePast.id);
+  outageDb.close();
+  const outageBoard = (await agent.call('/api/admin/dashboard')).data;
+  check('F50 the dashboard lists a service with a current outage and not one whose announced return time has passed', outageBoard.services.unavailable.includes(outageNow.title) && !outageBoard.services.unavailable.includes(outagePast.title), JSON.stringify(outageBoard.services));
+  await agent.call(`/api/services/${outageNow.id}/availability`, 'PATCH', { availability: 'available' });
+  await agent.call(`/api/services/${outagePast.id}/availability`, 'PATCH', { availability: 'available' });
+  check('F50 the outage list is empty again once both are marked available', (await agent.call('/api/admin/dashboard')).data.services.unavailable.length === 0);
 
   // F51: concerns about data use, and the personal export
   const post = (client, body) => client.call('/api/concerns', 'POST', body);
