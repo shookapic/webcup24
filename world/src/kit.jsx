@@ -33,6 +33,9 @@ export function Prop({ name, scale = 1, shadows = true, variant, ...props }) {
   const { scene } = useGLTF(kitUrl(name));
   const object = useMemo(() => {
     const clone = scene.clone(true);
+    // The kit exports every model under a root node translated by [2, 0, 1.5] (measured on all glb files), so a model drawn
+    // at x,z sits 2 x 1.5 units away from it. Zero that horizontal offset on the clone; geometry stays centred on its footprint.
+    clone.children.forEach((child) => child.position.set(0, child.position.y, 0));
     clone.traverse((child) => {
       if (!child.isMesh) return;
       child.material = kitMaterial(child.material?.name, variant);
