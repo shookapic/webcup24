@@ -114,6 +114,12 @@ check('English: untranslated alert marked FR (lang attr + tag)', qa('h3').some((
 await render(h(Screen, { page: 'services', locale: 'en' }));
 check('English services: translated + FR fallback for untranslated', text().includes('Health centre') && qa('[role=img]').length === 1);
 
+const outage = [{ ...services[0], availability: 'unavailable', unavailable_reason: 'Maintenance du système', unavailable_reason_en: 'System maintenance', available_again: '2026-10-06T09:30', alternative: 'Écrivez aux services.', alternative_en: 'Write to the services.' }, services[1]];
+await render(h(Screen, { page: 'services', services: outage }));
+check('F38 phone: unavailable service shows reason, return time (as written, UTC+4 city time), alternative', text().includes('Service indisponible') && text().includes('Maintenance du système') && text().includes('Retour prévu') && text().includes('09:30') && text().includes('mardi 6 octobre 2026') && text().includes('Écrivez aux services.') && qa('.phone-unavailable').length === 1, text().slice(0, 300));
+await render(h(Screen, { page: 'services', services: outage, locale: 'en' }));
+check('F38 phone English: translated reason/alternative, no FR tag needed', text().includes('Service unavailable') && text().includes('System maintenance') && text().includes('Write to the services.') && text().includes('Tuesday, 6 October 2026'), text().slice(0, 300));
+
 // loading / error / stale / empty states are distinct
 await render(h(Screen, { page: 'alerts', announcements: [], status: 'loading' }));
 check('loading: not "no alerts"', text().includes('Chargement') && !text().includes('Aucune alerte en cours'));

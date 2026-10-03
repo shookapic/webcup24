@@ -66,21 +66,21 @@ let takeoffs = 0, wasAir = false, maxY = 0;
 for (let i = 0; i < 24; i++) { await run(0.125); const p = await pos(); const air = p.y > 1.15; if (air && !wasAir) takeoffs++; wasAir = air; maxY = Math.max(maxY, p.y); }
 await page.keyboard.up('Space');
 check('jump once per press while held', takeoffs === 1 && maxY > 1.5, { takeoffs, maxY: maxY.toFixed(2) });
-// 6. wall: Habitat block spans x -27..-21, z -43..-37. Approach its south face diagonally, expect slide not stick/cross.
+// 6. wall: Mairie west wing spans x -20.5..-12.5, z -32..-20. Approach its south face diagonally, expect slide not stick/cross.
 const yaw = await camYaw();
 const fx = Math.sin(yaw), fz = Math.cos(yaw);
 const combos = [['KeyW'], ['KeyS'], ['KeyA'], ['KeyD'], ['KeyW', 'KeyA'], ['KeyW', 'KeyD'], ['KeyS', 'KeyA'], ['KeyS', 'KeyD']];
 const dirOf = (keys) => { let x = 0, z = 0; for (const k of keys) { if (k === 'KeyW') { x += fx; z += fz; } if (k === 'KeyS') { x -= fx; z -= fz; } if (k === 'KeyA') { x += fz; z -= fx; } if (k === 'KeyD') { x -= fz; z += fx; } } const l = Math.hypot(x, z); return [x / l, z / l]; };
 const want = [-0.7071, -0.7071];
 const best = combos.map((k) => ({ k, d: dirOf(k) })).sort((a, b) => b.d[0] * want[0] + b.d[1] * want[1] - (a.d[0] * want[0] + a.d[1] * want[1]))[0];
-await tele(-20, 1, -30); await run(0.5);
+await tele(-10, 1, -14); await run(0.5);
 for (const k of best.k) await page.keyboard.down(k);
 await run(4); const w = await pos();
 for (const k of best.k) await page.keyboard.up(k);
-check('wall stops at south face (-36.7 <= z <= -36)', w.z >= -36.7 && w.z <= -36, { z: w.z.toFixed(2) });
-check('wall slides along face (x < -22)', w.x < -22, { x: w.x.toFixed(2), keys: best.k.join('+') });
+check('wall stops at south face (-19.7 <= z <= -19.3)', w.z >= -19.7 && w.z <= -19.3, { z: w.z.toFixed(2) });
+check('wall slides along face (x < -13)', w.x < -13, { x: w.x.toFixed(2), keys: best.k.join('+') });
 // 7. camera retracts against the wall
-await tele(-24, 1, -36.4); await page.evaluate(() => window.__tn.controls.rotateAzimuthTo(Math.PI, false)); await run(1.5);
+await tele(-16.5, 1, -19.6); await page.evaluate(() => window.__tn.controls.rotateAzimuthTo(Math.PI, false)); await run(1.5);
 const cam = await page.evaluate(() => { const s = window.__tn.samples; const q = s[s.length - 1]; return { cx: q.cx, cz: q.cz, x: q.x, z: q.z }; });
 const camDist = Math.hypot(cam.cx - cam.x, cam.cz - cam.z);
 check('camera pulled in at wall (< 7 m of 9)', camDist < 7, { camDist: camDist.toFixed(2) });

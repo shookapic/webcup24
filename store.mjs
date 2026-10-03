@@ -127,4 +127,36 @@ if (!announcementColumns.has('title_en')) {
 db.prepare("INSERT OR IGNORE INTO transport_status (code, status, message) VALUES ('T1', 'perturbé', ?), ('T2', 'normal', NULL)")
   .run('Montée des eaux : ralentissements entre Mairie et Quartier sud. Prévoyez 10 minutes de plus.');
 
+// F38: a service can be marked unavailable, with the reason, when it is back, and what to do meanwhile.
+// available_again is city-local time, 'YYYY-MM-DDTHH:MM' (see server.mjs cityNow).
+const availabilityColumns = new Set(db.prepare('PRAGMA table_info(services)').all().map((column) => column.name));
+if (!availabilityColumns.has('availability')) db.exec("ALTER TABLE services ADD COLUMN availability TEXT NOT NULL DEFAULT 'available' CHECK (availability IN ('available', 'unavailable'))");
+for (const column of ['unavailable_reason', 'unavailable_reason_en', 'available_again', 'alternative', 'alternative_en']) {
+  if (!availabilityColumns.has(column)) db.exec(`ALTER TABLE services ADD COLUMN ${column} TEXT`);
+}
+// The service a request is about (optional), so staff see it and citizens were warned before writing.
+const messageColumnsAgain = new Set(db.prepare('PRAGMA table_info(messages)').all().map((column) => column.name));
+if (!messageColumnsAgain.has('service_id')) db.exec('ALTER TABLE messages ADD COLUMN service_id INTEGER REFERENCES services(id)');
+
+// F39: appointment slots published by agents. starts_at is city-local 'YYYY-MM-DDTHH:MM'.
+// open → booked (by one citizen) → open again if the citizen cancels, or cancelled if staff cancel a booking.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS appointments (
+    id INTEGER PRIMARY KEY,
+    agent_id INTEGER NOT NULL REFERENCES users(id),
+    starts_at TEXT NOT NULL,
+    duration_min INTEGER NOT NULL,
+    location TEXT NOT NULL,
+    instructions TEXT NOT NULL,
+    citizen_id INTEGER REFERENCES users(id),
+    reason TEXT,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'booked', 'cancelled')),
+    booked_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (agent_id, starts_at)
+  );
+  CREATE INDEX IF NOT EXISTS appointments_starts ON appointments(starts_at);
+  CREATE INDEX IF NOT EXISTS appointments_citizen ON appointments(citizen_id);
+`);
+
 db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());

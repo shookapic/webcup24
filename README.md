@@ -41,9 +41,17 @@ La commande affiche un mot de passe aléatoire une seule fois. Conservez-le dans
 - Transports (F36) : `GET /api/transports` (deux lignes, trois prochains passages par arrêt, perturbations). Le portail met l’arrêt du quartier du profil en premier ; les agents mettent à jour l’info trafic.
 - Suppression de son propre compte avec confirmation par mot de passe (F33) : le compte, les messages et les signalements sont effacés, les sessions fermées.
 - Administration des comptes citoyens (F34, agents et administrateurs) : recherche, désactivation/réactivation (les sessions sont fermées et la connexion refusée), mot de passe temporaire affiché une seule fois, suppression avec confirmation. Les comptes du personnel ne sont jamais modifiables depuis cet écran.
+- Protection des connexions (F37) : limites en trois couches sur 15 minutes (5 erreurs par adresse et compte, 20 par compte, 40 par adresse), pause annoncée avec le temps restant, alerte au titulaire après une connexion réussie, vue de sécurité pour les agents. Derrière un proxy, définir `TRUST_PROXY=1`. Les compteurs sont en mémoire (réinitialisés au redémarrage).
+- Disponibilité des services (F38) : un agent signale une interruption avec motif, reprise prévue (heure de Terra Nova, UTC+4) et alternative ; les habitants le voient sur la carte du service, avant d’écrire, et dans le téléphone du monde. L’interruption se termine d’elle-même à l’heure de reprise.
+- Rendez-vous (F39) et rappels (F40) : les agents publient des créneaux, les habitants réservent (un seul gagne si deux personnes cliquent en même temps), annulent, et retrouvent date, heures, lieu et consignes. Rappel en bandeau 24 h puis 1 h avant, notification du navigateur si activée, et fichier d’agenda `.ics` avec deux alarmes. Il n’y a ni e-mail ni SMS.
+- Accessibilité (D13, D20, F41–F44) : lien d’évitement qui place le focus dans le contenu, liens de saut dans l’espace personnel et l’espace agent, anneau de focus visible partout, erreurs de formulaire qui nomment le champ et y placent le focus, état « Envoi en cours… », taille du texte jusqu’à 200 %, mise en page sans défilement horizontal jusqu’à 400 % de zoom, mots expliqués simplement, aucun statut signalé par la seule couleur, réglage système « plus de contraste » suivi. Vérifié par `node tools/qa-a/a11y-browser.mjs` (Chrome) ; aucune technologie d’assistance réelle n’a été utilisée.
 - Astuces contextuelles au premier usage (F35) : recherche de services, premier message, premier signalement ; masquables et mémorisées par utilisateur.
 
 La clé API reste sur le serveur. Le flux du concours est accessible aux agents et administrateurs authentifiés uniquement. Le serveur ne déduit ni le nombre ni le calendrier des vagues : il affiche les demandes réellement reçues et utilise `request_code` comme référence stable.
+
+## Site de test déployé
+
+Portail : https://losfablitos.lareunion.webcup.hodi.cloud/ — monde 3D : https://losfablitos.lareunion.webcup.hodi.cloud/monde/ (Hodifly, chaque envoi sur `main` redéploie). Contrôle sans écriture : `node tools/qa-a/host-smoke.mjs https://losfablitos.lareunion.webcup.hodi.cloud dist/monde` (requêtes GET uniquement ; ne publie ni compte, ni message, ni alerte).
 
 ## Hébergement et données
 

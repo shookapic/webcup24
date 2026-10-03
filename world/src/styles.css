@@ -113,3 +113,14 @@ html, body, #root { margin: 0; height: 100%; background: #0b0614; color: #fff; f
 @media (prefers-reduced-motion: no-preference) { .phone-sheet { animation: phone-rise 0.25s ease-out; } }
 @keyframes phone-rise { from { transform: translateY(1.5rem); opacity: 0; } }
 @media (max-width: 30rem) { .phone-backdrop { padding: 0; } .phone-sheet { width: 100%; height: 100%; border: 0; border-radius: 0; } }
+.phone-unavailable { border-color: var(--ph-amber); }
+.phone-outage { margin: 0.4rem 0; padding: 0.6rem 0.75rem; background: #2c2410; border: 1px solid var(--ph-amber); border-radius: 0.7rem; }
+.phone-outage p { margin: 0 0 0.3rem; }
+.phone-outage p:last-child { margin-bottom: 0; }
+/* Found in the real-browser pass: tag stretched by the grid, status bar and tab labels breaking at 150% text. */
+.phone-stop-nearest .phone-tag-nearest { justify-self: start; margin-left: 0; }
+.phone-brand, .phone-clock { white-space: nowrap; }
+.phone-bar { flex-wrap: wrap; row-gap: 0.25rem; }
+.phone-nav { grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr)); }
+.phone-nav button { overflow-wrap: normal; word-break: normal; hyphens: none; }
+@media (hover: none) { .phone-close kbd { display: none; } }

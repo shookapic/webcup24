@@ -2,6 +2,20 @@
 
 Reviewed 2026-10-03: all `world/src` components, server routes and asset delivery, store migrations, portal feature wiring, Vite configuration, and the installed ecctrl implementation. Evidence includes the user's screenshot and a successful `npm run build` on Node 24.19.0. This was a static review and build, not a browser reproduction or complete security audit.
 
+## Follow-up review — 2026-10-03, A/B commits
+
+The findings below describe the original v1 snapshot. Read [PM_STATUS.md](PM_STATUS.md) for the current review and assignments; do not reimplement resolved component work from this historical list.
+
+- A's `2fd14e4` implements F34/F35, guarded per-user alert storage/polling, screen/fallback/HUD/editor/localization and asset 404/cache/gzip fixes. A reports local automated evidence; browser/production checks are still unverified. R3/R9/R10/R12 have progressed at the component/server layer.
+- B's `8e97b3e` fixes ground ownership, frame/physics scheduling, body tilt, turn damping, stopping and hold-to-run. The installed ecctrl code confirms that grounding requires a parent rigid body. B reports 30/60/144 Hz measurements; R1 is now partially resolved, with input, collisions and camera tests still outstanding.
+- App integration remains a blocking gap: both inspected versions omit userId/ready, discard explicit acknowledgement IDs and retain the old phone/HUD/input wiring. R2/R4 and end-to-end per-user alert behavior remain open. B's `input.js` is written but unused.
+- B still uses automatic colliders for City meshes and a manual variable timestep capped at 1/30; below 30 FPS the documented game slows down. Require irregular-frame/tab-return and low-mode evidence before accepting this deviation from the roadmap.
+- B's movement scripts output metrics without threshold assertions and only log page errors. Raw results and real-screen captures are required; their old storage fixture must follow A's per-user storage before integrated retesting.
+- No authored assets, physical PhoneRig, skeletal avatar/NPC animation or F36 world tram/stations were found in the inspected commits. R5–R8 remain open.
+- An authorized live feed GET succeeded at 2026-10-03T12:54:25.543Z: 36 requests through Wave 5. The prior unavailable-feed limitation is superseded for that inventory timestamp. F37 has an existing per-IP/email login limit to review; F38–F40 were not located. See the durable [request snapshot](CONTEST_REQUESTS_2026-10-03.md).
+
+This follow-up reviewed source, git history, QA reports and harnesses. It did not rerun tests, playtest, merge or deploy. Remote freshness could not be checked because Git's SSH shell failed locally; `origin/main` here is a cached ref.
+
 ## Findings by priority
 
 ### R1 — High: reported locomotion oscillation remains undiagnosed
@@ -89,3 +103,14 @@ Production build passed: main JS approximately 1.253 MB (344 KB gzip); playable-
 No local `data/` snapshot was available and the authenticated live contest feed was not retrieved. Exact current-wave completeness is unverified. Movement root cause, browser focus behavior, performance and deployed-host behavior require the roadmap's runtime gates. Application code was not changed by this review.
 
 Handoff update: a refreshed `CLAUDE.md` contained Wave 4 F33–F36 and transport API/watcher instructions added since the initial review read. These have been preserved in the assignments/spec. Their implementation has not been independently audited here; the initial review findings refer to the earlier inspected source snapshot. Both sessions must recheck changed files before applying a finding.
+
+## Combined release review — 2026-10-03 16:29
+
+The original findings above describe the prototype, not the current acceptance state. A's completed delivery through `4f3cd39` and B's committed plaza/rig through `ffec17b` are merged in the isolated integration worktree; remote `f06be69` README work is preserved. See `PM_STATUS.md` for the exact release sequence and pending B final commit.
+
+- Movement diagnosis is now measured by B: missing ground rigid-body detection, frame/physics update mismatch and controller rocking/yaw were isolated and corrected. Deterministic local checks at multiple rates are reported passing; real hardware and low-frame-rate experience remain unverified.
+- Authored CC0 local models, rigged recolorable characters, skeletal gait, moving NPCs, scoped distant curvature and a projected physical phone now exist. The captured plaza/device confirm substantial changes; final art/performance acceptance is still partial.
+- PM source review found a close/reopen timer race. B reproduced two failures on `ffec17b` and corrected it with one cancellable timer; its 12 checks now pass, including withdrawal and urgent arrivals during manual use. This correction is pending the final B commit/merge.
+- A independently validated archive `b1f2751`: build, API/portal/accessibility and both physical/flat phone modes passed, including projected real mouse clicks. Additive migrations preserve an original database fixture across two boots. This proof does not cover uncommitted later B code automatically.
+- The old live host baseline answers correctly for assets, CSP and navigation. Wave 5/6 routes and new chunks are absent there until the authorized combined push; those nine baseline version-check failures are expected, not waived for the final release.
+- Wave 7 introduces four further requests (46 total). Exact wording is captured and A's implementation is queued after its quota recovery. No claim of complete contest coverage or deployed acceptance is made by this test release.
