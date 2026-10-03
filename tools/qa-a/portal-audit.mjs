@@ -27,8 +27,12 @@ const server = spawn(process.execPath, ['server.mjs'], { cwd: root, env, stdio: 
 await wait(1500);
 
 let ipCounter = 0;
-async function open() {
+// every page opened normally is the SAME browser (one shared device cookie); { newBrowser: true } is another device with its own
+const sharedDevice = { cookies: new Map() };
+async function open(profile = {}) {
   const jar = { cookie: '' };
+  const device = profile.newBrowser ? { cookies: new Map() } : sharedDevice;
+  const userAgent = profile.newBrowser ? 'Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
   const ip = `10.20.${Math.floor(++ipCounter / 250)}.${ipCounter % 250}`;
   const dom = await JSDOM.fromURL(base + '/', {
     runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true,
@@ -39,9 +43,11 @@ async function open() {
       // Browser notification stand-in: records what the page asks the browser to show. The real popup is NOT tested here.
       window.Notification = class { static permission = 'default'; static async requestPermission() { window.Notification.permission = 'granted'; return 'granted'; } constructor(title, options) { window.__notes.push({ title, ...options }); } };
       window.fetch = async (url, options = {}) => {
-        const response = await fetch(new URL(url, base), { ...options, headers: { ...(options.headers || {}), 'X-Forwarded-For': ip, ...(jar.cookie ? { Cookie: jar.cookie } : {}) } });
-        const set = response.headers.get('set-cookie');
-        if (set) jar.cookie = set.startsWith('tn_session=;') ? '' : set.split(';')[0];
+        const response = await fetch(new URL(url, base), { ...options, headers: { ...(options.headers || {}), 'X-Forwarded-For': ip, 'User-Agent': userAgent, ...(jar.cookie || device.cookies.size ? { Cookie: [jar.cookie, ...[...device.cookies].map(([name, value]) => `${name}=${value}`)].filter(Boolean).join('; ') } : {}) } });
+        for (const set of response.headers.getSetCookie()) {
+          if (set.startsWith('tn_session=')) jar.cookie = set.startsWith('tn_session=;') ? '' : set.split(';')[0];
+          else if (set.startsWith('tn_device_')) { const pair = set.split(';')[0]; device.cookies.set(pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)); }
+        }
         return response;
       };
     },
@@ -166,7 +172,7 @@ try {
   const progress = (title) => steps(cards().find((c) => c.textContent.includes(title)));
   check('D11 the resident sees the progress without contacting the town hall: handled shows step 1 done and step 2 current, resolved shows all three done', progress('Lampadaire').join('|').includes('step-done:✓ Demande reçue') && progress('Lampadaire').join('|').includes('step-current:En cours de traitement') && progress('Question sur les horaires').every((s) => s.startsWith('step-done:✓')), `${progress('Lampadaire')} // ${progress('Question')}`);
   check('F49 the resident sees a banner and two unread notices in plain words, each saying what to do, with the town hall note', !$(zoe, '#notice-banner').hidden && $(zoe, '#notice-banner').textContent.includes('Vous avez 2 nouvelles sur vos demandes.') && $(zoe, '#notice-banner').getAttribute('role') === 'status' && $$(zoe, '#notices-list .notice-unread').length === 2 && $(zoe, '#notices-list').textContent.includes('Votre demande « Lampadaire cassé » est en cours de traitement.') && $(zoe, '#notices-list').textContent.includes('Vous n’avez rien à faire pour le moment.') && $(zoe, '#notices-list').textContent.includes('Votre demande « Question sur les horaires » est résolue.') && $(zoe, '#notices-list').textContent.includes('Si le problème persiste, envoyez-nous un nouveau message.') && $(zoe, '#notices-list').textContent.includes('Message de la mairie : Un technicien passe demain matin.'), $(zoe, '#notices-list').textContent);
-  check('F49 unread is stated by the word "Nouveau", not only by colour', $$(zoe, '#notices-list .notice-unread .notice-new').every((n) => n.textContent.startsWith('Nouveau')) && $(zoe, '#notice-banner a[href="#notices-panel"]'));
+  check('F49 unread is stated by the word "Nouveau", not only by colour', $$(zoe, '#notices-list .notice-unread .notice-new').every((n) => n.textContent.startsWith('Nouveau')) && !$(zoe, '#notice-banner a'));
   check('F49 nothing was sent to the browser before the resident opted in', zoe.window.__notes.length === 0);
   click(zoe, $(zoe, '#notices-read'));
   await wait(1200);
@@ -326,6 +332,34 @@ try {
   check('F52 when the author withdraws the publication, it vanishes for the supporter: list, supports and the notices quoting it', $$(yanis, '#public-list .notice-item .notice-action').length === 0 && $(yanis, '#public-list').textContent.includes('Aucun habitant n’a publié de signalement pour le moment.') && $(yanis, '#supports-list').textContent.includes('Vous ne soutenez aucune demande pour le moment.') && !$(yanis, '#notices-list').textContent.includes('Lampadaire éteint') && !lampCard().querySelector('.message-public') && lampCard().querySelector('.public-controls button').textContent === 'Rendre visible aux autres habitants', $(yanis, '#public-list').textContent + ' | ' + $(yanis, '#notices-list').textContent);
   yanis.window.close();
   admin.window.close();
+
+  // ============ F54: a sign-in from another browser leaves a notice; devices can be removed
+  const deviceRows = () => $$(zoe, '#devices-list .notice-item');
+  await zoe.window.loadDevices();
+  await wait(500);
+  check('F54 "Mes appareils": this browser is listed as "Cet appareil" with its label, first and last sign-in and open sessions; the page says a cookie only recognises, proves nothing, and no e-mail/SMS is sent', deviceRows().length === 1 && deviceRows()[0].textContent.includes('Chrome · Windows · Cet appareil') && /Première connexion : \d{4}-/.test(deviceRows()[0].textContent) && /Connexions ouvertes : [1-9]/.test(deviceRows()[0].textContent) && $(zoe, '#devices-panel').textContent.includes('ne prouve pas qui se connecte') && $(zoe, '#devices-panel').textContent.includes('Aucun e-mail ni SMS'), deviceRows().map((r) => r.textContent).join('|'));
+  check('F54 the very first device (and every re-opening in the same browser) raised no "new device" notice', !$(zoe, '#notices-list').textContent.includes('nouvel appareil'));
+  const elsewhere = await open({ newBrowser: true });
+  await login(elsewhere, 'zoe@audit.test', 'une-phrase-de-passe-1');
+  await zoe.window.loadNotices();
+  await wait(1200);
+  check('F54 the owner is told, in plain words, what happened and what to do: the new device named, a link to "Mes appareils", counted in the banner, and a browser notification fired (stand-in)', $(zoe, '#notices-list').textContent.includes('Connexion à votre compte depuis un nouvel appareil : Firefox · Linux.') && $(zoe, '#notices-list').textContent.includes('retirez cet appareil dans « Mes appareils » : ses connexions sont fermées') && $(zoe, '#notices-list a[href="#devices-panel"]') && !$(zoe, '#notice-banner').hidden && zoe.window.__notes.some((n) => n.body === 'Connexion à votre compte depuis un nouvel appareil : Firefox · Linux.'), $(zoe, '#notices-list').textContent.slice(0, 300));
+  check('F54 the device list refreshed by itself: two devices, the new one not marked as this device', deviceRows().length === 2 && deviceRows().filter((r) => r.textContent.includes('Cet appareil')).length === 1 && deviceRows().some((r) => r.textContent.includes('Firefox · Linux') && !r.textContent.includes('Cet appareil')), deviceRows().map((r) => r.textContent).join('|'));
+  const firefoxRow = () => deviceRows().find((r) => r.textContent.includes('Firefox · Linux'));
+  click(zoe, firefoxRow().querySelector('button'));
+  await wait(300);
+  check('F54 removing asks for confirmation first (nothing is removed yet) and offers to cancel; focus moves to the confirmation', firefoxRow().textContent.includes('Cet appareil sera déconnecté. Confirmer le retrait ?') && [...firefoxRow().querySelectorAll('button')].map((b) => b.textContent).join() === 'Confirmer le retrait,Annuler' && deviceRows().length === 2 && zoe.window.document.activeElement.textContent === 'Confirmer le retrait');
+  click(zoe, [...firefoxRow().querySelectorAll('button')].find((b) => b.textContent === 'Annuler'));
+  await wait(300);
+  check('F54 cancelling puts the "Retirer cet appareil" button back, nothing changed', firefoxRow().querySelector('button').textContent === 'Retirer cet appareil' && deviceRows().length === 2);
+  click(zoe, firefoxRow().querySelector('button'));
+  click(zoe, [...firefoxRow().querySelectorAll('button')].find((b) => b.textContent === 'Confirmer le retrait'));
+  await wait(1500);
+  check('F54 after confirming: status in words, one device left, the notice that named it is gone, focus on the panel', $(zoe, '#devices-status').textContent.includes('Appareil retiré : ses connexions sont fermées.') && deviceRows().length === 1 && !$(zoe, '#notices-list').textContent.includes('Firefox · Linux') && zoe.window.document.activeElement === $(zoe, '#devices-panel'), $(zoe, '#devices-status').textContent);
+  await elsewhere.window.loadMessages();
+  await wait(800);
+  check('F54 the removed device is signed out for real: its page falls back to the sign-in forms on its next request', !$(elsewhere, '#guest-area').hidden && $(elsewhere, '#member-area').hidden);
+  elsewhere.window.close();
 
   // ============ F33: a resident deletes their own account (UI), with the password
   fill(zoe, '#delete-form', { password: 'pas-le-bon-mot-de-passe' });

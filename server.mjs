@@ -5,7 +5,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, sep } from 'node:path';
 import { db } from './store.mjs';
-import { clearSession, createSession, currentUser, hashPassword, publicUser, verifyPassword } from './security.mjs';
+import { clearSession, createSession, currentDeviceId, currentUser, hashPassword, publicUser, recognizeDevice, verifyPassword } from './security.mjs';
 import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from './throttle.mjs';
 import { pickLang, personalHtml, recapCsv, recapHtml } from './recap.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
@@ -274,6 +274,15 @@ function color(value) {
   return value.toLowerCase();
 }
 
+// F54: a coarse, language-neutral label for the device, derived HERE from the user-agent header (never taken from a client-supplied field).
+// It is only a hint to help the resident recognise the device and can be spoofed: it is not evidence of anything.
+function deviceLabel(request) {
+  const agent = String(request.headers['user-agent'] || '').slice(0, 300);
+  const browser = /Edg\//.test(agent) ? 'Edge' : /OPR\/|Opera/.test(agent) ? 'Opera' : /Firefox\//.test(agent) ? 'Firefox' : /Chrome\/|CriOS\//.test(agent) ? 'Chrome' : /Safari\//.test(agent) ? 'Safari' : 'Navigateur';
+  const system = /Windows/.test(agent) ? 'Windows' : /Android/.test(agent) ? 'Android' : /iPhone|iPad|iPod/.test(agent) ? 'iOS' : /Mac OS X|Macintosh/.test(agent) ? 'macOS' : /Linux|X11/.test(agent) ? 'Linux' : 'appareil inconnu';
+  return `${browser} · ${system}`;
+}
+
 // F51 / F55 / F56: everything the portal holds about one resident, and only that. No password hash, no session value, nobody else's data.
 function ownData(user) {
   const own = (sql) => db.prepare(sql).all(user.id);
@@ -287,6 +296,7 @@ function ownData(user) {
     concerns: own('SELECT id, topic, body, status, response, created_at, responded_at FROM concerns WHERE user_id = ? ORDER BY id'),
     notices: own('SELECT id, code, ref_id, label, note, at, seen_at FROM notices WHERE user_id = ? ORDER BY id'),
     public_requests: own('SELECT pr.id, pr.message_id, pr.public_title, pr.public_summary, pr.district, pr.created_at, (SELECT COUNT(*) FROM supports WHERE public_request_id = pr.id) AS support_count FROM public_requests pr JOIN messages m ON m.id = pr.message_id WHERE m.user_id = ? ORDER BY pr.id'),
+    devices: own('SELECT id, label, first_seen, last_seen FROM devices WHERE user_id = ? ORDER BY id'),
     supports: own('SELECT supports.public_request_id, pr.public_title, supports.at FROM supports JOIN public_requests pr ON pr.id = supports.public_request_id WHERE supports.user_id = ? ORDER BY supports.id'),
   };
 }
@@ -325,6 +335,7 @@ function eraseUser(id) {
     db.prepare('DELETE FROM messages WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM notices WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM concerns WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM devices WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
   });
   presence.delete(id);
@@ -465,7 +476,7 @@ async function route(request, response) {
       throw error;
     }
     clearSession(request, response);
-    createSession(response, Number(result.lastInsertRowid));
+    createSession(response, Number(result.lastInsertRowid), recognizeDevice(request, Number(result.lastInsertRowid), deviceLabel(request)));
     return sendJson(response, 201, { user: publicUser({ id: Number(result.lastInsertRowid), email: address, name, role: 'citizen' }) });
   }
 
@@ -493,7 +504,10 @@ async function route(request, response) {
     if (!user.active) fail(403, 'Ce compte est désactivé. Contactez les services municipaux.');
     const earlierFailures = loginSucceeded(ip, address);
     clearSession(request, response);
-    createSession(response, user.id);
+    // F54: residents only. A sign-in from a device they have not used before leaves them a notice (same channel as F49).
+    const device = user.role === 'citizen' ? recognizeDevice(request, user.id, deviceLabel(request)) : null;
+    if (device?.isNew) db.prepare('INSERT INTO notices (user_id, code, ref_id, label) VALUES (?, ?, ?, ?)').run(user.id, 'device.new', device.id, deviceLabel(request));
+    createSession(response, user.id, device);
     if (user.role !== 'citizen') audit(user, { category: 'security', action: 'auth.staff_login', summary: 's’est connecté à l’espace de travail' });
     // The account owner is told about failed attempts made while they were away.
     return sendJson(response, 200, { user: publicUser(user), ...(earlierFailures >= 3 ? { notice: { failedAttempts: earlierFailures } } : {}) });
@@ -902,6 +916,28 @@ async function route(request, response) {
     const data = ownData(user);
     if (format === 'csv') return sendDocument(response, recapCsv(data, lang), 'text/csv; charset=utf-8', `recapitulatif-demandes-terra-nova-${lang}.csv`);
     return sendDocument(response, recapHtml(data, lang), 'text/html; charset=utf-8', params.has('download') ? `recapitulatif-demandes-terra-nova-${lang}.html` : null);
+  }
+  // F54: the resident's devices: list, and remove one (its sessions are closed). The cookie is recognition only, never a login.
+  if (path === '/api/me/devices' && method === 'GET') {
+    const user = requireUser(request, ['citizen']);
+    const current = currentDeviceId(request, user.id);
+    const rows = db.prepare('SELECT devices.id, devices.label, devices.first_seen, devices.last_seen, (SELECT COUNT(*) FROM sessions WHERE sessions.device_id = devices.id AND sessions.expires_at > ?) AS open_sessions FROM devices WHERE devices.user_id = ? ORDER BY devices.last_seen DESC, devices.id DESC').all(Date.now(), user.id);
+    return sendJson(response, 200, { devices: rows.map((row) => ({ ...row, current: row.id === current })) });
+  }
+  const deviceMatch = /^\/api\/me\/devices\/(\d+)$/.exec(path);
+  if (deviceMatch && method === 'DELETE') {
+    const user = requireUser(request, ['citizen']);
+    const id = Number(deviceMatch[1]);
+    const row = db.prepare('SELECT id FROM devices WHERE id = ? AND user_id = ?').get(id, user.id);
+    if (!row) fail(404, 'Appareil introuvable.');
+    const wasCurrent = id === currentDeviceId(request, user.id);
+    tx(() => {
+      db.prepare('DELETE FROM sessions WHERE device_id = ?').run(id);
+      db.prepare("DELETE FROM notices WHERE code = 'device.new' AND ref_id = ? AND user_id = ?").run(id, user.id);
+      db.prepare('DELETE FROM devices WHERE id = ?').run(id);
+    });
+    if (wasCurrent) clearSession(request, response);
+    return sendJson(response, 200, { ok: true, signed_out: wasCurrent });
   }
   // F51: concerns about data use (resident side)
   if (path === '/api/concerns' && method === 'GET') {

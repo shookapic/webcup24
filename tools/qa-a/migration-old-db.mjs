@@ -35,6 +35,7 @@ try {
   const login = await call('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'old@x.test', password: 'old-password-123' }) });
   const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
   check('the old user still signs in with the old password', login.status === 200);
+  check('the old resident signing in for the first time after the upgrade gets a device registered silently (no false "new device" alarm for every old account)', (login.headers.getSetCookie().some((c) => /^tn_device_\d+=/.test(c))));
   const messages = (await (await call('/api/messages', { headers: { Cookie: cookie } })).json()).messages || [];
   check('the old message is kept (new service_id column is NULL)', messages[0]?.subject === 'Ancien sujet' && messages[0].service_id === null);
   const services = (await (await call('/api/services')).json()).services;
@@ -47,7 +48,7 @@ try {
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name);
   const triggers = db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'").all().map((r) => r.name);
   check('new tables exist: appointments, places, audit_log (+ append-only triggers)', ['appointments', 'places', 'audit_log'].every((t) => tables.includes(t)) && triggers.includes('audit_log_no_update') && triggers.includes('audit_log_no_delete'), tables.join());
-  check('Wave 8 tables exist (notices, concerns, public_requests, supports) on the old database', ['notices', 'concerns', 'public_requests', 'supports'].every((t) => tables.includes(t)));
+  check('Wave 8 tables exist (notices, concerns, public_requests, supports, devices + sessions.device_id) on the old database', ['notices', 'concerns', 'public_requests', 'supports', 'devices'].every((t) => tables.includes(t)) && db.prepare('PRAGMA table_info(sessions)').all().some((c) => c.name === 'device_id'));
   const json = { Cookie: cookie, 'Content-Type': 'application/json' };
   const oldNotices = await (await call('/api/me/notices', { headers: json })).json();
   check('the old resident has no notice for the old message (nothing is invented), and an empty concern history', oldNotices.notices.length === 0 && oldNotices.unread === 0 && (await (await call('/api/concerns', { headers: json })).json()).concerns.length === 0);

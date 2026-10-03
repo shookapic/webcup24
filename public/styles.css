@@ -467,3 +467,9 @@ html[data-contrast=high] .notice-unread,html[data-contrast=high] .dashboard-todo
 .dashboard-tile dd a{color:inherit}
 @media(max-width:620px){.activity-row{grid-template-columns:5.5rem minmax(3rem,1fr)}.activity-values{grid-column:1 / -1;white-space:normal}}
 .link-list{margin:0 0 14px;padding:0;list-style:none;display:grid;gap:6px}
+/* links inside the notices: a ring that shows on their background and a target of at least 24 px */
+.notice-item a{display:inline-block;min-height:24px;line-height:24px;color:#0b2a44;font-weight:600}
+.notice-item a:focus-visible{outline:3px solid #0b2a44;outline-offset:2px}
+.notice-banner a:focus-visible{outline:3px solid #0b2a44;outline-offset:2px}
+html[data-contrast=high] .notice-item a{color:#ffeb00}
+html[data-contrast=high] .notice-item a:focus-visible{outline-color:#ffeb00}

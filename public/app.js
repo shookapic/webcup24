@@ -348,6 +348,7 @@ function renderIdentity() {
   renderDashboard();
   renderStaffConcerns();
   renderPublic();
+  renderDevices();
   updateDocumentLinks();
   loadConcerns();
   renderPlaces();
@@ -390,6 +391,8 @@ function clearIdentity() {
   auditTarget = null;
   renderAudit();
   notices = [];
+  devices = [];
+  deviceConfirm = null;
   staffConcerns = [];
   publicRequests = [];
   mySupports = [];
@@ -397,7 +400,7 @@ function clearIdentity() {
   for (const key of Object.keys(publishDrafts)) delete publishDrafts[key];
   noticeKey = null;
   dashboard = null;
-  for (const id of ['#notices-list', '#public-list', '#supports-list', '#concerns-list', '#staff-concerns', '#notice-banner', '#dashboard-todo', '#dashboard-tiles', '#dashboard-recent']) $(id).replaceChildren();
+  for (const id of ['#notices-list', '#devices-list', '#public-list', '#supports-list', '#concerns-list', '#staff-concerns', '#notice-banner', '#dashboard-todo', '#dashboard-tiles', '#dashboard-recent']) $(id).replaceChildren();
   $('#notice-banner').hidden = true;
   $('#dashboard-time').textContent = '';
   $('#citizens-list').replaceChildren();
@@ -513,6 +516,7 @@ const noticeLines = {
   'public.in_progress': ['La demande « {label} » que vous soutenez est en cours de traitement.', 'Vous n’avez rien à faire. Merci de votre soutien.'],
   'public.resolved': ['La demande « {label} » que vous soutenez est résolue.', 'Merci de votre soutien.'],
   'public.new': ['La demande « {label} » que vous soutenez est de nouveau à traiter.', 'Vous n’avez rien à faire.'],
+  'device.new': ['Connexion à votre compte depuis un nouvel appareil : {label}.', 'Si c’était vous, il n’y a rien à faire. Sinon, retirez cet appareil dans « Mes appareils » : ses connexions sont fermées. Les services municipaux peuvent aussi changer votre mot de passe.'],
   'concern.read': ['Votre inquiétude {label} a été lue par un agent.', 'Vous n’avez rien à faire : une réponse peut suivre.'],
   'concern.answered': ['Votre inquiétude {label} a reçu une réponse.', 'Lisez la réponse ci-dessous ou dans « Mes inquiétudes envoyées ».'],
 };
@@ -523,6 +527,7 @@ async function loadNotices() {
   try {
     ({ notices } = await api('/api/me/notices'));
     renderNotices();
+    if (notices.some((item) => item.code === 'device.new' && !item.seen_at)) loadDevices();
   } catch (error) {
     if (error.status === 401) clearIdentity();
   }
@@ -546,6 +551,11 @@ function renderNotices(force = false) {
     line.append(noticeText(item));
     if (action) line.append(element('span', 'notice-action', t(action)));
     if (item.note) line.append(element('span', 'notice-note', t('Message de la mairie : {note}', { note: item.note })));
+    if (item.code === 'device.new') {
+      const link = element('a', '', t('Voir mes appareils'));
+      link.href = '#devices-panel';
+      line.append(link);
+    }
     if (item.code.startsWith('public.')) {
       const link = element('a', '', t('Voir la demande publique'));
       link.href = '#public-panel';
@@ -562,9 +572,7 @@ function renderNotices(force = false) {
   const banner = $('#notice-banner');
   banner.hidden = !unread.length;
   if (!unread.length) return banner.replaceChildren();
-  const link = element('a', '', t('Voir mes nouvelles'));
-  link.href = '#notices-panel';
-  banner.replaceChildren(element('strong', '', `${t('Nouvelles')} · `), `${t(unread.length === 1 ? 'Vous avez 1 nouvelle sur vos demandes.' : 'Vous avez {n} nouvelles sur vos demandes.', { n: unread.length })} `, link);
+  banner.replaceChildren(element('strong', '', `${t('Nouvelles')} · `), `${t(unread.length === 1 ? 'Vous avez 1 nouvelle sur vos demandes.' : 'Vous avez {n} nouvelles sur vos demandes.', { n: unread.length })} ${t('Elles sont en haut de « Mon espace ».')}`);
 }
 
 $('#notices-read').addEventListener('click', async () => {
@@ -666,6 +674,67 @@ function renderDashboard() {
     return line;
   }));
   $('#dashboard-recent').replaceChildren(...(d.recent.length ? d.recent : [null]).map((row) => element('li', row ? '' : 'list-empty', row ? `${row.at.replace('T', ' ').slice(0, 16)} · ${row.actor_name} ${row.summary}` : t('Aucune action enregistrée.'))));
+}
+
+// ---- F54: the devices this account has been used from. The cookie only recognises a browser; it proves nothing about who is using it.
+let devices = [];
+let deviceConfirm = null;
+async function loadDevices() {
+  if (user?.role !== 'citizen') return;
+  try {
+    ({ devices } = await api('/api/me/devices'));
+    renderDevices();
+  } catch (error) {
+    if (error.status === 401) clearIdentity();
+  }
+}
+
+function renderDevices() {
+  $('#devices-list').replaceChildren(...(devices.length ? devices : [null]).map((item) => {
+    if (!item) return element('li', 'list-empty', t('Aucun appareil enregistré pour le moment.'));
+    const line = element('li', 'notice-item');
+    line.dataset.device = item.id;
+    line.append(element('strong', '', item.current ? `${item.label} · ${t('Cet appareil')}` : item.label));
+    line.append(element('span', 'notice-time', t('Première connexion : {first} · Dernière : {last} · Connexions ouvertes : {n}', { first: item.first_seen, last: item.last_seen, n: item.open_sessions })));
+    if (deviceConfirm === item.id) {
+      line.append(element('span', 'notice-note', t(item.current ? 'Vous serez déconnecté de cet appareil. Confirmer le retrait ?' : 'Cet appareil sera déconnecté. Confirmer le retrait ?')));
+      const actions = element('span', 'notice-actions');
+      const yes = element('button', '', t('Confirmer le retrait'));
+      yes.type = 'button';
+      yes.addEventListener('click', () => removeDevice(item));
+      const no = element('button', '', t('Annuler'));
+      no.type = 'button';
+      no.addEventListener('click', () => { deviceConfirm = null; renderDevices(); $(`[data-device="${item.id}"] button`)?.focus(); });
+      actions.append(yes, no);
+      line.append(actions);
+    } else {
+      const button = element('button', '', t('Retirer cet appareil'));
+      button.type = 'button';
+      button.setAttribute('aria-label', t('Retirer l’appareil {label}', { label: item.label }));
+      button.addEventListener('click', () => { deviceConfirm = item.id; renderDevices(); $(`[data-device="${item.id}"] .notice-actions button`)?.focus(); });
+      line.append(button);
+    }
+    return line;
+  }));
+}
+
+async function removeDevice(item) {
+  try {
+    const result = await api(`/api/me/devices/${item.id}`, 'DELETE');
+    deviceConfirm = null;
+    if (result.signed_out) {
+      clearIdentity();
+      setFormStatus('#account-status', t('Cet appareil est retiré et vous êtes déconnecté.'));
+      $('#account-status').focus();
+      return;
+    }
+    setFormStatus('#devices-status', t('Appareil retiré : ses connexions sont fermées.'));
+    await loadDevices();
+    loadNotices();
+    $('#devices-panel').focus();
+  } catch (error) {
+    reportError('#devices-status', error);
+  }
 }
 
 // F55 / F56: the readable pages and the recap files follow the interface language
@@ -1902,6 +1971,7 @@ async function afterAuthentication(nextUser) {
   loadConcerns();
   loadStaffConcerns();
   loadPublic();
+  loadDevices();
   await loadFeed();
   loadCitizens();
   loadAppointments();

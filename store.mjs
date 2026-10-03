@@ -243,6 +243,22 @@ db.exec(`
   );
 `);
 
+// F54: devices a resident has signed in from. A device is recognised by a random cookie whose hash is stored here; this is recognition
+// (to warn about a new device), never an authentication factor. Only a coarse label (browser, system) is kept: no address, no user-agent string.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS devices (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    label TEXT NOT NULL,
+    first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, token_hash)
+  );
+`);
+const sessionColumns = new Set(db.prepare('PRAGMA table_info(sessions)').all().map((column) => column.name));
+if (!sessionColumns.has('device_id')) db.exec('ALTER TABLE sessions ADD COLUMN device_id INTEGER');
+
 // F47 / F48: append-only audit trail with a hash chain (see audit.mjs). The triggers refuse any UPDATE or DELETE.
 db.exec(`
   CREATE TABLE IF NOT EXISTS audit_log (

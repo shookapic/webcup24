@@ -1,6 +1,7 @@
 // Session A regression smoke: boots a throwaway server on a temp database and checks the API contracts,
 // role checks, Wave 4 account flows and /monde/ asset serving. Usage: node tools/smoke-a.mjs
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -29,14 +30,19 @@ function staff(email, name, role) {
 
 class Client {
   cookie = '';
+  deviceJar = new Map();
+  get deviceCookie() { return [...this.deviceJar].map(([name, value]) => `${name}=${value}`).join('; '); }
+  set deviceCookie(pairs) { this.deviceJar = new Map(pairs.split('; ').filter(Boolean).map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)])); }
   async call(path, method = 'GET', body, headers = {}) {
     const response = await fetch(base + path, {
       method, redirect: 'manual',
-      headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(this.cookie ? { Cookie: this.cookie } : {}), ...headers },
+      headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(this.cookie || this.deviceCookie ? { Cookie: [this.cookie, this.deviceCookie].filter(Boolean).join('; ') } : {}), ...headers },
       body: body ? JSON.stringify(body) : undefined,
     });
-    const set = response.headers.get('set-cookie');
-    if (set) this.cookie = set.startsWith('tn_session=;') ? '' : set.split(';')[0];
+    for (const set of response.headers.getSetCookie()) {
+      if (set.startsWith('tn_session=')) this.cookie = set.startsWith('tn_session=;') ? '' : set.split(';')[0];
+      else if (set.startsWith('tn_device_')) { const pair = set.split(';')[0]; this.deviceJar.set(pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)); }
+    }
     const type = response.headers.get('content-type') || '';
     return { status: response.status, headers: response.headers, data: type.includes('json') ? await response.json() : await response.text() };
   }
@@ -566,13 +572,72 @@ try {
   check('F56 a resident with no request gets a clear sentence and a header-only CSV; wrong format 400, visitors 401, staff 403', (await r55_empty.call('/api/me/recap')).data.includes('Vous n’avez encore envoyé aucune demande.') && (await r55_empty.call('/api/me/recap?format=csv')).data.split('\r\n').filter(Boolean).length === 1 && (await visitor.call('/api/me/recap')).status === 401 && (await agent.call('/api/me/recap')).status === 403 && (await citizen.call('/api/me/recap?format=xml')).status === 400);
   check('F56 another resident\'s requests never appear in my r55_recap or personal page', !(await r55_empty.call('/api/me/recap')).data.includes('Lampadaire') && !(await r55_empty.call('/api/me/export?format=html')).data.includes('citizen@smoke.test'));
 
+  // F54: a notice when the account is signed in from a device it has not used before
+  const EDGE_WINDOWS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36 Edg/120.0' };
+  const FIREFOX_LINUX = { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0' };
+  const laptop = new Client();
+  await laptop.call('/api/auth/register', 'POST', { name: 'Appareil Un', email: 'devices@smoke.test', password: 'device-password-123' }, EDGE_WINDOWS);
+  const deviceNotices = async (client) => (await mine(client)).notices.filter((n) => n.code === 'device.new');
+  const laptopDevices = async () => (await laptop.call('/api/me/devices')).data.devices;
+  check('F54 the first device is registered silently (registration is not a "new device"), is marked current and labelled from the request header', (await deviceNotices(laptop)).length === 0 && (await laptopDevices()).length === 1 && (await laptopDevices())[0].current === true && (await laptopDevices())[0].label === 'Edge · Windows' && (await laptopDevices())[0].open_sessions === 1);
+  await laptop.call('/api/auth/logout', 'POST');
+  const again = await laptop.call('/api/auth/login', 'POST', { email: 'devices@smoke.test', password: 'device-password-123', label: '<b>Fausse étiquette</b>' }, EDGE_WINDOWS);
+  check('F54 signing in again from the same browser is not a new device: no notice, still one device, no second device cookie, a client-supplied label is ignored', again.status === 200 && (await deviceNotices(laptop)).length === 0 && (await laptopDevices()).length === 1 && !/tn_device_/.test(again.headers.get('set-cookie')) && (await laptopDevices())[0].label === 'Edge · Windows');
+  const phone = new Client();
+  const fromLinux = await phone.call('/api/auth/login', 'POST', { email: 'devices@smoke.test', password: 'device-password-123' }, FIREFOX_LINUX);
+  check('F54 a sign-in from a browser with no known device cookie leaves the owner a durable notice naming the device (derived on the server), once', fromLinux.status === 200 && (await deviceNotices(laptop)).length === 1 && (await deviceNotices(laptop))[0].label === 'Firefox · Linux' && Boolean((await deviceNotices(laptop))[0].at) && (await laptopDevices()).length === 2);
+  check('F54 the device cookie is HttpOnly, SameSite=Strict, one year, and only its hash is stored (nothing like an address or user-agent string)', await (async () => { const cookie = fromLinux.headers.get('set-cookie'); const raw = new DatabaseSync(env.DATA_PATH); const rows = raw.prepare("SELECT * FROM devices WHERE user_id = (SELECT id FROM users WHERE email = 'devices@smoke.test')").all(); const columns = raw.prepare('PRAGMA table_info(devices)').all().map((c) => c.name); raw.close(); const value = phone.deviceCookie.split('=')[1]; return /tn_device_\d+=[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Strict; Path=\/; Max-Age=31536000/.test(cookie) && rows.every((r) => r.token_hash !== value && r.token_hash.length === 64) && JSON.stringify(columns) === JSON.stringify(['id', 'user_id', 'token_hash', 'label', 'first_seen', 'last_seen']) && !JSON.stringify(rows).includes('Mozilla'); })());
+  const again2 = new Client();
+  again2.deviceCookie = phone.deviceCookie;
+  await again2.call('/api/auth/login', 'POST', { email: 'devices@smoke.test', password: 'device-password-123' }, FIREFOX_LINUX);
+  check('F54 the second sign-in from that same device is recognised: no new notice, still two devices', (await deviceNotices(laptop)).length === 1 && (await laptopDevices()).length === 2);
+  const planter = new Client();
+  const ownerId = (await laptop.call('/api/me')).data.user.id;
+  const plantedPair = `tn_device_${ownerId}=${'B'.repeat(43)}`;
+  planter.deviceCookie = plantedPair;
+  const planted = await planter.call('/api/auth/login', 'POST', { email: 'devices@smoke.test', password: 'device-password-123' }, EDGE_WINDOWS);
+  check('F54 a device identifier sent by the client is never adopted: it counts as a new device, the server issues its own different value, and the planted one is not stored', planted.status === 200 && (await deviceNotices(laptop)).length === 2 && planter.deviceCookie !== plantedPair && await (async () => { const raw = new DatabaseSync(env.DATA_PATH); const n = raw.prepare('SELECT COUNT(*) AS n FROM devices WHERE token_hash = ?').get(createHash('sha256').update('B'.repeat(43)).digest('hex')).n; raw.close(); return n === 0; })());
+  const sharedBrowser = new Client();
+  await sharedBrowser.call('/api/auth/register', 'POST', { name: 'Autre Personne', email: 'other-person@smoke.test', password: 'device-password-456' }, EDGE_WINDOWS);
+  sharedBrowser.cookie = '';
+  await sharedBrowser.call('/api/auth/login', 'POST', { email: 'devices@smoke.test', password: 'device-password-123' }, EDGE_WINDOWS);
+  const ownerDevices = (await sharedBrowser.call('/api/me/devices')).data.devices;
+  await sharedBrowser.call('/api/auth/login', 'POST', { email: 'other-person@smoke.test', password: 'device-password-456' }, EDGE_WINDOWS);
+  await sharedBrowser.call('/api/auth/login', 'POST', { email: 'devices@smoke.test', password: 'device-password-123' }, EDGE_WINDOWS);
+  check('F54 two accounts on one browser keep their own device cookie: alternating sign-ins raise no notice for either, each has exactly one device', (await mine(sharedBrowser)).notices.filter((n) => n.code === 'device.new').length === (await deviceNotices(laptop)).length && (await sharedBrowser.call('/api/me/devices')).data.devices.length === ownerDevices.length && sharedBrowser.deviceJar.size === 2);
+  const fixated = new Client();
+  fixated.cookie = `tn_session=${'C'.repeat(43)}`;
+  const fixedLogin = await fixated.call('/api/auth/login', 'POST', { email: 'devices@smoke.test', password: 'device-password-123' }, EDGE_WINDOWS);
+  check('F54 session fixation: a session value planted before sign-in is not accepted, signing in issues a new one', fixedLogin.status === 200 && fixated.cookie !== `tn_session=${'C'.repeat(43)}` && (await new Client().call('/api/me', 'GET', undefined, { Cookie: `tn_session=${'C'.repeat(43)}` })).data.user === null);
+  const mineByDevice = (await laptopDevices());
+  const linuxDevice = mineByDevice.find((d) => d.label === 'Firefox · Linux');
+  check('F54 devices are listed with first and last sign-in and open sessions; only the caller\'s own', mineByDevice.length === 5 && mineByDevice.every((d) => d.first_seen && d.last_seen) && linuxDevice.current === false && (await new Client().call('/api/me/devices')).status === 401 && (await agent.call('/api/me/devices')).status === 403 && (await citizen.call('/api/me/devices')).data.devices.every((d) => d.id !== linuxDevice.id));
+  check('F54 nobody can remove another resident\'s device (404), visitors 401, staff 403', (await citizen.call(`/api/me/devices/${linuxDevice.id}`, 'DELETE')).status === 404 && (await new Client().call(`/api/me/devices/${linuxDevice.id}`, 'DELETE')).status === 401 && (await agent.call(`/api/me/devices/${linuxDevice.id}`, 'DELETE')).status === 403 && (await laptopDevices()).length === 5);
+  const removed = await laptop.call(`/api/me/devices/${linuxDevice.id}`, 'DELETE');
+  check('F54 removing a device closes its sessions (that browser is signed out), deletes the device and the notice that named it, and does not sign out the caller', removed.status === 200 && removed.data.signed_out === false && (await phone.call('/api/me')).data.user === null && (await again2.call('/api/me')).data.user === null && (await laptop.call('/api/me')).data.user !== null && (await laptopDevices()).length === 4 && !(await deviceNotices(laptop)).some((n) => n.label === 'Firefox · Linux' && n.ref_id === linuxDevice.id));
+  await phone.call('/api/auth/login', 'POST', { email: 'devices@smoke.test', password: 'device-password-123' }, FIREFOX_LINUX);
+  check('F54 after removal the same browser is a new device again and the owner is told again', (await deviceNotices(laptop)).filter((n) => n.label === 'Firefox · Linux').length === 1);
+  const self = (await laptopDevices()).find((d) => d.current);
+  const selfRemoval = await laptop.call(`/api/me/devices/${self.id}`, 'DELETE');
+  check('F54 removing the current device signs the caller out (says so), and the rest of the account keeps working', selfRemoval.data.signed_out === true && (await laptop.call('/api/me')).data.user === null && (await phone.call('/api/me')).data.user !== null);
+  const preFeature = new DatabaseSync(env.DATA_PATH);
+  preFeature.prepare("UPDATE sessions SET device_id = NULL WHERE user_id = (SELECT id FROM users WHERE email = 'devices@smoke.test')").run();
+  preFeature.close();
+  check('F54 sessions created before the feature (no device) stay valid', (await phone.call('/api/me')).data.user !== null && (await phone.call('/api/me/devices')).status === 200);
+  const exportedDevices = (await phone.call('/api/me/export')).data.devices;
+  check('F54 the export lists the resident\'s devices (label, first and last sign-in), nothing else', exportedDevices.length >= 1 && Object.keys(exportedDevices[0]).sort().join() === 'first_seen,id,label,last_seen');
+  await phone.call('/api/me', 'DELETE', { password: 'device-password-123' });
+  const gone2 = new DatabaseSync(env.DATA_PATH);
+  check('F54 deleting the account removes its devices', gone2.prepare("SELECT COUNT(*) AS n FROM devices WHERE user_id NOT IN (SELECT id FROM users)").get().n === 0 && gone2.prepare("SELECT COUNT(*) AS n FROM devices WHERE label = 'Firefox · Linux'").get().n === 0);
+  gone2.close();
+
   // F51: the "Vos données" page makes claims; each one is checked against the running server and the database
   const relogin = new Client();
   const loginResponse = await relogin.call('/api/auth/login', 'POST', { email: 'citizen@smoke.test', password: 'a-long-password-1' });
   check('F51 claim: the session cookie lasts 7 days, is HttpOnly and SameSite=Strict', /Max-Age=604800/.test(loginResponse.headers.get('set-cookie')) && /HttpOnly/.test(loginResponse.headers.get('set-cookie')) && /SameSite=Strict/.test(loginResponse.headers.get('set-cookie')));
   const claims = new DatabaseSync(env.DATA_PATH);
   const tables = claims.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name);
-  const expectedTables = ['announcements', 'appointments', 'audit_log', 'concerns', 'messages', 'notices', 'places', 'public_requests', 'services', 'sessions', 'supports', 'transport_status', 'users'];
+  const expectedTables = ['announcements', 'appointments', 'audit_log', 'concerns', 'devices', 'messages', 'notices', 'places', 'public_requests', 'services', 'sessions', 'supports', 'transport_status', 'users'];
   check('F51 claim: the database holds exactly the tables the "Vos données" page describes (a new table means that page must be updated)', JSON.stringify(tables) === JSON.stringify(expectedTables), JSON.stringify(tables));
   const cookieValue = citizen.cookie.split('=')[1];
   check('F51 claim: passwords and session values are stored scrambled, not readable', claims.prepare('SELECT COUNT(*) AS n FROM sessions WHERE token_hash = ?').get(cookieValue).n === 0 && claims.prepare('SELECT COUNT(*) AS n FROM sessions').get().n >= 1 && !claims.prepare("SELECT password_hash FROM users WHERE email = 'citizen@smoke.test'").get().password_hash.includes('a-long-password-1'));
