@@ -45,6 +45,10 @@ La commande affiche un mot de passe aléatoire une seule fois. Conservez-le dans
 
 La clé API reste sur le serveur. Le flux du concours est accessible aux agents et administrateurs authentifiés uniquement. Le serveur ne déduit ni le nombre ni le calendrier des vagues : il affiche les demandes réellement reçues et utilise `request_code` comme référence stable.
 
+## Site de test déployé
+
+Portail : https://losfablitos.lareunion.webcup.hodi.cloud/ — monde 3D : https://losfablitos.lareunion.webcup.hodi.cloud/monde/ (Hodifly, chaque envoi sur `main` redéploie). Contrôle sans écriture : `node tools/qa-a/host-smoke.mjs https://losfablitos.lareunion.webcup.hodi.cloud dist/monde` (requêtes GET uniquement ; ne publie ni compte, ni message, ni alerte).
+
 ## Hébergement et données
 
 Par défaut, le serveur écoute uniquement sur `127.0.0.1`. Pour un hébergement public, placer Node derrière HTTPS, définir `NODE_ENV=production`, choisir `HOST` et `PORT` selon l’hébergeur, et conserver `DATA_PATH` sur un volume persistant. Le drapeau `Secure` est alors appliqué au cookie de session. Ne pas exposer `.env` ni le dossier `data/` par le serveur web.

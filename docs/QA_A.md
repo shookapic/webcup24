@@ -7,6 +7,7 @@ Updated 2026-10-03 (H+7h30). Scope: A0 scope ledger, A1 phone/HUD/data hook, A2 
 | What | Where |
 |---|---|
 | A0–A3, F34, F35, phone/HUD/editor, asset serving | commit `2fd14e4`; already on `main` through B's merge `d04f830` |
+| Wave 6 accessibility (D13, D20, F41–F44) | `4749bdf` on **`sessionA-work`** (isolated commit on top of Wave 5) |
 | Wave 5 (F37–F40), D11 steps, F23 contrast fixes, QA harnesses | branch **`sessionA-work`** (not pushed, not on `main`): `3db1f0d` Wave 5, `6f88f02` merge of `origin/main` (`b0aaa09`), `ac006bc` docs + QA scripts |
 | Docs `docs/PM_STATUS.md`, `docs/CONTEST_REQUESTS_2026-10-03.md`, edits to `CODE_REVIEW.md`/`GAME_ROADMAP.md` | belong to the PM; **left uncommitted** in the working tree on purpose |
 
@@ -75,7 +76,7 @@ Screenshots: `SHOTS_DIR` (default the OS temp folder) — `p0*` production, `w*`
 | F40 as e-mail/SMS | NOT PROVIDED: none exists; the reminder needs the page open (banner/notification) or a calendar app (.ics alarms) |
 | Rate-limit state survives a restart | NO: in memory, per process (documented in `throttle.mjs`) |
 | `sign-in limits per visitor on Hodifly` | depends on `TRUST_PROXY`; unknown until measured there |
-| Physical phone, stations/tram, plaza art (B) | not A's; B's `docs/QA_B.md` says not started |
+| B's world: physical phone, plaza and avatar are committed (see the combined-candidate section); stations and moving tram not found in source; performance on a reference laptop; real GPU | PARTIAL / UNVERIFIED |
 
 ## Decisions and limits
 - F33/F34 deletion removes messages and reports with the account (stated in the UI); deleting a citizen frees their booked slots.
@@ -125,3 +126,31 @@ Screenshots in `SHOTS_DIR`: `a11y-*` (zoom matrix, four colour-vision simulation
 
 ### Next
 Watcher still running (one per machine). `sessionA-work` has not been pushed or merged; that is a separate checkpoint.
+
+## Combined candidate b1f2751 (A's `sessionA-work` 4749bdf + B's ffec17b), validated 2026-10-03 ~16:15
+
+Source: `git archive b1f2751191101f8721637ae9332cff277841ed16` of the PM's `webcup24-int` (worktree untouched, still clean), extracted to a scratch folder, `npm ci`, `npm run build`. All local: Node-served build, Chrome headless, disposable databases. `origin/main` is now **f06be69** (README-only change over ffec17b); `sessionA-work` 4749bdf merges with it cleanly (`git merge-tree`). Nothing pushed.
+
+| Command (cwd = the candidate) | Result |
+|---|---|
+| `npm run build` | PASS (index 1.37 MB / gzip 381 KB, PlayableCity 4.38 MB / gzip 1.63 MB; models and Kenney licences under assets/) |
+| `node tools/smoke-a.mjs` | PASS 104/104 |
+| `node tools/qa-a/portal.mjs` (jsdom) | PASS 60 |
+| `node tools/qa-a/world-ui.mjs` (jsdom) | PASS 75 |
+| `node tools/qa-a/portal-browser.mjs` (Chrome) | PASS 15 |
+| `node tools/qa-a/a11y-browser.mjs` (Chrome) | PASS 91 |
+| `node tools/qa-a/world-browser.mjs` (Chrome, harness) | PASS 113 |
+| `node tools/qa-a/world-production.mjs physical` (Node-served `/monde/`, B's physical rig) | PASS 20 |
+| `node tools/qa-a/world-production.mjs flat` (`?flatphone`, accessible dialog) | PASS 15 |
+| B's `tools/qa/world-checks.mjs` at 60 Hz and at 30 Hz with jitter | ALL PASS (18 checks each) |
+| B's `tools/qa/phone-capture.mjs`, `tools/qa/alert-flow.mjs` | ALL PASS |
+
+**Physical phone, what was actually proven** (real-time build, 1280×800, Chrome, software WebGL): the host is `.phone-host` (`role=dialog`, `aria-modal`, labelled) under a CSS `matrix3d`, lit (opacity 1), exactly one dialog and no flat sheet beside it, on the viewport, focus inside. A **real mouse click at each projected tab centre hit that tab** and changed the page (Services, back to Home), and the alert takeover, acknowledge and Escape paths work. The screen is drawn at about **0.76 scale**: 16 px text reads as about 12 px at this size, readable in the capture but smaller than the flat dialog. Not proven: real GPU timing, Firefox/Safari, touch, other resolutions. `tools/qa-a/world-production.mjs` takes the mode as an argument and covers both hosts (`.phone-sheet`, `.phone-host`).
+
+**Host baseline (production URL, read-only).** The user-supplied host is https://losfablitos.lareunion.webcup.hodi.cloud/ (world at `/monde/`). `node tools/qa-a/host-smoke.mjs <url> dist/monde` sends GET requests only (no login, no posting, no accounts, no content). Result against the **currently deployed earlier build**: portal and `/monde/` answer 200; portal CSP strict; world CSP is the contract one; hashed assets are 200 with correct MIME, immutable cache, gzip; all 13 local models/textures are served with `model/gltf-binary` / `image/png`; a missing `.glb` is a real 404; navigation falls back to the app; traversal does not leak; conditional GET is 304; public APIs shape OK; Wave 4 route present (401). **Expected FAILs until the release is pushed (9 checks):** the portal HTML and the Wave 5 routes (`/api/admin/security`, `/api/appointments/slots` answer 404) and `availability` fields are not deployed yet, and the host's entry chunks are `index-DUJ3j-ei.js` / `index-Hrqw9TDY.css` instead of the candidate's `index-B_qHMEZc.js` / `index-DPnYpTfY.css` / `PlayableCity-DxlwfB7x.js` / `rapier-CRmr7vNN.js`. Re-run the same command after the push: every one of these should flip to PASS. This is host evidence for the old build only; it is not a result for the combined release.
+
+**Migration / data safety.** Schema changes are additive. Tested: a database created by the original store (commit 1afe494) with a real user and message keeps working after the new server boots (login, message kept, services available, new appointment routes), and a second boot is harmless. Rollback leaves extra columns that older code ignores.
+
+**Deploy knobs.** `TRUST_PROXY=1` if Hodifly shows every client as loopback (otherwise the per-address sign-in limit is shared by all visitors). `TERRA_NOVA_API_KEY` stays server-side. Sign-in counters are in memory and reset on restart.
+
+**Feed.** Contest API queried directly at 16:16: wave 6, 42 requests, next wave 7 due in 9 minutes; no new codes. The single watcher (started 15:25:37) is running; `api-requests.md` is rewritten only when the feed changes.
