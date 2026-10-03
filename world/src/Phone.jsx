@@ -9,11 +9,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { audience as audienceName, formatCityTime, formatDate, formatTime, fold, getLocale, localized, normalizeLocale, t } from './ui/i18n.js';
 import { loadSeen, saveSeen } from './ui/storage.js';
-import { usePolled, useServices, useTransports } from './ui/usePolled.js';
+import { usePlaces, usePolled, useServices, useTransports } from './ui/usePolled.js';
 import { useDialogFocus } from './ui/useDialog.js';
 
-export const PHONE_PAGES = ['home', 'alerts', 'news', 'services', 'transports'];
-export { useServices, useTransports };
+export const PHONE_PAGES = ['home', 'alerts', 'news', 'services', 'places', 'transports'];
+export { usePlaces, useServices, useTransports };
 
 const validAnnouncements = (data) => Array.isArray(data?.announcements);
 
@@ -273,7 +273,69 @@ function NewsPage({ news, detailId, onOpen, onBack, status, lastUpdated, onRetry
   );
 }
 
-function HomePage({ urgent, news, status, lastUpdated, onRetry, transportFeed, lines, nearest, go, locale }) {
+// F45 / F46: physical places. Emergency and hospitals first, then the one at the nearest stop first within each kind.
+const placeRank = { emergency: 0, hospital: 1, service: 2 };
+const isHere = (place, nearest) => Boolean(nearest) && fold(place.stop) === nearest;
+function sortPlaces(items, nearest) {
+  return [...items].sort((a, b) => (placeRank[a.kind] ?? 3) - (placeRank[b.kind] ?? 3) || Number(isHere(b, nearest)) - Number(isHere(a, nearest)) || String(a.name).localeCompare(String(b.name)));
+}
+const careFor = (items, nearest) => sortPlaces(items.filter((place) => place && place.kind !== 'service'), nearest);
+
+function PlaceCard({ item, nearest, locale }) {
+  const name = localized(item, 'name', locale);
+  const address = localized(item, 'address', locale);
+  const hours = localized(item, 'hours', locale);
+  const phone = item.phone ? String(item.phone).replace(/[^0-9+]/g, '') : '';
+  return (
+    <article className={item.kind === 'emergency' ? 'phone-card phone-place phone-place-emergency' : 'phone-card phone-place'}>
+      <p>
+        <span className="phone-tag phone-tag-kind">{t(locale, `places.kind.${item.kind}`)}</span>
+        {isHere(item, nearest) && <span className="phone-tag phone-tag-nearest">{t(locale, 'places.nearest')}</span>}
+      </p>
+      <h3 lang={name.lang}>{name.text}{name.fallback && <> <FrTag locale={locale} /></>}</h3>
+      <p className="phone-next">{item.district} · {t(locale, 'places.stop', { stop: item.stop })}</p>
+      <p lang={address.lang}>{address.text}</p>
+      <p lang={hours.lang}>{item.open_24h ? t(locale, 'places.open24') : hours.text}</p>
+      {phone && <a className="phone-call" href={`tel:${phone}`}>{t(locale, 'places.call', { phone: item.phone })}</a>}
+    </article>
+  );
+}
+
+function PlacesPage({ items, feed, nearest, locale }) {
+  const [query, setQuery] = useState('');
+  const [kind, setKind] = useState('all');
+  const valid = items.filter((item) => item && item.id != null);
+  const needle = fold(query.trim());
+  const shown = sortPlaces(valid, nearest).filter((item) => (kind === 'all' || (kind === 'care' ? item.kind !== 'service' : item.kind === 'service'))
+    && fold(['name', 'address'].map((field) => localized(item, field, locale).text).join(' ')).includes(needle));
+  const filters = [['all', 'places.filterAll'], ['care', 'places.filterCare'], ['service', 'places.filterServices']];
+  return (
+    <>
+      <label className="phone-search">
+        <span>{t(locale, 'places.search')}</span>
+        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t(locale, 'places.placeholder')} autoComplete="off" enterKeyHint="search" />
+      </label>
+      <fieldset className="phone-filter">
+        <legend className="sr-only">{t(locale, 'places.filterLabel')}</legend>
+        {filters.map(([value, label]) => (
+          <label key={value} className={kind === value ? 'phone-chip phone-chip-on' : 'phone-chip'}>
+            <input type="radio" name="phone-place-kind" value={value} checked={kind === value} onChange={() => setKind(value)} />
+            <span>{t(locale, label)}</span>
+          </label>
+        ))}
+      </fieldset>
+      <Notice status={feed.status} hasData={valid.length > 0} lastUpdated={feed.lastUpdated} onRetry={feed.retry} locale={locale} />
+      <p className="phone-count" role="status">
+        {!settled(feed.status, valid.length > 0) ? '' : !valid.length ? t(locale, 'places.none') : !shown.length ? t(locale, 'places.noMatch')
+          : t(locale, shown.length > 1 ? 'places.countMany' : 'places.countOne', { n: shown.length })}
+      </p>
+      {shown.map((item) => <PlaceCard key={item.id} item={item} nearest={nearest} locale={locale} />)}
+      <p className="phone-links"><a href="/#lieux" target="_blank" rel="noopener">{t(locale, 'places.portal')} <span className="sr-only">{t(locale, 'services.newTab')}</span></a></p>
+    </>
+  );
+}
+
+function HomePage({ urgent, news, status, lastUpdated, onRetry, transportFeed, lines, nearest, placeItems, placeFeed, go, locale }) {
   const hasData = urgent.length > 0 || news.length > 0;
   const nearestLines = nearest ? lines.filter((line) => Array.isArray(line.stops) && line.stops.some((stop) => fold(stop.name) === nearest)) : [];
   const nearestStop = nearestLines[0]?.stops.find((stop) => fold(stop.name) === nearest);
@@ -287,6 +349,20 @@ function HomePage({ urgent, news, status, lastUpdated, onRetry, transportFeed, l
           {urgent.length > 0 && <button type="button" className="phone-action" onClick={() => go('alerts')}>{t(locale, 'page.alerts')}</button>}
         </section>
       )}
+      {(() => {
+        // Answer first: the number to call and the closest hospital or emergency service, without opening another page.
+        const care = careFor(placeItems, nearest)[0];
+        const name = care && localized(care, 'name', locale);
+        return (
+          <section className="phone-card phone-emergency">
+            <h3>{t(locale, 'places.emergencyTitle')}</h3>
+            <p><strong>{t(locale, 'places.call112', { phone: care?.phone || '112' })}</strong></p>
+            {care && <p className="phone-next">{t(locale, 'places.nearestCare')} : <strong lang={name.lang}>{name.text}</strong> — {t(locale, 'places.stop', { stop: care.stop })}</p>}
+            {placeFeed.status === 'error' && !care && <p className="phone-next">{t(locale, 'state.error')}</p>}
+            <button type="button" className="phone-action" onClick={() => go('places')}>{t(locale, 'places.all')}</button>
+          </section>
+        );
+      })()}
       {nearest && (
         <section className="phone-card">
           <h3>{t(locale, 'home.nearest')}</h3>
@@ -333,12 +409,12 @@ function HomePage({ urgent, news, status, lastUpdated, onRetry, transportFeed, l
 }
 
 export function PhoneScreen({
-  page = 'home', onPageChange, announcements = [], pendingAlerts = [], services, transports, nearestStop,
+  page = 'home', onPageChange, announcements = [], pendingAlerts = [], services, transports, places, nearestStop,
   status = 'ready', error, lastUpdated, onAcknowledge, onClose, onRetry, locale,
 }) {
   const loc = normalizeLocale(locale ?? getLocale());
-  // Opt-in experiment for browsers/GPUs where the physical phone's text is sliced or missing (not reproduced here: Chrome, Edge and
-  // headless Firefox on an RTX 5070 Ti at 1x-2x): /monde/?phonefix=layer | nomask | smooth. See world/src/styles.css. Inert without the parameter.
+  // Opt-in experiment for GPUs where the physical phone's text is sliced or missing (not reproduced on an RTX 5070 Ti in Chrome/Edge):
+  // /monde/?phonefix=layer | nomask | smooth. See world/src/styles.css. Does nothing without the parameter.
   useEffect(() => {
     const mode = new URLSearchParams(window.location.search).get('phonefix');
     if (!['layer', 'nomask', 'smooth'].includes(mode)) return undefined;
@@ -360,6 +436,9 @@ export function PhoneScreen({
   const pendingKey = pending.map((item) => item.id).join(',');
   const transportFeed = feedOf(transports, 'lines');
   const serviceFeed = feedOf(services, 'services');
+  // Places load themselves unless the host passes them, so no host wiring is needed.
+  const ownPlaces = usePlaces(places === undefined);
+  const placeFeed = feedOf(places === undefined ? ownPlaces : places, 'places');
   const nearest = nearestName(nearestStop);
   void error;
 
@@ -425,10 +504,12 @@ export function PhoneScreen({
           <NewsPage news={news} detailId={detail} onOpen={(id) => setDetail(id)} onBack={() => { setDetail(null); }} status={status} lastUpdated={lastUpdated} onRetry={onRetry} locale={loc} />
         ) : current === 'services' ? (
           <ServicesPage items={serviceFeed.items} feed={serviceFeed} locale={loc} />
+        ) : current === 'places' ? (
+          <PlacesPage items={placeFeed.items} feed={placeFeed} nearest={nearest} locale={loc} />
         ) : current === 'transports' ? (
           <TransportsPage lines={transportFeed.items} feed={transportFeed} nearest={nearest} locale={loc} />
         ) : (
-          <HomePage urgent={urgent} news={news} status={status} lastUpdated={lastUpdated} onRetry={onRetry} transportFeed={transportFeed} lines={transportFeed.items} nearest={nearest} go={go} locale={loc} />
+          <HomePage urgent={urgent} news={news} status={status} lastUpdated={lastUpdated} onRetry={onRetry} transportFeed={transportFeed} lines={transportFeed.items} nearest={nearest} placeItems={placeFeed.items} placeFeed={placeFeed} go={go} locale={loc} />
         )}
       </div>
       {!pending.length && (

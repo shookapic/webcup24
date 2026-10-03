@@ -20,7 +20,7 @@
         <span class="brand-mark" aria-hidden="true"><span></span></span>
         <span class="brand-name">TERRA <strong>NOVA</strong><small>LE PORTAIL DE LA CITÉ</small></span>
       </a>
-      <nav aria-label="Navigation principale"><a href="#services">Services</a><a href="#transports">Transports</a><a href="#actualites">Actualités</a><a href="#espace">Mon espace</a><a href="#mots">Mots simples</a></nav>
+      <nav aria-label="Navigation principale"><a href="#services">Services</a><a href="#lieux">Lieux</a><a href="#transports">Transports</a><a href="#actualites">Actualités</a><a href="#espace">Mon espace</a><a href="#mots">Mots simples</a></nav>
       <div class="header-tools">
         <button id="lang-toggle" class="lang-toggle" type="button" lang="en">English</button>
         <div class="accessibility-tools" role="group" aria-label="Options d’affichage">
@@ -33,6 +33,11 @@
     </header>
 
     <main id="contenu" tabindex="-1">
+      <section class="emergency-strip" id="urgences" aria-labelledby="urgences-title" tabindex="-1">
+        <p id="urgences-title" class="emergency-title">Urgence ? Appelez le <a class="emergency-call" href="tel:112">112</a>.</p>
+        <ul id="urgences-list" class="emergency-list" data-content></ul>
+        <a class="emergency-all" href="#lieux">Tous les lieux</a>
+      </section>
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
           <span class="eyebrow"><span class="eyebrow-line"></span> PREMIÈRE CITÉ D’UN NOUVEAU MONDE</span>
@@ -51,6 +56,19 @@
         <div id="tip-search" class="tip-slot" role="status"></div>
         <div id="services-list" class="service-grid" data-content></div>
         <p id="services-status" class="section-status" role="status"></p>
+      </section>
+
+      <section class="overview places-section" id="lieux" aria-labelledby="places-title" tabindex="-1">
+        <nav class="breadcrumb" aria-label="Fil d’Ariane des lieux"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Lieux</span></nav>
+        <div class="section-heading"><div><span class="section-kicker">LIEUX DE LA VILLE</span><h2 id="places-title">Où trouver ?</h2></div><p>Hôpitaux, urgences et services de la ville : où c’est, comment y aller et quand c’est ouvert.</p></div>
+        <label class="search-field place-search"><span class="visually-hidden">Rechercher un lieu</span><span aria-hidden="true">⌕</span><input id="place-search" type="search" placeholder="Hôpital, mairie, marché…" aria-describedby="places-status"></label>
+        <fieldset class="place-filter"><legend>Type de lieu</legend>
+          <label class="chip"><input type="radio" name="place-kind" value="all" checked><span>Tous</span></label>
+          <label class="chip"><input type="radio" name="place-kind" value="care"><span>Urgences et soins</span></label>
+          <label class="chip"><input type="radio" name="place-kind" value="service"><span>Services de la ville</span></label>
+        </fieldset>
+        <div id="places-list" class="place-grid" data-content></div>
+        <p id="places-status" class="section-status" role="status"></p>
       </section>
 
       <section class="overview transports-section" id="transports" aria-labelledby="transports-title">
@@ -155,7 +173,7 @@
           </div>
 
           <div id="staff-area" hidden>
-            <nav class="jump-nav" aria-label="Dans l’espace agent"><a href="#staff-messages-panel">Messages</a><a href="#traffic-form">Info trafic</a><a href="#availability-form">Disponibilité des services</a><a href="#slots-panel">Horaires de rendez-vous</a><a href="#security-panel">Sécurité</a><a href="#citizens-panel">Comptes des habitants</a><a href="#feed-panel">Demandes du concours</a><a class="admin-only" href="#service-form" hidden>Ajouter un service</a><a class="admin-only" href="#news-form" hidden>Publier une actualité</a></nav>
+            <nav class="jump-nav" aria-label="Dans l’espace agent"><a href="#staff-messages-panel">Messages</a><a href="#traffic-form">Info trafic</a><a href="#availability-form">Disponibilité des services</a><a href="#slots-panel">Horaires de rendez-vous</a><a href="#security-panel">Sécurité</a><a href="#citizens-panel">Comptes des habitants</a><a href="#audit-panel">Journal des actions</a><a href="#feed-panel">Demandes du concours</a><a class="admin-only" href="#service-form" hidden>Ajouter un service</a><a class="admin-only" href="#news-form" hidden>Publier une actualité</a><a class="admin-only" href="#place-admin" hidden>Lieux de la ville</a></nav>
             <div class="section-heading staff-heading"><div><span class="section-kicker">ESPACE AGENT</span><h3>Suivi de l’activité</h3></div><p>Demandes citoyennes et flux officiel, dans un espace réservé aux agents.</p></div>
             <div class="workspace-grid">
               <div class="panel" id="staff-messages-panel" tabindex="-1"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p><div id="staff-messages" class="message-list" data-content></div></div>
@@ -203,6 +221,24 @@
               <p id="security-summary" class="security-summary" role="status" data-content></p>
               <ul id="security-targets" class="security-targets" data-content></ul>
             </section>
+            <section id="audit-panel" class="panel audit-panel" aria-labelledby="audit-title" tabindex="-1">
+              <h3 id="audit-title">Journal des actions</h3>
+              <p>Qui a fait quoi, quand et pourquoi dans l’espace de travail. Le journal ne peut être ni modifié ni effacé : chaque ligne est liée à la précédente.</p>
+              <p id="audit-integrity" class="audit-integrity" role="status" data-content></p>
+              <div class="audit-tools"><button id="audit-verify" type="button">Vérifier l’intégrité</button><a id="audit-csv" class="button-link" href="/api/admin/audit?format=csv">Exporter en tableur (CSV)</a></div>
+              <form id="audit-filter" class="audit-filter">
+                <p id="audit-target" class="audit-target" data-content hidden></p>
+                <label>Agent <select name="actor" id="audit-actor"><option value="">Tous</option></select></label>
+                <label>Domaine <select name="category" id="audit-category"><option value="">Tous</option></select></label>
+                <label>Mot recherché <input type="search" name="q" maxlength="80" autocomplete="off"></label>
+                <label>Du <input type="date" name="from"></label>
+                <label>Au <input type="date" name="to"></label>
+                <div class="audit-buttons"><button class="button button-primary" type="submit">Filtrer</button><button id="audit-reset" type="button">Tout afficher</button></div>
+                <p id="audit-status" class="form-status" role="status" aria-live="polite"></p>
+              </form>
+              <ol id="audit-list" class="audit-list" data-content></ol>
+              <button id="audit-more" type="button" hidden>Afficher plus</button>
+            </section>
             <section id="citizens-panel" class="panel citizens-panel" aria-labelledby="citizens-title" tabindex="-1">
               <h3 id="citizens-title">Comptes des habitants</h3><p>Désactivez, réactivez, réinitialisez le mot de passe ou supprimez le compte d’un habitant. Les comptes du personnel ne sont pas modifiables ici.</p>
               <label>Rechercher un habitant <input id="citizen-search" type="search" maxlength="80" placeholder="Nom ou adresse e-mail" autocomplete="off"></label>
@@ -215,6 +251,26 @@
 
           <div id="admin-area" class="admin-grid" hidden>
             <form id="service-form" class="panel" tabindex="-1"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="100"></label><label>Résumé en anglais (facultatif) <input name="description_en" minlength="5" maxlength="180"></label><label>Informations utiles en anglais (facultatif) <textarea name="details_en" minlength="10" maxlength="2000" rows="4"></textarea></label><label class="check-field"><input name="featured" type="checkbox"> Mettre en avant (affiché en premier)</label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <section id="place-admin" class="panel place-admin" aria-labelledby="place-admin-title" tabindex="-1">
+              <h3 id="place-admin-title">Lieux de la ville</h3><p>Ajoutez ou corrigez les lieux que les habitants cherchent : hôpitaux, urgences, services. Chaque changement est noté dans le journal des actions.</p>
+              <form id="place-form">
+                <label>Type <select name="kind"><option value="service">Service de la ville</option><option value="hospital">Hôpital</option><option value="emergency">Urgences et secours</option></select></label>
+                <label>Nom <input name="name" required minlength="3" maxlength="100"></label>
+                <label>Nom en anglais (facultatif) <input name="name_en" minlength="3" maxlength="100"></label>
+                <label>Quartier <select name="district"><option>Centre-ville</option><option>Quartier nord</option><option>Quartier est</option><option>Quartier ouest</option><option>Quartier sud</option></select></label>
+                <label>Arrêt de tram le plus proche <select name="stop"><option>Mairie</option><option>Habitat</option><option>Santé</option><option>Marché</option><option>Quartier sud</option></select></label>
+                <label>Où c’est et comment y aller <textarea name="address" required minlength="5" maxlength="240" rows="3"></textarea></label>
+                <label>Où c’est, en anglais (facultatif) <textarea name="address_en" minlength="5" maxlength="240" rows="3"></textarea></label>
+                <label>Horaires <input name="hours" minlength="3" maxlength="120" placeholder="Ex. Du lundi au vendredi, de 8 h à 17 h"></label>
+                <label>Horaires en anglais (facultatif) <input name="hours_en" minlength="3" maxlength="120"></label>
+                <label class="check-field"><input type="checkbox" name="open_24h"> Ouvert 24 h sur 24</label>
+                <label>Téléphone (facultatif) <input name="phone" inputmode="tel" maxlength="20" placeholder="Ex. 112"></label>
+                <label>Service lié (facultatif) <select name="service_id" id="place-service"><option value="">Aucun</option></select></label>
+                <div class="audit-buttons"><button class="button button-primary" type="submit" id="place-submit">Enregistrer le lieu</button><button id="place-cancel" type="button" hidden>Annuler la modification</button></div>
+                <p id="place-status" class="form-status" role="status" aria-live="polite"></p>
+              </form>
+              <ul id="places-admin-list" class="appointment-list" data-content></ul>
+            </section>
             <form id="news-form" class="panel" tabindex="-1"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="120"></label><label>Contenu en anglais (facultatif) <textarea name="body_en" minlength="10" maxlength="4000" rows="4"></textarea></label><label>Public concerné <input name="audience" list="audiences" minlength="2" maxlength="80" placeholder="Tous"></label><datalist id="audiences"><option value="Tous"></option><option value="Quartier sud"></option><option value="Personnes vulnérables"></option></datalist><label class="check-field"><input name="urgent" type="checkbox"> Alerte urgente : afficher en bandeau sur toutes les pages et notifier les habitants</label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
           </div>
         </div>
