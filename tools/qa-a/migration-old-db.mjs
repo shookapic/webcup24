@@ -47,12 +47,14 @@ try {
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name);
   const triggers = db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'").all().map((r) => r.name);
   check('new tables exist: appointments, places, audit_log (+ append-only triggers)', ['appointments', 'places', 'audit_log'].every((t) => tables.includes(t)) && triggers.includes('audit_log_no_update') && triggers.includes('audit_log_no_delete'), tables.join());
-  check('Wave 8 tables exist (notices, concerns) on the old database', ['notices', 'concerns'].every((t) => tables.includes(t)));
+  check('Wave 8 tables exist (notices, concerns, public_requests, supports) on the old database', ['notices', 'concerns', 'public_requests', 'supports'].every((t) => tables.includes(t)));
   const json = { Cookie: cookie, 'Content-Type': 'application/json' };
   const oldNotices = await (await call('/api/me/notices', { headers: json })).json();
   check('the old resident has no notice for the old message (nothing is invented), and an empty concern history', oldNotices.notices.length === 0 && oldNotices.unread === 0 && (await (await call('/api/concerns', { headers: json })).json()).concerns.length === 0);
   const exported = await (await call('/api/me/export', { headers: json })).json();
   check('the export of the old account contains the old message and no password hash', exported.messages[0]?.subject === 'Ancien sujet' && !JSON.stringify(exported).includes('scrypt'));
+  const oldPublic = await (await call('/api/public-requests', { headers: json })).json();
+  check('the old incident-style data stays private: nothing is public after migration, and the old message offers no public id', oldPublic.requests.length === 0 && (await (await call('/api/messages', { headers: json })).json()).messages.every((m) => m.public_id === null));
   const filed = await call('/api/concerns', { method: 'POST', headers: json, body: JSON.stringify({ topic: 'usage', body: 'Une question de test sur mes données.' }) });
   check('a concern can be filed on the migrated database', filed.status === 201);
   const userColumns = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);

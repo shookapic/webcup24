@@ -347,6 +347,7 @@ function renderIdentity() {
   renderNotices(true);
   renderDashboard();
   renderStaffConcerns();
+  renderPublic();
   loadConcerns();
   renderPlaces();
   renderEmergency();
@@ -389,9 +390,13 @@ function clearIdentity() {
   renderAudit();
   notices = [];
   staffConcerns = [];
+  publicRequests = [];
+  mySupports = [];
+  publishOpen = null;
+  for (const key of Object.keys(publishDrafts)) delete publishDrafts[key];
   noticeKey = null;
   dashboard = null;
-  for (const id of ['#notices-list', '#concerns-list', '#staff-concerns', '#notice-banner', '#dashboard-todo', '#dashboard-tiles', '#dashboard-recent']) $(id).replaceChildren();
+  for (const id of ['#notices-list', '#public-list', '#supports-list', '#concerns-list', '#staff-concerns', '#notice-banner', '#dashboard-todo', '#dashboard-tiles', '#dashboard-recent']) $(id).replaceChildren();
   $('#notice-banner').hidden = true;
   $('#dashboard-time').textContent = '';
   $('#citizens-list').replaceChildren();
@@ -448,6 +453,9 @@ function renderMessages(messages) {
       });
       card.append(steps);
     }
+    card.dataset.message = item.id;
+    if (staff && item.public_id) card.append(element('p', 'message-public', t(item.support_count === 1 ? 'Publié pour les habitants : 1 soutien.' : 'Publié pour les habitants : {n} soutiens.', { n: item.support_count })));
+    if (!staff && item.kind === 'incident') card.append(publicControls(item));
     card.append(element('p', 'message-dates', t('Reçu le {created} · Dernière mise à jour le {updated}', { created: item.created_at, updated: item.updated_at })));
     if (staff) {
       const label = element('label', 'status-field', t('État '));
@@ -489,6 +497,9 @@ const noticeLines = {
   'message.in_progress': ['Votre demande « {label} » est en cours de traitement.', 'Vous n’avez rien à faire pour le moment.'],
   'message.resolved': ['Votre demande « {label} » est résolue.', 'Si le problème persiste, envoyez-nous un nouveau message.'],
   'message.new': ['Votre demande « {label} » est de nouveau à traiter.', 'Vous n’avez rien à faire : un agent la reprendra.'],
+  'public.in_progress': ['La demande « {label} » que vous soutenez est en cours de traitement.', 'Vous n’avez rien à faire. Merci de votre soutien.'],
+  'public.resolved': ['La demande « {label} » que vous soutenez est résolue.', 'Merci de votre soutien.'],
+  'public.new': ['La demande « {label} » que vous soutenez est de nouveau à traiter.', 'Vous n’avez rien à faire.'],
   'concern.read': ['Votre inquiétude {label} a été lue par un agent.', 'Vous n’avez rien à faire : une réponse peut suivre.'],
   'concern.answered': ['Votre inquiétude {label} a reçu une réponse.', 'Lisez la réponse ci-dessous ou dans « Mes inquiétudes envoyées ».'],
 };
@@ -522,6 +533,11 @@ function renderNotices(force = false) {
     line.append(noticeText(item));
     if (action) line.append(element('span', 'notice-action', t(action)));
     if (item.note) line.append(element('span', 'notice-note', t('Message de la mairie : {note}', { note: item.note })));
+    if (item.code.startsWith('public.')) {
+      const link = element('a', '', t('Voir la demande publique'));
+      link.href = '#public-panel';
+      line.append(link);
+    }
     line.append(element('span', 'notice-time', item.at));
     return line;
   }));
@@ -579,7 +595,7 @@ function renderDashboard() {
   $('#dashboard-todo').replaceChildren(...(todo.length ? todo : [t('Rien d’urgent : aucune demande n’attend et rien n’est perturbé.')]).map((line) => element('li', '', line)));
   const tiles = [
     ['Messages à traiter', d.messages.new], ['Messages en cours', d.messages.in_progress], ['Messages résolus', d.messages.resolved],
-    ['Inquiétudes à lire', d.concerns.received], ['Messages reçus aujourd’hui', d.messages.received_today], ['Messages reçus sur 7 jours', d.messages.received_week],
+    ['Inquiétudes à lire', d.concerns.received], ['Signalements publiés', d.public.requests], ['Soutiens donnés', d.public.supports], ['Messages reçus aujourd’hui', d.messages.received_today], ['Messages reçus sur 7 jours', d.messages.received_week],
     ['Rendez-vous réservés aujourd’hui', d.appointments.booked_today], ['Rendez-vous réservés sur 7 jours', d.appointments.booked_week], ['Horaires libres sur 7 jours', d.appointments.open_week],
     ['Habitants inscrits', d.residents.total], ['Nouveaux habitants sur 7 jours', d.residents.new_week],
     ...(d.residents.deactivated === undefined ? [] : [['Comptes désactivés', d.residents.deactivated]]),
@@ -695,6 +711,152 @@ function renderStaffConcerns() {
     line.append(answer, actions);
     return line;
   }));
+}
+
+// ---- F52: a resident chooses to publish an incident report as a separate public record; others can support it once.
+const districtList = ['Centre-ville', 'Quartier nord', 'Quartier est', 'Quartier ouest', 'Quartier sud'];
+let publicRequests = [];
+let mySupports = [];
+let publishOpen = null;
+const publishDrafts = {};
+const focusMessageControl = (id) => $(`[data-message="${id}"] .public-controls button`)?.focus();
+
+function publicControls(item) {
+  const box = element('div', 'public-controls');
+  const button = (label, handler) => {
+    const control = element('button', '', t(label));
+    control.type = 'button';
+    control.addEventListener('click', handler);
+    return control;
+  };
+  if (item.public_id) {
+    box.append(element('p', 'message-public', t(item.support_count === 1 ? 'Visible par les autres habitants : « {title} » · 1 soutien.' : 'Visible par les autres habitants : « {title} » · {n} soutiens.', { title: item.public_title, n: item.support_count })));
+    box.append(button('Retirer la publication', async () => {
+      try {
+        await api(`/api/messages/${item.id}/public`, 'DELETE');
+        setFormStatus('#public-status', t('La publication est retirée : les autres habitants ne la voient plus.'));
+        await loadMessages();
+        loadPublic();
+        focusMessageControl(item.id);
+      } catch (error) {
+        reportError('#public-status', error);
+      }
+    }));
+    return box;
+  }
+  if (item.status === 'resolved') return box;
+  if (publishOpen === item.id) {
+    box.append(publishForm(item));
+    return box;
+  }
+  box.append(button('Rendre visible aux autres habitants', () => {
+    publishOpen = item.id;
+    loadMessages().then(() => $(`[data-message="${item.id}"] .public-form input`)?.focus());
+  }));
+  return box;
+}
+
+function publishForm(item) {
+  const draft = (publishDrafts[item.id] ||= { title: '', summary: '', district: districtList.includes(user?.district) ? user.district : districtList[0], consent: false });
+  const form = element('form', 'public-form');
+  form.setAttribute('aria-label', t('Publier le signalement « {title} »', { title: item.subject }));
+  form.append(element('p', '', t('Ce que les autres habitants liront : le titre, le résumé et le quartier ci-dessous, et rien d’autre. Votre nom, votre adresse e-mail, votre message et le lieu précis ne sont pas montrés. N’écrivez ni numéro de téléphone ni adresse e-mail.')));
+  const field = (label, control, key) => {
+    const wrapper = element('label', '', `${t(label)} `);
+    control.value = draft[key];
+    control.addEventListener('input', () => { draft[key] = control.value; });
+    wrapper.append(control);
+    return wrapper;
+  };
+  const title = element('input');
+  Object.assign(title, { name: 'public_title', required: true, minLength: 5, maxLength: 100, autocomplete: 'off' });
+  const summary = element('textarea');
+  Object.assign(summary, { name: 'public_summary', required: true, minLength: 10, maxLength: 300, rows: 3 });
+  const district = element('select');
+  district.name = 'district';
+  for (const name of districtList) district.append(Object.assign(element('option', '', name), { value: name }));
+  const consent = element('input');
+  Object.assign(consent, { type: 'checkbox', name: 'consent', required: true, checked: draft.consent });
+  consent.addEventListener('change', () => { draft.consent = consent.checked; });
+  const consentLabel = element('label', 'consent-field');
+  consentLabel.append(consent, ` ${t('Je comprends que ce titre, ce résumé et ce quartier seront lus par les autres habitants.')}`);
+  const status = element('p', 'form-status');
+  status.id = `public-form-status-${item.id}`;
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  const send = element('button', 'button button-primary', t('Publier mon signalement'));
+  send.type = 'submit';
+  const cancel = element('button', '', t('Annuler'));
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => {
+    publishOpen = null;
+    loadMessages().then(() => focusMessageControl(item.id));
+  });
+  form.append(field('Titre public', title, 'title'), field('Résumé public', summary, 'summary'), field('Quartier', district, 'district'), consentLabel, send, cancel, status);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await api(`/api/messages/${item.id}/public`, 'POST', { public_title: title.value, public_summary: summary.value, district: district.value, consent: consent.checked });
+      publishOpen = null;
+      delete publishDrafts[item.id];
+      setFormStatus('#public-status', t('Votre signalement est maintenant visible par les autres habitants. Vous pouvez le retirer à tout moment.'));
+      await loadMessages();
+      loadPublic();
+      focusMessageControl(item.id);
+    } catch (error) {
+      reportError(`#${status.id}`, error);
+    }
+  });
+  return form;
+}
+
+async function loadPublic() {
+  if (user?.role !== 'citizen') return;
+  try {
+    const [list, own] = await Promise.all([api('/api/public-requests'), api('/api/me/supports')]);
+    publicRequests = list.requests;
+    mySupports = own.supports;
+    renderPublic();
+  } catch (error) {
+    if (error.status === 401) clearIdentity();
+  }
+}
+
+function renderPublic() {
+  $('#public-list').replaceChildren(...(publicRequests.length ? publicRequests : [null]).map((item) => {
+    if (!item) return element('li', 'list-empty', t('Aucun habitant n’a publié de signalement pour le moment.'));
+    const line = element('li', 'notice-item');
+    line.dataset.public = item.id;
+    line.append(element('strong', '', item.public_title), element('span', 'notice-action', item.public_summary));
+    line.append(element('span', '', `${t('Quartier : {district}', { district: item.district })} · ${t('État : {state}', { state: t(statusLabels[item.status]) })}`));
+    line.append(element('span', 'notice-time', item.support_count === 0 ? t('Aucun soutien pour le moment.') : t(item.support_count === 1 ? '1 habitant soutient cette demande.' : '{n} habitants soutiennent cette demande.', { n: item.support_count })));
+    if (item.mine) line.append(element('span', 'notice-note', t('C’est votre demande : vous ne pouvez pas la soutenir.')));
+    else if (item.status === 'resolved') line.append(element('span', 'notice-note', t('Demande résolue : le soutien n’est plus possible.')));
+    else {
+      if (item.supported_by_me) line.append(element('span', 'notice-note', t('Vous soutenez cette demande depuis le {date}.', { date: item.supported_at })));
+      const button = element('button', '', t(item.supported_by_me ? 'Retirer mon soutien' : 'Je soutiens cette demande'));
+      button.type = 'button';
+      button.setAttribute('aria-label', t(item.supported_by_me ? 'Retirer mon soutien à « {title} »' : 'Soutenir la demande « {title} »', { title: item.public_title }));
+      button.addEventListener('click', () => toggleSupport(item));
+      line.append(button);
+    }
+    return line;
+  }));
+  $('#supports-list').replaceChildren(...(mySupports.length ? mySupports : [null]).map((item) => (item
+    ? element('li', 'notice-item', t('« {title} » · soutenue le {date} · état : {state}', { title: item.public_title, date: item.supported_at, state: t(statusLabels[item.status]) }))
+    : element('li', 'list-empty', t('Vous ne soutenez aucune demande pour le moment.')))));
+}
+
+async function toggleSupport(item) {
+  try {
+    await api(`/api/public-requests/${item.id}/support`, item.supported_by_me ? 'DELETE' : 'POST');
+    setFormStatus('#public-status', t(item.supported_by_me ? 'Votre soutien est retiré.' : 'Merci : votre soutien à « {title} » est enregistré.', { title: item.public_title }));
+    await loadPublic();
+    $(`[data-public="${item.id}"] button`)?.focus();
+  } catch (error) {
+    reportError('#public-status', error);
+    if ([404, 409].includes(error.status)) await loadPublic();
+  }
 }
 
 async function loadMessages() {
@@ -1672,6 +1834,7 @@ async function afterAuthentication(nextUser) {
   loadNotices();
   loadConcerns();
   loadStaffConcerns();
+  loadPublic();
   await loadFeed();
   loadCitizens();
   loadAppointments();
@@ -1895,4 +2058,4 @@ applyContrast();
 
 setInterval(() => { loadTransports(); loadServices(); loadAppointments(); loadPlaces(); }, 60_000);
 Promise.allSettled([loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]);
-setInterval(() => { if (!document.activeElement?.closest?.('.reason-form')) loadNews(); if (user) { loadMessages(); loadNotices(); loadConcerns(); loadStaffConcerns(); } if (['agent', 'admin'].includes(user?.role)) { loadFeed(); loadStaffSlots(); loadSecurity(); } }, 30_000);
+setInterval(() => { if (!document.activeElement?.closest?.('.reason-form')) loadNews(); if (user) { loadMessages(); loadNotices(); loadConcerns(); loadStaffConcerns(); loadPublic(); } if (['agent', 'admin'].includes(user?.role)) { loadFeed(); loadStaffSlots(); loadSecurity(); } }, 30_000);

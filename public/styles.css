@@ -449,3 +449,9 @@ html[data-contrast=high] .notice-unread,html[data-contrast=high] .dashboard-todo
 .notice-actions{display:flex;flex-wrap:wrap;gap:8px}
 .notice-item textarea{width:100%;box-sizing:border-box}
 .data-link{display:block;margin-top:6px}
+.public-controls{display:grid;gap:8px;margin-top:8px}
+.public-form{display:grid;gap:10px;padding:10px 12px;border:1px solid var(--line,#c9d3dc);border-radius:4px}
+.public-form label{display:grid;gap:4px}
+.public-form .consent-field{display:flex;gap:8px;align-items:flex-start}
+.public-form input:not([type=checkbox]),.public-form textarea,.public-form select{width:100%;box-sizing:border-box}
+.message-public{margin:0;font-weight:600}
