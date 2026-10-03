@@ -310,6 +310,21 @@ try {
   const verify = (await agent.call('/api/admin/audit/verify')).data;
   const total = (await agent.call('/api/admin/audit?limit=200')).data.entries.length;
   check('F47 the hash chain verifies over the whole journal', verify.ok === true && verify.checked >= total && verify.brokenAt === null, JSON.stringify(verify));
+  // privacy: citizens are masked as ACTORS too (self-deletion, booking, own cancellation), in rows, facets and the export
+  const everyRow = (await agent.call('/api/admin/audit?limit=200')).data;
+  const citizenRows = everyRow.entries.filter((e) => e.actor_role === 'citizen');
+  const facetNames = everyRow.facets?.actors ?? (await agent.call('/api/admin/audit?limit=1')).data.facets.actors;
+  const everything = JSON.stringify(everyRow.entries) + JSON.stringify(facetNames) + csvText;
+  check('F47 privacy: citizen actors (self-deletion, booking, cancelling) are stored masked: first name, initial, masked e-mail, id', citizenRows.length >= 3 && citizenRows.every((e) => /^\S+( \S\.)? · \S\*\*\*@smoke\.test \(n°\d+\)$/.test(e.actor_name)), JSON.stringify(citizenRows.map((e) => e.actor_name)));
+  check('F47 privacy: after self-deletion no full citizen name or e-mail remains in rows, actor filter list or CSV; staff names are kept', !/Doomed One|Rdv Un|Rdv Deux|Citoyen Test|doomed@smoke|rdv1@smoke|rdv2@smoke/.test(everything) && everything.includes('Agent Smoke') && facetNames.some((a) => a.role === 'citizen' && /\*\*\*@/.test(a.name)) && facetNames.some((a) => a.role === 'agent' && a.name === 'Agent Smoke'));
+  // robustness: nonsense filters are a clear 400, never a crash
+  const bad = ['from=2026-99-99', 'from=2026-02-30', 'to=2026-13-01', 'from=abc', 'from=2026-5-1', 'from=2026-05-02&to=2026-05-01', 'limit=1.5', 'limit=abc', 'limit=0', 'limit=-3', 'limit=1e3', 'before=abc', 'before=0', 'before=1.5', 'actor=abc', 'actor=1.5', 'actor=-1'];
+  const badResults = await Promise.all(bad.map(async (q) => { const r = await agent.call('/api/admin/audit?' + q); return { q, status: r.status, message: typeof r.data.error === 'string' }; }));
+  check('F47 robustness: 17 malformed filters (impossible dates, non-integer limit/before/actor, reversed range) each return a clear 400 message', badResults.every((r) => r.status === 400 && r.message), JSON.stringify(badResults.filter((r) => r.status !== 400 || !r.message)));
+  check('F47 robustness: the CSV export validates the same way', (await agent.call('/api/admin/audit?format=csv&from=2026-99-99')).status === 400);
+  check('F47 robustness: the server is still healthy after the bad requests', (await agent.call('/api/me')).status === 200 && (await agent.call('/api/admin/audit/verify')).data.ok === true);
+  const clamped = (await agent.call('/api/admin/audit?limit=999')).data;
+  check('F47 robustness: valid edge inputs are accepted (limit above the maximum is clamped to 200, limit=1 gives one row, 29 February of a leap year)', clamped.entries.length <= 200 && clamped.entries.length > 20 && (await agent.call('/api/admin/audit?limit=1')).data.entries.length === 1 && (await agent.call('/api/admin/audit?from=2024-02-29&to=2024-02-29')).status === 200 && (await agent.call('/api/admin/audit?actor=&category=&q=&from=&to=&limit=')).status === 200);
   const trail = new DatabaseSync(env.DATA_PATH);
   const refused = [() => trail.prepare("UPDATE audit_log SET summary = 'modifié' WHERE id = 1").run(), () => trail.prepare('DELETE FROM audit_log WHERE id = 1').run()].map((run) => { try { run(); return false; } catch (error) { return /append-only/.test(error.message); } });
   check('F47 the journal is append-only at the database level: UPDATE and DELETE are refused', refused.every(Boolean), refused.join());

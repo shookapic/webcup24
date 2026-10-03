@@ -120,6 +120,45 @@ check('F38 phone: unavailable service shows reason, return time (as written, UTC
 await render(h(Screen, { page: 'services', services: outage, locale: 'en' }));
 check('F38 phone English: translated reason/alternative, no FR tag needed', text().includes('Service unavailable') && text().includes('System maintenance') && text().includes('Write to the services.') && text().includes('Tuesday, 6 October 2026'), text().slice(0, 300));
 
+// ---------- F45 / F46: places ----------
+const placeFixtures = [
+  { id: 1, code: 'mairie', kind: 'service', name: 'Mairie', name_en: 'Town hall', district: 'Centre-ville', stop: 'Mairie', address: 'Place centrale.', address_en: 'Central square.', hours: 'Du lundi au vendredi', hours_en: 'Monday to Friday', open_24h: 0, phone: null },
+  { id: 2, code: 'hopital', kind: 'hospital', name: 'Hôpital de Terra Nova', district: 'Quartier est', stop: 'Santé', address: 'Près de l’arrêt Santé.', open_24h: 1, phone: '112' },
+  { id: 3, code: 'urgences', kind: 'emergency', name: 'Urgences de l’hôpital', district: 'Quartier est', stop: 'Santé', address: 'Entrée nord.', open_24h: 1, phone: '112' },
+  { id: 4, code: 'secours', kind: 'emergency', name: 'Poste de secours du quartier sud', district: 'Quartier sud', stop: 'Quartier sud', address: 'Près des berges.', open_24h: 1, phone: '112' },
+];
+await render(h(Screen, { page: 'places', places: placeFixtures, nearestStop: 'Quartier sud' }));
+const cardNames = () => qa('.phone-place h3').map((n) => n.textContent.replace(/FR$/, '').trim());
+check('F45 phone: emergency first, hospital next, city services last; the one at the nearest stop leads its kind', cardNames().join('|') === 'Poste de secours du quartier sud|Urgences de l’hôpital|Hôpital de Terra Nova|Mairie', cardNames().join('|'));
+check('F46 phone: "nearest" tag on the nearest-stop place only, as words', qa('.phone-tag-nearest').length === 1 && qa('.phone-place')[0].querySelector('.phone-tag-nearest').textContent === 'Le plus proche');
+check('F46 phone: kind shown in words, 24 h opening, tram stop, and a call link', qa('.phone-place')[0].textContent.includes('Urgences') && text().includes('Ouvert 24 h sur 24') && text().includes('Arrêt de tram : Quartier sud') && q('a[href="tel:112"]')?.textContent === 'Appeler le 112');
+check('F45 phone: the page has a search field and a labelled radio group (legend)', q('input[type=search]') !== null && qa('fieldset input[type=radio]').length === 3 && q('fieldset legend').textContent === 'Type de lieu');
+await typeInto(q('input[type=search]'), 'hopital');
+check('F45 phone: search ignores accents ("hopital" finds Hôpital and Urgences de l’hôpital)', cardNames().join('|') === 'Urgences de l’hôpital|Hôpital de Terra Nova' && q('.phone-count').textContent === '2 lieux trouvés.', cardNames().join('|'));
+await typeInto(q('input[type=search]'), '');
+await act(async () => { qa('fieldset input[type=radio]')[1].click(); });
+check('F46 phone: the "Urgences et soins" filter hides city services', cardNames().length === 3 && !cardNames().includes('Mairie'));
+await act(async () => { qa('fieldset input[type=radio]')[2].click(); });
+check('F45 phone: the "Services" filter shows only city services', cardNames().join('|') === 'Mairie');
+await render(h(Screen, { page: 'places', places: placeFixtures, nearestStop: 'Mairie', locale: 'en' }));
+check('F45 phone English: translated names, hours and stop; untranslated places marked FR', text().includes('Town hall') && text().includes('Monday to Friday') && text().includes('Tram stop: Mairie') && qa('.phone-place [role=img]').length === 3 && text().includes('Places'), text().slice(0, 200));
+await render(h(Screen, { page: 'places', places: { data: { places: [] }, status: 'error', retry: () => {} } }));
+check('F45 phone: a failed load is said in words with a Retry button, never "no place published"', text().includes('Impossible de charger') && !text().includes('Aucun lieu publié') && q('.phone-note button') !== null);
+await render(h(Screen, { page: 'places', places: { data: { places: [] }, status: 'ready' } }));
+check('F45 phone: a loaded but empty list says so', text().includes('Aucun lieu publié pour le moment.'));
+await render(h(Screen, { page: 'home', places: placeFixtures, nearestStop: 'Santé' }));
+check('F46 phone home: emergency card answers first (call 112, closest care) without opening another page', text().includes('Urgence ?') && text().includes('Appelez le 112.') && text().includes('Soins les plus proches') && /Soins les plus proches : Urgences de l’hôpital — Arrêt de tram : Santé/.test(text()), text().slice(0, 400));
+await clickEl(qa('.phone-emergency .phone-action')[0]);
+check('F46 phone home: "Tous les lieux" opens the Places page', (await text()).includes('Type de lieu') || q('.phone-title').textContent === 'Lieux');
+await render(h(Screen, { page: 'home', places: { data: { places: [] }, status: 'error' } }));
+check('F46 phone home: the 112 line is still shown when places cannot load', text().includes('Appelez le 112.'));
+check('F45 phone: six tabs including "Lieux", nothing else reordered', qa('.phone-nav button').map((b) => b.textContent.replace(/\d+$/, '')).join('|') === 'Accueil|Alertes|Actualités|Services|Lieux|Transports', qa('.phone-nav button').map((b) => b.textContent).join('|'));
+const placeRequests = [];
+globalThis.fetch = async (url) => { placeRequests.push(String(url)); return { ok: true, status: 200, json: async () => ({ places: placeFixtures }) }; };
+await render(h(Screen, { page: 'places', nearestStop: 'Santé' }));
+await act(async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); });
+check('F45 phone: with no places prop the screen loads them itself from /api/places (no host wiring needed)', placeRequests.some((u) => u.includes('/api/places')) && qa('.phone-place').length === 4, placeRequests.join());
+
 // loading / error / stale / empty states are distinct
 await render(h(Screen, { page: 'alerts', announcements: [], status: 'loading' }));
 check('loading: not "no alerts"', text().includes('Chargement') && !text().includes('Aucune alerte en cours'));

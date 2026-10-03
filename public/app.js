@@ -55,6 +55,7 @@ async function api(path, method = 'GET', body) {
   });
   const data = await response.json();
   if (!response.ok) throw Object.assign(new Error(translateError(data.error || 'Une erreur est survenue.')), { status: response.status, retryAfter: data.retryAfter, attemptsLeft: data.attemptsLeft, field: fieldsOf(data.error || '') });
+  if (method !== 'GET') auditSoon();
   return data;
 }
 
@@ -63,7 +64,7 @@ const fieldByLabel = {
   'Le nom': ['name'], 'L’adresse e-mail': ['email'], 'Le mot de passe': ['password'], 'Le sujet': ['subject'], 'Le message': ['body', 'message'], 'Le lieu': ['location'],
   'Le titre': ['title'], 'La description': ['description'], 'Les informations': ['details'], 'Le contenu': ['body'], 'Le quartier': ['district'],
   'Le public concerné': ['audience'], 'Le motif': ['reason'], 'L’alternative': ['alternative'], 'Les consignes': ['instructions'],
-  'La date de retour': ['until'], 'La date ou l’heure': ['date', 'start'],
+  'La date de retour': ['until'], 'La date ou l’heure': ['date', 'start'], 'L’adresse': ['address'], 'Les horaires': ['hours'],
 };
 function fieldsOf(message) {
   const range = /^(.+?) (?:doit contenir|est invalide)/.exec(message);
@@ -175,7 +176,7 @@ function renderServices() {
           toggle.disabled = false;
         }
       });
-      card.append(toggle);
+      card.append(toggle, historyButton('service', service.id, translated ? service.title_en : service.title));
     }
     list.append(card);
   }
@@ -214,15 +215,13 @@ async function loadNews() {
       if (item.urgent && user?.role === 'admin') {
         const lift = element('button', 'lift-button', t('Lever l’alerte'));
         lift.type = 'button';
-        lift.addEventListener('click', async () => {
-          lift.disabled = true;
-          try {
-            await api(`/api/announcements/${item.id}`, 'PATCH', { urgent: false });
-            await loadNews();
-          } catch (error) {
-            alert(error.message);
-            lift.disabled = false;
-          }
+        lift.addEventListener('click', () => {
+          const form = reasonForm({
+            prompt: t('Pourquoi lever cette alerte ? Le motif est conservé dans le journal.'), confirmLabel: t('Confirmer : lever l’alerte'), danger: true,
+            onConfirm: async (reason) => { await api(`/api/announcements/${item.id}`, 'PATCH', { urgent: false, reason }); await loadNews(); },
+            onCancel: () => { form.replaceWith(lift); lift.focus(); },
+          });
+          lift.replaceWith(form);
         });
         card.append(lift);
       }
@@ -270,6 +269,7 @@ async function loadTransports() {
     ({ lines: transports } = await api('/api/transports'));
     $('#transports-status').textContent = '';
     renderTransports();
+    renderPlaces();
   } catch (error) {
     $('#transports-status').textContent = error.message;
   }
@@ -344,6 +344,8 @@ function renderIdentity() {
   for (const link of document.querySelectorAll('.admin-only')) link.hidden = user?.role !== 'admin';
   renderGuide();
   renderTips();
+  renderPlaces();
+  renderEmergency();
   renderTransports();
   if (!user) return;
   $('#member-name').textContent = user.name;
@@ -377,6 +379,10 @@ function clearIdentity() {
   $('#requests-list').replaceChildren();
   citizens = [];
   pendingDelete = null;
+  pendingCitizen = null;
+  audit = { entries: [], next: null, facets: null };
+  auditTarget = null;
+  renderAudit();
   $('#citizens-list').replaceChildren();
   $('#citizens-secret').hidden = true;
   slots = [];
@@ -576,6 +582,7 @@ $('#message-kind').addEventListener('change', () => { if ($('#message-kind').val
 // F34: staff administer citizen accounts (the server enforces the role and protects staff accounts).
 let citizens = [];
 let pendingDelete = null;
+let pendingCitizen = null;
 let citizenTimer;
 
 function setCitizensStatus(message, error = false) {
@@ -597,40 +604,6 @@ function focusCitizen(id) {
   ($(`[data-citizen="${id}"] button`) || $('#citizen-search')).focus();
 }
 
-function renderCitizens() {
-  const list = $('#citizens-list');
-  list.replaceChildren();
-  for (const citizen of citizens) {
-    const item = element('li', citizen.active ? 'citizen-item' : 'citizen-item citizen-inactive');
-    item.dataset.citizen = citizen.id;
-    const head = element('div', 'citizen-head');
-    head.append(element('strong', '', citizen.name), element('span', `citizen-state state-${citizen.active ? 'on' : 'off'}`, t(citizen.active ? 'Actif' : 'Désactivé')));
-    item.append(head, element('p', 'citizen-meta', [citizen.email, citizen.district].filter(Boolean).join(' · ')));
-    const actions = element('div', 'citizen-actions');
-    const action = (label, handler, danger) => {
-      const button = element('button', danger ? 'citizen-danger' : '', t(label, { name: citizen.name }));
-      button.type = 'button';
-      button.addEventListener('click', handler);
-      return button;
-    };
-    if (pendingDelete === citizen.id) {
-      item.append(element('p', 'citizen-confirm', t('Supprimer définitivement le compte de {name} ? Ses messages et signalements seront aussi effacés.', { name: citizen.name })));
-      actions.append(
-        action('Confirmer la suppression de {name}', () => citizenAction(citizen, 'delete'), true),
-        action('Annuler', () => { pendingDelete = null; renderCitizens(); focusCitizen(citizen.id); }),
-      );
-    } else {
-      actions.append(
-        action(citizen.active ? 'Désactiver {name}' : 'Réactiver {name}', () => citizenAction(citizen, 'toggle')),
-        action('Réinitialiser le mot de passe de {name}', () => citizenAction(citizen, 'reset')),
-        action('Supprimer {name}', () => { pendingDelete = citizen.id; $('#citizens-secret').hidden = true; renderCitizens(); focusCitizen(citizen.id); }, true),
-      );
-    }
-    item.append(actions);
-    list.append(item);
-  }
-}
-
 async function loadCitizens() {
   if (!['agent', 'admin'].includes(user?.role)) return;
   try {
@@ -643,20 +616,22 @@ async function loadCitizens() {
   }
 }
 
-async function citizenAction(citizen, kind) {
+async function citizenAction(citizen, kind, reason) {
   $('#citizens-secret').hidden = true;
   try {
-    if (kind === 'toggle') await api(`/api/admin/citizens/${citizen.id}`, 'PATCH', { active: !citizen.active });
-    else if (kind === 'reset') showTemporaryPassword(citizen, (await api(`/api/admin/citizens/${citizen.id}/password`, 'POST')).password);
-    else await api(`/api/admin/citizens/${citizen.id}`, 'DELETE');
-    pendingDelete = null;
+    if (kind === 'deactivate') await api(`/api/admin/citizens/${citizen.id}`, 'PATCH', { active: false, reason });
+    else if (kind === 'reactivate') await api(`/api/admin/citizens/${citizen.id}`, 'PATCH', { active: true });
+    else if (kind === 'reset') showTemporaryPassword(citizen, (await api(`/api/admin/citizens/${citizen.id}/password`, 'POST', { reason })).password);
+    else await api(`/api/admin/citizens/${citizen.id}`, 'DELETE', { reason });
+    pendingCitizen = null;
     await loadCitizens();
-    if (kind === 'toggle') setCitizensStatus(t(citizen.active ? 'Compte de {name} désactivé.' : 'Compte de {name} réactivé.', { name: citizen.name }));
+    if (kind === 'deactivate' || kind === 'reactivate') setCitizensStatus(t(kind === 'reactivate' ? 'Compte de {name} réactivé.' : 'Compte de {name} désactivé.', { name: citizen.name }));
     if (kind === 'delete') setCitizensStatus(t('Compte de {name} supprimé.', { name: citizen.name }));
-    if (kind === 'toggle') focusCitizen(citizen.id);
+    if (kind === 'deactivate' || kind === 'reactivate') focusCitizen(citizen.id);
     if (kind === 'delete') $('#citizen-search').focus();
   } catch (error) {
     if (error.status === 401) return clearIdentity();
+    if (reason) throw error;
     setCitizensStatus(error.message, true);
   }
 }
@@ -771,6 +746,10 @@ function renderServiceOptions() {
   const keepStaff = staffSelect.value;
   staffSelect.replaceChildren(...options(services));
   if (keepStaff) staffSelect.value = keepStaff;
+  const placeSelect = $('#place-service');
+  const keepPlace = placeSelect.value;
+  placeSelect.replaceChildren(Object.assign(element('option', '', t('Aucun')), { value: '' }), ...options(services));
+  placeSelect.value = keepPlace;
   renderServiceNotice();
   fillAvailabilityForm(false);
 }
@@ -1038,8 +1017,11 @@ function renderStaffSlots() {
       return node;
     };
     if (booked && pendingStaffCancel === item.id) {
-      li.append(element('p', 'citizen-confirm', t('Annuler ce rendez-vous ? {name} verra qu’il est annulé par la mairie.', { name: item.citizen.name })));
-      actions.append(button(t('Confirmer l’annulation'), () => removeSlot(item), true), button(t('Garder le rendez-vous'), () => { pendingStaffCancel = null; renderStaffSlots(); }));
+      li.append(reasonForm({
+        prompt: t('Annuler ce rendez-vous ? {name} verra qu’il est annulé par la mairie. Le motif est conservé dans le journal.', { name: item.citizen.name }), confirmLabel: t('Confirmer l’annulation'), danger: true,
+        onConfirm: (reason) => removeSlot(item, reason),
+        onCancel: () => { pendingStaffCancel = null; renderStaffSlots(); },
+      }));
     } else if (booked) {
       actions.append(button(t('Annuler le rendez-vous'), () => { pendingStaffCancel = item.id; renderStaffSlots(); $(`[data-appointment="${item.id}"] .citizen-danger`).focus(); }, true));
     } else {
@@ -1050,13 +1032,14 @@ function renderStaffSlots() {
   }
 }
 
-async function removeSlot(item) {
+async function removeSlot(item, reason) {
   try {
-    await api(`/api/appointments/${item.id}`, 'DELETE');
+    await api(`/api/appointments/${item.id}`, 'DELETE', reason ? { reason } : undefined);
     pendingStaffCancel = null;
     await loadStaffSlots();
     setFormStatus('#slots-status', t('Horaire mis à jour.'));
   } catch (error) {
+    if (reason) throw error;
     reportError('#slots-status', error);
   }
 }
@@ -1077,6 +1060,375 @@ $('#slots-form').addEventListener('submit', async (event) => {
   }
 });
 
+// ---- F47: sensitive staff actions ask for a reason, kept in the journal of actions.
+function reasonForm({ prompt, confirmLabel, onConfirm, onCancel, danger = false }) {
+  const form = element('form', 'reason-form');
+  const input = element('input');
+  Object.assign(input, { name: 'reason', required: true, minLength: 5, maxLength: 200, autocomplete: 'off' });
+  const label = element('label', '', `${t('Motif (obligatoire)')} `);
+  label.append(input);
+  const error = element('p', 'reason-error');
+  error.setAttribute('role', 'alert');
+  const ok = element('button', danger ? 'citizen-danger' : '', confirmLabel);
+  ok.type = 'submit';
+  const cancel = element('button', '', t('Annuler'));
+  cancel.type = 'button';
+  cancel.addEventListener('click', onCancel);
+  form.append(element('p', 'citizen-confirm', prompt), label, error, ok, cancel);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    ok.disabled = true;
+    error.textContent = '';
+    try {
+      await onConfirm(input.value.trim());
+    } catch (failure) {
+      error.textContent = `⚠ ${t('Erreur :')} ${failure.message}`;
+      input.setAttribute('aria-invalid', 'true');
+      ok.disabled = false;
+      input.focus();
+    }
+  });
+  input.addEventListener('input', () => input.removeAttribute('aria-invalid'));
+  queueMicrotask(() => input.focus());
+  return form;
+}
+
+// ---- F45 / F46: places residents look for (hospitals, emergency services, city services)
+let places = [];
+let placeKind = 'all';
+const placeRank = { emergency: 0, hospital: 1, service: 2 };
+const sortedPlaces = (list) => [...list].sort((a, b) => (placeRank[a.kind] ?? 3) - (placeRank[b.kind] ?? 3)
+  || Number(Boolean(user?.district) && b.district === user.district) - Number(Boolean(user?.district) && a.district === user.district) || a.name.localeCompare(b.name));
+const kindLabel = (kind) => t(({ emergency: 'Urgences', hospital: 'Hôpital', service: 'Service de la ville' })[kind] || kind);
+const phoneHref = (phone) => `tel:${String(phone).replace(/[^0-9+]/g, '')}`;
+
+async function loadPlaces() {
+  try {
+    ({ places } = await api('/api/places'));
+    $('#places-status').textContent = '';
+    renderPlaces();
+    renderEmergency();
+    renderPlaceAdmin();
+  } catch (error) {
+    $('#places-status').textContent = error.message;
+  }
+}
+
+// Next trams at the nearest stop, from the same data as the transports section.
+function placeTransport(place) {
+  const out = [];
+  for (const line of transports) {
+    const stop = line.stops?.find((entry) => entry.name === place.stop);
+    if (!stop) continue;
+    out.push(`${line.code} : ${stop.next.join(' · ')}${line.status === 'perturbé' ? ` (${t('Trafic perturbé')})` : ''}`);
+  }
+  return out.join(' — ');
+}
+
+function placeCard(place) {
+  const name = pickText(place, 'name');
+  const address = pickText(place, 'address');
+  const hours = pickText(place, 'hours');
+  const card = element('article', place.kind === 'emergency' ? 'place-card place-emergency' : 'place-card');
+  const title = element('h3', '', name.text);
+  title.lang = name.lang;
+  const where = element('p', 'place-where', address.text);
+  where.lang = address.lang;
+  card.append(element('p', 'place-kind', kindLabel(place.kind)), title, element('p', 'place-district', `${place.district} · ${t('Arrêt de tram : {stop}', { stop: place.stop })}`), where);
+  const trams = placeTransport(place);
+  if (trams) card.append(element('p', 'place-trams', `${t('Prochains passages')} ${trams}`));
+  const opening = place.open_24h ? t('Ouvert 24 h sur 24') : hours.text;
+  if (opening) {
+    const line = element('p', 'place-hours', opening);
+    if (!place.open_24h) line.lang = hours.lang;
+    card.append(line);
+  }
+  if (place.phone) {
+    const call = element('a', 'button-link place-call', t('Appeler le {phone}', { phone: place.phone }));
+    call.href = phoneHref(place.phone);
+    card.append(call);
+  }
+  if (place.service_id) {
+    const service = element('a', 'button-link', t('Voir le service'));
+    service.href = '#services';
+    card.append(service);
+  }
+  return card;
+}
+
+function renderPlaces() {
+  const needle = fold($('#place-search').value.trim());
+  const shown = sortedPlaces(places).filter((place) => (placeKind === 'all' || (placeKind === 'care' ? place.kind !== 'service' : place.kind === 'service'))
+    && fold(['name', 'address'].map((field) => pickText(place, field).text).join(' ')).includes(needle));
+  $('#places-list').replaceChildren(...shown.map(placeCard));
+  $('#places-status').textContent = !places.length ? t('Aucun lieu publié pour le moment.') : !shown.length ? t('Aucun lieu ne correspond à votre recherche.')
+    : (needle || placeKind !== 'all') ? t(shown.length > 1 ? '{n} lieux trouvés.' : '{n} lieu trouvé.', { n: shown.length }) : '';
+}
+$('#place-search').addEventListener('input', renderPlaces);
+for (const radio of document.querySelectorAll('input[name=place-kind]')) radio.addEventListener('change', () => { placeKind = radio.value; renderPlaces(); });
+
+// The first thing on the page: the number to call and the closest hospital or emergency services.
+function renderEmergency() {
+  const care = sortedPlaces(places.filter((place) => place.kind !== 'service')).slice(0, 3);
+  $('#urgences-list').replaceChildren(...care.map((place) => {
+    const name = pickText(place, 'name');
+    const item = element('li', 'emergency-item');
+    const label = element('strong', '', name.text);
+    label.lang = name.lang;
+    item.append(label, ` — ${place.district}, ${t('Arrêt de tram : {stop}', { stop: place.stop })}${place.open_24h ? ` · ${t('Ouvert 24 h sur 24')}` : ''} `);
+    if (place.phone) {
+      const call = element('a', 'emergency-phone', t('Appeler le {phone}', { phone: place.phone }));
+      call.href = phoneHref(place.phone);
+      item.append(call);
+    }
+    return item;
+  }));
+}
+
+// Admin: add, edit, delete places (every change is journalled).
+let editingPlace = null;
+let pendingPlaceDelete = null;
+
+function renderPlaceAdmin() {
+  const list = $('#places-admin-list');
+  list.replaceChildren();
+  for (const place of sortedPlaces(places)) {
+    const li = element('li', 'appointment-card');
+    li.dataset.place = place.id;
+    const head = element('div', 'appointment-head');
+    head.append(element('strong', '', place.name), element('span', 'appointment-state', kindLabel(place.kind)));
+    li.append(head, element('p', 'citizen-meta', `${place.district} · ${t('Arrêt de tram : {stop}', { stop: place.stop })}${place.open_24h ? ` · ${t('Ouvert 24 h sur 24')}` : ''}`));
+    const actions = element('div', 'appointment-actions');
+    const button = (label, handler, danger) => {
+      const node = element('button', danger ? 'citizen-danger' : '', label);
+      node.type = 'button';
+      node.addEventListener('click', handler);
+      return node;
+    };
+    if (pendingPlaceDelete === place.id) {
+      li.append(reasonForm({
+        prompt: t('Supprimer le lieu « {name} » ? Il disparaît du portail et du téléphone. Le motif est conservé dans le journal.', { name: place.name }), confirmLabel: t('Confirmer la suppression'), danger: true,
+        onConfirm: async (reason) => { await api(`/api/places/${place.id}`, 'DELETE', { reason }); pendingPlaceDelete = null; await loadPlaces(); setFormStatus('#place-status', t('Lieu supprimé.')); $('#place-form').elements.name.focus(); },
+        onCancel: () => { pendingPlaceDelete = null; renderPlaceAdmin(); $(`[data-place="${place.id}"] button`)?.focus(); },
+      }));
+    } else {
+      actions.append(button(t('Modifier'), () => editPlace(place)), button(t('Historique'), () => showHistory('place', place.id, place.name)), button(t('Supprimer'), () => { pendingPlaceDelete = place.id; renderPlaceAdmin(); }, true));
+      li.append(actions);
+    }
+    list.append(li);
+  }
+}
+
+function editPlace(place) {
+  const form = $('#place-form');
+  editingPlace = place.id;
+  for (const key of ['kind', 'name', 'name_en', 'district', 'stop', 'address', 'address_en', 'hours', 'hours_en', 'phone', 'service_id']) form.elements[key].value = place[key] ?? '';
+  form.elements.open_24h.checked = Boolean(place.open_24h);
+  $('#place-submit').textContent = t('Enregistrer les changements');
+  $('#place-cancel').hidden = false;
+  form.elements.name.focus();
+}
+
+function resetPlaceForm() {
+  editingPlace = null;
+  $('#place-form').reset();
+  $('#place-submit').textContent = t('Enregistrer le lieu');
+  $('#place-cancel').hidden = true;
+}
+$('#place-cancel').addEventListener('click', () => { resetPlaceForm(); setFormStatus('#place-status', ''); $('#place-form').elements.name.focus(); });
+$('#place-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const body = Object.fromEntries(['kind', 'name', 'name_en', 'district', 'stop', 'address', 'address_en', 'hours', 'hours_en', 'phone', 'service_id'].map((key) => [key, formValue(form, key)]));
+  body.open_24h = form.elements.open_24h.checked;
+  try {
+    await (editingPlace ? api(`/api/places/${editingPlace}`, 'PATCH', body) : api('/api/places', 'POST', body));
+    setFormStatus('#place-status', t(editingPlace ? 'Lieu modifié.' : 'Lieu ajouté.'));
+    resetPlaceForm();
+    await loadPlaces();
+  } catch (error) {
+    reportError('#place-status', error);
+  }
+});
+
+// ---- F47 / F48: journal of actions (who, what, when, why), staff only
+let audit = { entries: [], next: null, facets: null };
+let auditTarget = null;
+let auditTimer;
+const auditRoles = { admin: 'Administrateur', agent: 'Agent', citizen: 'Habitant' };
+const auditCategories = { service: 'Services', announcement: 'Actualités et alertes', transport: 'Transports', message: 'Messages des habitants', account: 'Comptes des habitants', appointment: 'Rendez-vous', place: 'Lieux', security: 'Sécurité' };
+const auditTime = (iso) => new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Indian/Reunion' }).format(new Date(iso));
+
+// Any change made by staff refreshes the journal a moment later, so "what I just did" is there.
+function auditSoon() {
+  if (!['agent', 'admin'].includes(user?.role)) return;
+  clearTimeout(auditTimer);
+  auditTimer = setTimeout(() => { if (!document.activeElement?.closest?.('#audit-panel')) loadAudit(); }, 600);
+}
+
+function auditQuery() {
+  const form = $('#audit-filter');
+  const query = {};
+  for (const key of ['actor', 'category', 'q', 'from', 'to']) if (form.elements[key].value) query[key] = form.elements[key].value;
+  if (auditTarget) Object.assign(query, { target_type: auditTarget.type, target_id: auditTarget.id });
+  return query;
+}
+
+async function loadAudit({ more = false } = {}) {
+  if (!['agent', 'admin'].includes(user?.role)) return;
+  const params = new URLSearchParams(auditQuery());
+  if (more && audit.next) params.set('before', audit.next);
+  try {
+    const data = await api(`/api/admin/audit?${params}`);
+    audit = { entries: more ? [...audit.entries, ...data.entries] : data.entries, next: data.next_before, facets: data.facets || audit.facets };
+    $('#audit-csv').href = `/api/admin/audit?${new URLSearchParams({ ...auditQuery(), format: 'csv' })}`;
+    renderAudit();
+  } catch (error) {
+    if (error.status === 401) return clearIdentity();
+    setFormStatus('#audit-status', error.message, true);
+  }
+}
+
+function renderAuditFacets() {
+  if (!audit.facets) return;
+  const fill = (select, options) => {
+    const keep = select.value;
+    select.replaceChildren(Object.assign(element('option', '', t('Tous')), { value: '' }), ...options);
+    select.value = keep;
+  };
+  fill($('#audit-actor'), audit.facets.actors.map((actor) => Object.assign(element('option', '', `${actor.name} (${t(auditRoles[actor.role] || actor.role)}, ${actor.actions})`), { value: actor.id ?? '' })));
+  fill($('#audit-category'), audit.facets.categories.map((entry) => Object.assign(element('option', '', t(auditCategories[entry.category] || entry.category)), { value: entry.category })));
+}
+
+function auditDetails(details) {
+  const labels = { avant: 'Avant', apres: 'Après', debut: 'Début', nombre: 'Nombre', duree_min: 'Durée (min)', lieu: 'Lieu', agent: 'Agent', public: 'Public concerné', urgent: 'Alerte', featured: 'À la une', type: 'Type', quartier: 'Quartier', arret: 'Arrêt', etat: 'État', motif: 'Motif', reprise: 'Reprise', alternative: 'Alternative', availability: 'Disponibilité', status: 'État', message: 'Message' };
+  const show = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (typeof value === 'boolean') return t(value ? 'oui' : 'non');
+    if (typeof value === 'object') return Object.entries(value).map(([key, inner]) => `${t(labels[key] || key)} : ${show(inner)}`).join(' · ');
+    return String(value);
+  };
+  const list = element('dl', 'audit-details');
+  for (const [key, value] of Object.entries(details)) list.append(element('dt', '', t(labels[key] || key)), element('dd', '', show(value)));
+  return list;
+}
+
+function renderAudit() {
+  renderAuditFacets();
+  const target = $('#audit-target');
+  target.hidden = !auditTarget;
+  if (auditTarget) {
+    const clear = element('button', '', t('Voir tout le journal'));
+    clear.type = 'button';
+    clear.addEventListener('click', () => { auditTarget = null; loadAudit(); $('#audit-filter').elements.q.focus(); });
+    target.replaceChildren(`${t('Historique de : {name}', { name: auditTarget.label })} `, clear);
+  }
+  const list = $('#audit-list');
+  list.replaceChildren();
+  for (const entry of audit.entries) {
+    const li = element('li', `audit-item audit-${entry.category}`);
+    li.dataset.audit = entry.id;
+    const head = element('p', 'audit-head');
+    const time = element('time', '', auditTime(entry.at));
+    time.dateTime = entry.at;
+    head.append(time, element('span', 'audit-tag', t(auditCategories[entry.category] || entry.category)), element('span', 'audit-tag audit-role', t(auditRoles[entry.actor_role] || entry.actor_role)));
+    const sentence = element('p', 'audit-sentence');
+    sentence.lang = 'fr';
+    sentence.append(element('strong', '', entry.actor_name), ` ${entry.summary}`);
+    li.append(head, sentence);
+    if (entry.reason) {
+      const reason = element('p', 'audit-reason', `${t('Motif')} : ${entry.reason}`);
+      reason.lang = 'fr';
+      li.append(reason);
+    }
+    if (entry.details && Object.keys(entry.details).length) {
+      const details = element('details', 'audit-more');
+      details.append(element('summary', '', t('Voir les valeurs')), auditDetails(entry.details));
+      li.append(details);
+    }
+    list.append(li);
+  }
+  $('#audit-more').hidden = !audit.next;
+  setFormStatus('#audit-status', audit.entries.length ? t(audit.entries.length > 1 ? '{n} actions affichées.' : '{n} action affichée.', { n: audit.entries.length }) : t('Aucune action ne correspond.'));
+}
+
+function showHistory(type, id, label) {
+  auditTarget = { type, id: String(id), label };
+  const form = $('#audit-filter');
+  for (const key of ['actor', 'category', 'q', 'from', 'to']) form.elements[key].value = '';
+  loadAudit().then(() => $('#audit-panel').focus());
+  $('#audit-panel').scrollIntoView({ block: 'start' });
+}
+const historyButton = (type, id, label) => {
+  const button = element('button', '', t('Historique'));
+  button.type = 'button';
+  button.setAttribute('aria-label', t('Historique : {name}', { name: label }));
+  button.addEventListener('click', () => showHistory(type, id, label));
+  return button;
+};
+
+async function verifyAudit() {
+  const box = $('#audit-integrity');
+  try {
+    const result = await api('/api/admin/audit/verify');
+    box.dataset.error = String(!result.ok);
+    box.textContent = result.ok
+      ? `✓ ${t('Intégrité vérifiée : {n} entrées, aucune modification détectée.', { n: result.checked })}`
+      : `⚠ ${t('Erreur :')} ${t('le journal a été modifié : l’entrée n°{id} ne correspond plus à la précédente.', { id: result.brokenAt })}`;
+  } catch (error) {
+    box.dataset.error = 'true';
+    box.textContent = `⚠ ${t('Erreur :')} ${error.message}`;
+  }
+}
+$('#audit-verify').addEventListener('click', verifyAudit);
+$('#audit-filter').addEventListener('submit', (event) => { event.preventDefault(); loadAudit(); });
+$('#audit-reset').addEventListener('click', () => { auditTarget = null; $('#audit-filter').reset(); loadAudit(); });
+$('#audit-more').addEventListener('click', () => loadAudit({ more: true }));
+
+// ---- F34 (with F47 reasons): resident accounts
+function renderCitizens() {
+  const list = $('#citizens-list');
+  list.replaceChildren();
+  for (const citizen of citizens) {
+    const item = element('li', citizen.active ? 'citizen-item' : 'citizen-item citizen-inactive');
+    item.dataset.citizen = citizen.id;
+    const head = element('div', 'citizen-head');
+    head.append(element('strong', '', citizen.name), element('span', `citizen-state state-${citizen.active ? 'on' : 'off'}`, t(citizen.active ? 'Actif' : 'Désactivé')));
+    item.append(head, element('p', 'citizen-meta', [citizen.email, citizen.district].filter(Boolean).join(' · ')));
+    const pending = pendingCitizen?.id === citizen.id ? pendingCitizen.kind : null;
+    if (pending) {
+      const prompts = {
+        deactivate: t('Désactiver le compte de {name} ? Ses sessions sont fermées. Le motif est conservé dans le journal.', { name: citizen.name }),
+        reset: t('Réinitialiser le mot de passe de {name} ? Un mot de passe temporaire sera affiché une seule fois. Le motif est conservé dans le journal.', { name: citizen.name }),
+        delete: t('Supprimer définitivement le compte de {name} ? Ses messages et signalements seront aussi effacés. Le motif est conservé dans le journal.', { name: citizen.name }),
+      };
+      const labels = { deactivate: 'Confirmer la désactivation', reset: 'Confirmer la réinitialisation', delete: 'Confirmer la suppression de {name}' };
+      item.append(reasonForm({
+        prompt: prompts[pending], confirmLabel: t(labels[pending], { name: citizen.name }), danger: true,
+        onConfirm: (reason) => citizenAction(citizen, pending, reason),
+        onCancel: () => { pendingCitizen = null; renderCitizens(); focusCitizen(citizen.id); },
+      }));
+    } else {
+      const actions = element('div', 'citizen-actions');
+      const action = (label, handler, danger) => {
+        const button = element('button', danger ? 'citizen-danger' : '', t(label, { name: citizen.name }));
+        button.type = 'button';
+        button.addEventListener('click', handler);
+        return button;
+      };
+      const ask = (kind) => () => { pendingCitizen = { id: citizen.id, kind }; $('#citizens-secret').hidden = true; renderCitizens(); };
+      actions.append(
+        citizen.active ? action('Désactiver {name}', ask('deactivate')) : action('Réactiver {name}', () => citizenAction(citizen, 'reactivate')),
+        action('Réinitialiser le mot de passe de {name}', ask('reset')),
+        action('Supprimer {name}', ask('delete'), true),
+        historyButton('user', citizen.id, citizen.name),
+      );
+      item.append(actions);
+    }
+    list.append(item);
+  }
+}
+
 async function afterAuthentication(nextUser) {
   user = nextUser;
   if (user) setFormStatus('#account-status', '');
@@ -1089,6 +1441,9 @@ async function afterAuthentication(nextUser) {
   loadAppointments();
   loadStaffSlots();
   loadSecurity();
+  loadAudit();
+  renderPlaces();
+  renderEmergency();
 }
 
 $('#register-form').addEventListener('submit', async (event) => {
@@ -1282,6 +1637,10 @@ $('#lang-toggle').addEventListener('click', () => {
   renderRequests();
   renderCitizens();
   renderTips();
+  renderPlaces();
+  renderEmergency();
+  renderPlaceAdmin();
+  renderAudit();
   renderServiceOptions();
   renderSlotSelect();
   renderMyAppointments();
@@ -1298,6 +1657,6 @@ applyLanguage();
 $('#contrast-toggle').addEventListener('click', () => { preference('highContrast', String(document.documentElement.dataset.contrast !== 'high')); applyContrast(); });
 applyContrast();
 
-setInterval(() => { loadTransports(); loadServices(); loadAppointments(); }, 60_000);
-Promise.allSettled([loadServices(), loadTransports(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]);
-setInterval(() => { loadNews(); if (user) loadMessages(); if (['agent', 'admin'].includes(user?.role)) { loadFeed(); loadStaffSlots(); loadSecurity(); } }, 30_000);
+setInterval(() => { loadTransports(); loadServices(); loadAppointments(); loadPlaces(); }, 60_000);
+Promise.allSettled([loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]);
+setInterval(() => { if (!document.activeElement?.closest?.('.reason-form')) loadNews(); if (user) loadMessages(); if (['agent', 'admin'].includes(user?.role)) { loadFeed(); loadStaffSlots(); loadSecurity(); } }, 30_000);

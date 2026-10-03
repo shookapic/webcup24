@@ -98,7 +98,7 @@ try {
     console.log(`NOTE  physical screen drawn ${host.w}x${host.h}px for a 360x740 layout: text scale about ${(host.w / 360).toFixed(2)} (16px body text reads as about ${(16 * host.w / 360).toFixed(1)}px)`);
     // click alignment: a real mouse click at each tab's on-screen centre (after the 3D transform) must hit that tab
     const tabs = await page.$$eval(".phone-nav button", (nodes) => nodes.map((n) => { const r = n.getBoundingClientRect(); return { label: n.textContent.trim(), x: r.left + r.width / 2, y: r.top + r.height / 2, hit: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('button') === n }; }));
-    check('physical phone: every tab button is hit-testable at its projected centre (' + tabs.length + ' tabs)', tabs.length === 5 && tabs.every((t) => t.hit), JSON.stringify(tabs));
+    check('physical phone: every tab button is hit-testable at its projected centre (' + tabs.length + ' tabs)', tabs.length === 6 && tabs.every((t) => t.hit), JSON.stringify(tabs));
     const target = tabs.find((t) => t.label.startsWith('Services'));
     await page.mouse.click(target.x, target.y);
     await wait(500);
@@ -110,6 +110,16 @@ try {
     await page.screenshot({ path: join(shots, 'p05-physical-phone-open.png') });
     await nav('Transports');
   }
+  // F45 / F46 in production: real seeded places through the real API
+  await nav('Accueil');
+  const homeText = await page.$eval('.phone-body', (n) => n.textContent);
+  check('F46 in production: the phone home answers an emergency first (call 112 and the closest care, by the player position)', homeText.includes('Urgence ?') && homeText.includes('Appelez le 112.') && homeText.includes('Soins les plus proches'), homeText.slice(0, 300));
+  await nav('Lieux');
+  const placeNames = await page.$$eval('.phone-place h3', (nodes) => nodes.map((n) => n.textContent.trim()));
+  const placeKinds = await page.$$eval('.phone-place .phone-tag-kind', (nodes) => nodes.map((n) => n.textContent.trim()));
+  check('F45 in production: the Places page lists the seeded places, emergency and hospital first, with a 112 call link and a nearest tag', placeNames.length >= 7 && placeKinds[0] === 'Urgences' && placeKinds.indexOf('Service de la ville') > placeKinds.lastIndexOf('Hôpital') && (await page.$('a[href="tel:112"]')) !== null && (await page.$('.phone-tag-nearest')) !== null, JSON.stringify({ placeNames, placeKinds }));
+  await page.screenshot({ path: join(shots, `p06-production-places-${mode}.png`) });
+  await nav('Transports');
   const hudBefore = await page.$eval('.hud-district strong', (n) => n.textContent).catch(() => null);
   check('HUD shows the district of the nearest stop', Boolean(hudBefore), String(hudBefore));
   await page.keyboard.press('Escape');

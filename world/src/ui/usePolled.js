@@ -69,3 +69,5 @@ export function usePolled(path, { interval, enabled = true, validate }) {
 // F36: departures refresh every 60 s. Services change rarely; the same rate is plenty.
 export const useTransports = (enabled = true) => usePolled('/api/transports', { interval: 60_000, enabled });
 export const useServices = (enabled = true) => usePolled('/api/services', { interval: 60_000, enabled });
+// F45 / F46: places rarely change, so 5 minutes is plenty.
+export const usePlaces = (enabled = true) => usePolled('/api/places', { interval: 300_000, enabled, validate: (data) => Array.isArray(data?.places) });

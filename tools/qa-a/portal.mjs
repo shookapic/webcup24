@@ -18,6 +18,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const out = spawnSync(process.execPath, ['create-staff.mjs', 'agent@p.test', 'Agent P', 'agent'], { cwd: root, env, encoding: 'utf8' });
 const agentPw = /conserver : (\S+)/.exec(out.stdout)[1];
+const adminPw = /conserver : (\S+)/.exec(spawnSync(process.execPath, ['create-staff.mjs', 'admin@p.test', 'Admin P', 'admin'], { cwd: root, env, encoding: 'utf8' }).stdout)[1];
 const server = spawn(process.execPath, ['server.mjs'], { cwd: root, env, stdio: 'ignore' });
 await wait(1500);
 
@@ -100,26 +101,35 @@ try {
   check('F34 UI search filters', items().length === 1 && items()[0].textContent.includes('Alice'));
   const labels = () => buttons(staff).map((b) => b.textContent);
   check('F34 action buttons name the citizen', labels().includes('Désactiver Alice Habitante') && labels().includes('Supprimer Alice Habitante'), labels().join('|'));
+  const reasonInput = () => $(staff, '.reason-form input[name=reason]');
+  const submitReason = async (value) => {
+    reasonInput().value = value;
+    reasonInput().form.dispatchEvent(new staff.window.Event('submit', { cancelable: true, bubbles: true }));
+    await wait(800);
+  };
   click(staff, buttons(staff).find((b) => b.textContent.startsWith('Désactiver')));
-  await wait(700);
+  await wait(30);
+  check('F47 UI: deactivating asks for a reason first (nothing happens yet), with the field focused and the journal promise stated', reasonInput() !== null && items()[0].textContent.includes('Actif') && doc.activeElement === reasonInput() && $(staff, '.reason-form').textContent.includes('conservé dans le journal'));
+  await submitReason('xx');
+  check('F47 UI: a too-short reason is refused with a visible, marked error and the account stays active', $(staff, '.reason-error').textContent.startsWith('⚠') && reasonInput().getAttribute('aria-invalid') === 'true' && items()[0].textContent.includes('Actif'), $(staff, '.reason-error').textContent);
+  await submitReason('Compte signalé comme usurpé');
   check('F34 UI deactivate → state + status text', items()[0].textContent.includes('Désactivé') && $(staff, '#citizens-status').textContent.includes('désactivé'), $(staff, '#citizens-status').textContent);
   check('F34 UI focus stays on the row', doc.activeElement?.closest('[data-citizen]') !== null);
   click(staff, buttons(staff).find((b) => b.textContent.startsWith('Réactiver')));
   await wait(700);
-  check('F34 UI reactivate', items()[0].textContent.includes('Actif'));
+  check('F34 UI reactivate (no reason needed)', items()[0].textContent.includes('Actif'));
   click(staff, buttons(staff).find((b) => b.textContent.startsWith('Réinitialiser')));
-  await wait(700);
+  await submitReason('Demande de l’habitant au guichet');
   const pw = $(staff, '.citizen-password')?.textContent;
   check('F34 UI shows one-time password and focuses it', !$(staff, '#citizens-secret').hidden && pw?.length >= 20 && doc.activeElement === $(staff, '#citizens-secret'), pw);
   const login = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'alice@p.test', password: pw }) });
   check('F34 displayed password really works', login.status === 200);
   click(staff, buttons(staff).find((b) => b.textContent.startsWith('Supprimer')));
-  check('F34 UI delete asks for confirmation first', items().length === 1 && $(staff, '.citizen-confirm') !== null && labels().some((l) => l.startsWith('Confirmer')));
+  check('F34 UI delete asks for a reason and a confirmation first', items().length === 1 && reasonInput() !== null && $(staff, '.citizen-confirm') !== null && labels().some((l) => l.startsWith('Confirmer')));
   click(staff, buttons(staff).find((b) => b.textContent === 'Annuler'));
-  check('F34 UI cancel keeps account', items().length === 1 && $(staff, '.citizen-confirm') === null);
+  check('F34 UI cancel keeps account', items().length === 1 && $(staff, '.reason-form') === null);
   click(staff, buttons(staff).find((b) => b.textContent.startsWith('Supprimer')));
-  click(staff, buttons(staff).find((b) => b.textContent.startsWith('Confirmer')));
-  await wait(800);
+  await submitReason('Doublon du compte, supprimé à la demande');
   check('F34 UI delete removes citizen', items().length === 0 && $(staff, '#citizens-status').textContent.includes('supprimé'), $(staff, '#citizens-status').textContent);
   check('F37 staff panel shows failed/blocked attempts and the targeted account (masked)', $(staff, '#security-summary').textContent.includes('échecs de connexion') && $(staff, '#security-summary').textContent.includes('Activité inhabituelle') && $(staff, '#security-targets').textContent.includes('b***@p.test') && !$(staff, '#security-panel').textContent.includes('bob@p.test'), $(staff, '#security-summary').textContent + $(staff, '#security-targets').textContent);
   // F38: the staff form marks a service unavailable
@@ -151,11 +161,109 @@ try {
   check('F39 staff UI: slots published and listed as free', $(staff, '#slots-status').textContent.includes('2 horaires publiés') && [...doc.querySelectorAll('#staff-appointments > li')].length === 2 && doc.querySelector('#staff-appointments').textContent.includes('Libre'), $(staff, '#slots-status').textContent);
   check('F39 staff UI: slot date picker cannot go into the past', sf.elements.date.min === new Date(Date.now() + 4 * 3600_000).toISOString().slice(0, 10));
 
+  // ---- F47 / F48: the journal as an agent sees it
+  const auditItems = () => [...doc.querySelectorAll('#audit-list > li')];
+  await wait(1200);
+  check('F48 UI: the journal lists who did what and when, newest first, each with a time and a role in words', auditItems().length >= 5 && auditItems().every((li) => li.querySelector('time')?.dateTime && li.querySelector('.audit-role')?.textContent.length > 3) && auditItems().some((li) => li.textContent.includes('Agent P') && li.textContent.includes('a signalé « Centre de santé » indisponible')), auditItems().slice(0, 3).map((li) => li.textContent).join(' || '));
+  check('F47 UI: sensitive entries show their reason', auditItems().some((li) => li.textContent.includes('Motif : Compte signalé comme usurpé')) && auditItems().some((li) => li.textContent.includes('Motif : Demande de l’habitant au guichet')));
+  check('F48 UI: an entry opens to show before/after values', auditItems().some((li) => li.querySelector('details.audit-more')?.textContent.includes('Avant')));
+  check('F48 UI: filters list the agents and areas to choose from', $(staff, '#audit-actor').options.length >= 2 && [...$(staff, '#audit-category').options].some((o) => o.value === 'account'));
+  $(staff, '#audit-category').value = 'account';
+  submit(staff, '#audit-filter');
+  await wait(700);
+  check('F48 UI: filtering by area shows only that area, with a count in words', auditItems().length >= 3 && auditItems().every((li) => li.classList.contains('audit-account')) && /actions? affichée/.test($(staff, '#audit-status').textContent), $(staff, '#audit-status').textContent);
+  $(staff, '#audit-category').value = '';
+  doc.querySelector('#audit-filter [name=q]').value = 'usurpé';
+  submit(staff, '#audit-filter');
+  await wait(700);
+  check('F48 UI: text search finds the reason', auditItems().length === 1 && auditItems()[0].textContent.includes('usurpé'));
+  doc.querySelector('#audit-filter [name=q]').value = 'zzzzzz';
+  submit(staff, '#audit-filter');
+  await wait(600);
+  check('F48 UI: nothing found is said in words', auditItems().length === 0 && $(staff, '#audit-status').textContent.includes('Aucune action ne correspond'));
+  $(staff, '#audit-reset').click();
+  await wait(700);
+  check('F48 UI: "Tout afficher" brings the whole journal back', auditItems().length >= 5);
+  $(staff, '#citizen-search').value = '';
+  $(staff, '#citizen-search').dispatchEvent(new staff.window.Event('input', { bubbles: true }));
+  await wait(800);
+  const historyBtn = [...doc.querySelectorAll('#citizens-list button')].find((b) => b.getAttribute('aria-label')?.startsWith('Historique'));
+  historyBtn.click();
+  await wait(800);
+  check('F48 UI: a resident\'s "Historique" button shows a chip with the target and only that target', !$(staff, '#audit-target').hidden && $(staff, '#audit-target').textContent.includes('Historique de :') && auditItems().every((li) => li.textContent.length > 0), $(staff, '#audit-target').textContent);
+  [...doc.querySelectorAll('#audit-target button')].find((b) => b.textContent.includes('Voir tout')).click();
+  await wait(700);
+  check('F48 UI: "Voir tout le journal" clears the target', $(staff, '#audit-target').hidden && auditItems().length >= 5);
+  $(staff, '#audit-verify').click();
+  await wait(700);
+  check('F47 UI: the integrity check says in words that nothing was altered (tick + count)', $(staff, '#audit-integrity').textContent.startsWith('✓') && /Intégrité vérifiée : \d+ entrées/.test($(staff, '#audit-integrity').textContent), $(staff, '#audit-integrity').textContent);
+  check('F47 UI: the CSV export link points at the filtered export', $(staff, '#audit-csv').getAttribute('href').includes('format=csv'));
+  check('F45 UI: the place editor and its jump link are hidden from agents (admin only)', $(staff, '#admin-area').hidden && doc.querySelector('.jump-nav a[href="#place-admin"]').hidden);
+
   // language
   $(staff, '#lang-toggle').click();
   await wait(500);
   check('F34 panel translated to English', $(staff, '#citizens-title').textContent === 'Resident accounts' && $(staff, '#citizen-search').placeholder === 'Name or email address', $(staff, '#citizens-title').textContent);
   staff.window.close();
+
+  // ---- F45 / F47 / F48 as an administrator
+  const adm = await open('10.4.4.4');
+  const ad = adm.window.document;
+  ad.querySelector('#login-form [name=email]').value = 'admin@p.test';
+  ad.querySelector('#login-form [name=password]').value = adminPw;
+  submit(adm, '#login-form');
+  await wait(1500);
+  check('F45 UI: administrators see the place editor and its jump link', !ad.querySelector('#admin-area').hidden && !ad.querySelector('.jump-nav a[href="#place-admin"]').hidden);
+  const pf = ad.querySelector('#place-form');
+  pf.elements.name.value = 'Bibliothèque centrale';
+  pf.elements.name_en.value = 'Central library';
+  pf.elements.kind.value = 'service';
+  pf.elements.district.value = 'Centre-ville';
+  pf.elements.stop.value = 'Mairie';
+  pf.elements.address.value = 'Rue des Livres, derrière la mairie.';
+  pf.elements.hours.value = 'Du mardi au samedi, 10 h–18 h';
+  pf.elements.phone.value = '+262 262 00 00 00';
+  submit(adm, '#place-form');
+  await wait(1200);
+  const publicNames = () => [...ad.querySelectorAll('#places-list h3')].map((h) => h.textContent);
+  check('F45 UI: an added place appears at once in the public list and in the admin list, with a status in words', ad.querySelector('#place-status').textContent.includes('Lieu ajouté') && publicNames().includes('Bibliothèque centrale') && ad.querySelector('#places-admin-list').textContent.includes('Bibliothèque centrale'), ad.querySelector('#place-status').textContent);
+  const editButton = [...ad.querySelectorAll('#places-admin-list li')].find((li) => li.textContent.includes('Bibliothèque')).querySelector('button');
+  editButton.click();
+  check('F45 UI: "Modifier" fills the form, renames the button and focuses the name', pf.elements.name.value === 'Bibliothèque centrale' && ad.querySelector('#place-submit').textContent === 'Enregistrer les changements' && !ad.querySelector('#place-cancel').hidden && ad.activeElement === pf.elements.name);
+  pf.elements.hours.value = 'Du lundi au samedi, 9 h–19 h';
+  submit(adm, '#place-form');
+  await wait(1200);
+  check('F45 UI: the edit is saved and shown', ad.querySelector('#place-status').textContent.includes('Lieu modifié') && ad.querySelector('#places-list').textContent.includes('Du lundi au samedi, 9 h–19 h') && ad.querySelector('#place-submit').textContent === 'Enregistrer le lieu');
+  const row = () => [...ad.querySelectorAll('#places-admin-list li')].find((li) => li.textContent.includes('Bibliothèque'));
+  [...row().querySelectorAll('button')].find((b) => b.textContent === 'Supprimer').click();
+  await wait(40);
+  check('F47 UI: deleting a place asks for a reason first', ad.querySelector('#places-admin-list .reason-form') !== null && publicNames().includes('Bibliothèque centrale'));
+  const reason = ad.querySelector('#places-admin-list .reason-form input');
+  reason.value = 'Lieu fermé définitivement';
+  reason.form.dispatchEvent(new adm.window.Event('submit', { cancelable: true, bubbles: true }));
+  await wait(1200);
+  check('F45 UI: with a reason the place is deleted and leaves the public list', ad.querySelector('#place-status').textContent.includes('Lieu supprimé') && !publicNames().includes('Bibliothèque centrale'));
+  await wait(900);
+  const adminAudit = [...ad.querySelectorAll('#audit-list > li')].map((li) => li.textContent);
+  check('F48 UI: the journal shows the three place changes by the administrator, the deletion with its reason', adminAudit.some((t) => t.includes('Admin P') && t.includes('a ajouté le lieu « Bibliothèque centrale »')) && adminAudit.some((t) => t.includes('a modifié le lieu')) && adminAudit.some((t) => t.includes('a supprimé le lieu') && t.includes('Motif : Lieu fermé définitivement')), adminAudit.slice(0, 4).join(' || '));
+  const serviceCard = [...ad.querySelectorAll('#services-list .service-card')].find((c) => c.textContent.includes('Centre de santé'));
+  check('F48 UI: an administrator gets an "Historique" button on each service', Boolean(serviceCard.querySelector('button[aria-label="Historique : Centre de santé"]')));
+  serviceCard.querySelector('button[aria-label="Historique : Centre de santé"]').click();
+  await wait(900);
+  const history = [...ad.querySelectorAll('#audit-list > li')];
+  check('F48 UI: the service history shows only that service (availability change, who and why)', history.length >= 1 && history.every((li) => li.textContent.includes('Centre de santé')) && history.some((li) => li.textContent.includes('Agent P') && li.textContent.includes('Motif :')), history.map((li) => li.textContent.slice(0, 80)).join(' || '));
+  // lifting an alert needs a reason
+  ad.querySelector('#audit-reset').click();
+  const lift = [...ad.querySelectorAll('.lift-button')][0];
+  lift.click();
+  await wait(40);
+  check('F47 UI: lifting an alert asks for a reason first and the alert is still active', ad.querySelector('#news-list .reason-form') !== null && ad.querySelectorAll('.news-urgent').length === 2);
+  const liftReason = ad.querySelector('#news-list .reason-form input');
+  liftReason.value = 'Le niveau de l’eau est redescendu';
+  liftReason.form.dispatchEvent(new adm.window.Event('submit', { cancelable: true, bubbles: true }));
+  await wait(1400);
+  check('F47 UI: with a reason the alert is lifted, and the journal records who lifted it and why', ad.querySelectorAll('.news-urgent').length === 1 && [...ad.querySelectorAll('#audit-list > li')].some((li) => li.textContent.includes('a levé l’alerte') && li.textContent.includes('Motif : Le niveau de l’eau est redescendu') && li.textContent.includes('Admin P')));
+  adm.window.close();
 
   // ---- Citizen: F35 tips
   const cit = await open();
@@ -232,6 +340,34 @@ try {
   cd.querySelector('#lang-toggle').click();
   await wait(500);
 
+  // ---- F45 / F46 as a resident
+  await wait(500);
+  const strip = cd.querySelector('#urgences');
+  const emergencyItems = [...cd.querySelectorAll('#urgences-list li')];
+  check('F46 UI: the first thing in the main content is the emergency strip: number to call, closest care, tram stop, 24 h, call link', strip === cd.querySelector('main').firstElementChild && strip.textContent.includes('Urgence ? Appelez le 112') && emergencyItems.length === 3 && emergencyItems.every((li) => li.textContent.includes('Ouvert 24 h sur 24') && li.querySelector('a[href="tel:112"]')), strip.textContent.slice(0, 300));
+  check('F46 UI: the resident\'s own district comes first (profile district is Quartier sud)', emergencyItems[0].textContent.includes('Poste de secours du quartier sud'), emergencyItems.map((li) => li.textContent.slice(0, 40)).join(' | '));
+  check('F46 UI: the strip is labelled and links to the full list', strip.getAttribute('aria-labelledby') === 'urgences-title' && strip.querySelector('a[href="#lieux"]') !== null);
+  const placeCards = () => [...cd.querySelectorAll('#places-list .place-card')];
+  const kinds = placeCards().map((c) => c.querySelector('.place-kind').textContent);
+  check('F45 UI: the places section lists every place with its kind in words; emergency and hospital first', placeCards().length >= 7 && kinds[0] === 'Urgences' && kinds.indexOf('Service de la ville') > kinds.lastIndexOf('Hôpital'), kinds.join('|'));
+  check('F45 UI: each card says where it is, which district and tram stop, and the next trams at that stop', placeCards().every((c) => c.querySelector('.place-district').textContent.includes('Arrêt de tram') && c.querySelector('.place-where').textContent.length > 10) && placeCards().some((c) => /Prochains passages T\d : \d\d:\d\d/.test(c.querySelector('.place-trams')?.textContent || '')), placeCards()[0].textContent);
+  check('F45 UI: opening hours or "Ouvert 24 h sur 24", and a call link when there is a number', placeCards().every((c) => c.querySelector('.place-hours')) && cd.querySelectorAll('#places-list a[href="tel:112"]').length >= 3);
+  const placeSearch = cd.querySelector('#place-search');
+  placeSearch.value = 'hopital';
+  placeSearch.dispatchEvent(new cit.window.Event('input', { bubbles: true }));
+  check('F45 UI: search ignores accents ("hopital" finds Hôpital and Urgences de l’hôpital)', placeCards().length === 2 && cd.querySelector('#places-status').textContent === '2 lieux trouvés.', placeCards().map((c) => c.querySelector('h3').textContent).join('|'));
+  placeSearch.value = 'zzzz';
+  placeSearch.dispatchEvent(new cit.window.Event('input', { bubbles: true }));
+  check('F45 UI: no result is said in words', cd.querySelector('#places-status').textContent.includes('Aucun lieu ne correspond'));
+  placeSearch.value = '';
+  placeSearch.dispatchEvent(new cit.window.Event('input', { bubbles: true }));
+  const careRadio = cd.querySelector('input[name=place-kind][value=care]');
+  careRadio.checked = true;
+  careRadio.dispatchEvent(new cit.window.Event('change', { bubbles: true }));
+  check('F45 UI: the "Urgences et soins" filter hides city services; the group has a legend', placeCards().length >= 3 && placeCards().every((c) => c.querySelector('.place-kind').textContent !== 'Service de la ville') && cd.querySelector('.place-filter legend').textContent === 'Type de lieu');
+  cd.querySelector('input[name=place-kind][value=all]').checked = true;
+  cd.querySelector('input[name=place-kind][value=all]').dispatchEvent(new cit.window.Event('change', { bubbles: true }));
+
   // ---- Baseline portal features (verified, not rebuilt)
   check('D12 guide shown to a new citizen', !cd.querySelector('#guide').hidden);
   cd.querySelector('#profile-form [name=district]').value = 'Quartier sud';
@@ -244,8 +380,8 @@ try {
   const firstStop = cd.querySelector('#transports-list .transport-card .transport-stop');
   check('F36 portal puts the profile-district stop first with a badge', firstStop?.textContent.includes('Quartier sud') && firstStop.textContent.includes('Votre quartier') && /\d\d:\d\d/.test(firstStop.textContent), firstStop?.textContent);
   check('F36 portal shows both lines and a disruption', cd.querySelectorAll('#transports-list .transport-card').length === 2 && cd.querySelector('.transport-disrupted') !== null);
-  check('D18/F29 urgent alerts in role=alert banner with audience', cd.querySelector('#alert-banner').getAttribute('role') === 'alert' && cd.querySelectorAll('#alert-banner .alert-item').length === 2 && cd.querySelector('#alert-banner').textContent.includes('Quartier sud'));
-  check('F31 alerts also listed as active in news', cd.querySelectorAll('.news-urgent').length === 2);
+  check('D18/F29 urgent alerts in role=alert banner with audience', cd.querySelector('#alert-banner').getAttribute('role') === 'alert' && cd.querySelectorAll('#alert-banner .alert-item').length === 1 && cd.querySelector('#alert-banner').textContent.includes('Quartier sud'));
+  check('F31 alerts also listed as active in news', cd.querySelectorAll('.news-urgent').length === 1);
   const search = cd.querySelector('#service-search');
   search.value = 'sante';
   search.dispatchEvent(new cit.window.Event('input', { bubbles: true }));
@@ -260,6 +396,7 @@ try {
   cd.querySelector('#lang-toggle').click();
   await wait(600);
   check('D14/F27 English: interface, service content, alert banner', cd.querySelector('#services-title').textContent === 'City services' && [...cd.querySelectorAll('#services-list h3')].some((x) => x.textContent === 'Health centre') && cd.querySelector('#alert-banner').textContent.includes('Rising water'), cd.querySelector('#alert-banner').textContent.slice(0, 120));
+  check('F45/F46 English: strip, section, kinds and place names translated', cd.querySelector('#urgences-title').textContent.startsWith('Emergency? Call') && cd.querySelector('#places-title').textContent === 'Where to find?' && [...cd.querySelectorAll('#places-list h3')].some((h) => h.textContent === 'Town hall') && [...cd.querySelectorAll('#places-list .place-kind')].some((k) => k.textContent === 'Hospital'), cd.querySelector('#urgences-title').textContent);
   check('D14 page language attribute follows the switch', cd.documentElement.lang === 'en');
   cit.window.close();
 } catch (error) {

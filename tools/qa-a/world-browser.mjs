@@ -37,6 +37,12 @@ const services = [
   { id: 1, title: 'Centre de santé', description: 'Consultations, vaccinations et soins de proximité.', details: 'Rendez-vous par message depuis votre espace personnel.', featured: 1, availability: 'unavailable', unavailable_reason: 'Maintenance du système de rendez-vous', unavailable_reason_en: 'Appointment system maintenance', available_again: '2026-10-06T09:30', alternative: 'Écrivez aux services depuis votre espace.', alternative_en: 'Write to the services from your space.', title_en: 'Health centre', description_en: 'Consultations, vaccinations and local care.', details_en: 'Book by message from your personal space.' },
   { id: 2, title: 'Espace personnel', description: 'Vos démarches au même endroit.', details: 'Créez un compte pour retrouver vos échanges.', featured: 0, availability: 'available' },
 ];
+const places = [
+  { id: 4, code: 'secours-quartier-sud', kind: 'emergency', name: 'Poste de secours du quartier sud', district: 'Quartier sud', stop: 'Quartier sud', address: 'Quartier sud, près des berges.', hours: null, open_24h: 1, phone: '112' },
+  { id: 3, code: 'urgences-hopital', kind: 'emergency', name: 'Urgences de l’hôpital', district: 'Quartier est', stop: 'Santé', address: 'Entrée des urgences sur le côté nord de l’hôpital.', hours: null, open_24h: 1, phone: '112' },
+  { id: 2, code: 'hopital-terra-nova', kind: 'hospital', name: 'Hôpital de Terra Nova', name_en: 'Terra Nova hospital', district: 'Quartier est', stop: 'Santé', address: 'Quartier est, à côté de l’arrêt Santé.', hours: null, open_24h: 1, phone: '112' },
+  { id: 1, code: 'mairie', kind: 'service', name: 'Mairie', name_en: 'Town hall', district: 'Centre-ville', stop: 'Mairie', address: 'Sur la place centrale.', address_en: 'On the central square.', hours: 'Du lundi au vendredi, de 8 h à 17 h', hours_en: 'Monday to Friday, 8 am to 5 pm', open_24h: 0, phone: null },
+];
 const json = (response, status, body) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(body)); };
 const fakeApi = {
   name: 'fake-api',
@@ -46,6 +52,7 @@ const fakeApi = {
       if (path === '/api/announcements') { state.calls.announcements++; return state.fail ? json(response, 503, { error: 'down' }) : json(response, 200, { announcements: state.announcements }); }
       if (path === '/api/transports') return json(response, 200, { lines });
       if (path === '/api/services') return json(response, 200, { services });
+      if (path === '/api/places') return json(response, 200, { places });
       if (path === '/api/me/avatar' && request.method === 'PUT') {
         const chunks = [];
         for await (const chunk of request) chunks.push(chunk);
@@ -293,7 +300,7 @@ try {
       if (mode === 'manual') await p.evaluate(() => [...document.querySelectorAll('.hud-controls button')].find((b) => b.textContent.includes('Téléphone')).click());
       await p.waitForSelector('.phone-sheet', { timeout: 8000 });
       await wait(250);
-      const pages = mode === 'takeover' ? [null] : ['Accueil', 'Alertes', 'Actualités', 'Services', 'Transports'];
+      const pages = mode === 'takeover' ? [null] : ['Accueil', 'Alertes', 'Actualités', 'Services', 'Lieux', 'Transports'];
       for (const pageName of pages) {
         if (pageName) await clickByText(p, '.phone-nav button', pageName);
         const m = await p.evaluate(() => {
