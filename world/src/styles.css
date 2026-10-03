@@ -147,3 +147,7 @@ html, body, #root { margin: 0; height: 100%; background: #0b0614; color: #fff; f
 html[data-phonefix=layer] .phone-host { will-change: transform; backface-visibility: hidden; }
 html[data-phonefix=nomask] .phone-host { overflow: visible !important; border-radius: 0 !important; }
 html[data-phonefix=smooth] .phone-host { -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
+.avatar-editor fieldset { margin: 0 0 0.75rem; padding: 0; border: 0; }
+.avatar-editor legend { padding: 0; margin-bottom: 0.4rem; font-weight: 700; }
+.avatar-editor .avatar-choice { margin-bottom: 0.25rem; min-height: 2.75rem; }
+.avatar-editor input[type=radio] { width: 1.5rem; height: 1.5rem; margin: 0; accent-color: #ff4fa3; }

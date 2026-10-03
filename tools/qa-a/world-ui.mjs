@@ -348,7 +348,7 @@ check('HUD registers no key listener of its own (nothing to observe on render)',
 const apiCalls = [];
 let saveFails = true;
 globalThis.fetch = async (url, options) => {
-  apiCalls.push([String(url), options?.method]);
+  apiCalls.push([String(url), options?.method, options?.body]);
   if (saveFails) return { ok: false, status: 500, json: async () => ({ error: 'Erreur interne.' }) };
   const body = JSON.parse(options.body);
   return { ok: true, status: 200, json: async () => ({ avatar: body }) };
@@ -392,6 +392,48 @@ await act(async () => {
 await act(async () => { q('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
 await flush();
 check('editor: successful save PUTs the avatar and closes', apiCalls.some(([u, m]) => u === '/api/me/avatar' && m === 'PUT') && state.outfit === '#445566' && closedEditor === 2);
+
+// ---- look + accessory (B's catalogue: colon / lunettes / bandeau, none / sac / visiere), offered only when the renderer ships them
+const LOOKS = ['colon', 'lunettes', 'bandeau'];
+const ACCESSORIES = ['none', 'sac', 'visiere'];
+let drafted;
+let closedLook = 0;
+const withLooks = (start, props = {}) => function LookEditor() {
+  const [avatar, setAvatar] = React.useState(start);
+  const [open, setOpen] = React.useState(true);
+  drafted = avatar;
+  return h(editor.AvatarEditor, { open, avatar, onChange: setAvatar, onClose: () => { closedLook++; setOpen(false); }, locale: 'fr', looks: LOOKS, accessories: ACCESSORIES, ...props });
+};
+await render(h(Editor));
+check('editor: without a catalogue there is no look/accessory group (colours only, as before)', qa('input[type=radio]').length === 0 && qa('fieldset').length === 0);
+await render(h(withLooks(saved)));
+check('editor: with the catalogue, two labelled radio groups (Apparence, Accessoire) with the French labels', qa('fieldset legend').map((l) => l.textContent).join() === 'Apparence,Accessoire' && qa('input[name="avatar-look"]').map((i) => i.parentElement.textContent.trim()).join('|') === 'Colon|Colon à lunettes|Colon au bandeau' && qa('input[name="avatar-accessory"]').map((i) => i.parentElement.textContent.trim()).join('|') === 'Aucun|Sac|Visière');
+check('editor: an old three-colour save shows the first (default) look and "Aucun" as the selection, nothing invented', qa('input[name="avatar-look"]').find((i) => i.checked)?.value === 'colon' && qa('input[name="avatar-accessory"]').find((i) => i.checked)?.value === 'none');
+check('editor: the radios are native, in the tab order, 24 px or more, keyboard operable (arrow keys come from the browser)', qa('input[type=radio]').every((i) => i.tabIndex >= 0 && !i.disabled));
+await clickEl(qa('input[name="avatar-look"]').find((i) => i.value === 'lunettes'));
+await clickEl(qa('input[name="avatar-accessory"]').find((i) => i.value === 'visiere'));
+check('editor: choosing updates the draft live (so the 3D preview follows) and keeps the colours', drafted.look === 'lunettes' && drafted.accessory === 'visiere' && drafted.skin === '#e0ac69', JSON.stringify(drafted));
+saveFails = false;
+apiCalls.length = 0;
+await act(async () => { q('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+await flush();
+const putBody = JSON.parse(apiCalls.find(([u, m]) => u === '/api/me/avatar' && m === 'PUT')[2]);
+check('editor: Save sends colours AND look AND accessory in one PUT, and the stored value comes back into the draft', putBody.look === 'lunettes' && putBody.accessory === 'visiere' && putBody.skin === '#e0ac69' && drafted.look === 'lunettes' && closedLook === 1, JSON.stringify(putBody));
+// persistence: what the server stored is what a reopened editor shows
+await render(h(withLooks({ ...saved, look: 'bandeau', accessory: 'sac' })));
+check('editor: reopened with a stored look and accessory, those are the selected ones (persistence and reload)', qa('input[name="avatar-look"]').find((i) => i.checked)?.value === 'bandeau' && qa('input[name="avatar-accessory"]').find((i) => i.checked)?.value === 'sac');
+await clickEl(qa('input[name="avatar-look"]').find((i) => i.value === 'colon'));
+const closedBefore = closedLook;
+await clickEl(qa('button').find((b) => b.textContent === 'Annuler'));
+check('editor: Cancel restores the saved look and accessory too', drafted.look === 'bandeau' && drafted.accessory === 'sac' && closedLook === closedBefore + 1, JSON.stringify(drafted));
+await render(h(withLooks({ ...saved, look: 'ingenieur', accessory: 'chapeau' })));
+check('editor: a stored id the renderer does not ship (provisional or unknown) falls back to the default selection without throwing', qa('input[name="avatar-look"]').find((i) => i.checked)?.value === 'colon' && qa('input[name="avatar-accessory"]').find((i) => i.checked)?.value === 'none');
+await render(h(withLooks(saved, { looks: ['colon'], accessories: [] })));
+check('editor: a group with a single option (or none) is not offered: no choice that does nothing', qa('input[type=radio]').length === 0);
+await render(h(withLooks(saved, { locale: 'en' })));
+check('editor: English labels', qa('fieldset legend').map((l) => l.textContent).join() === 'Look,Accessory' && qa('input[name="avatar-look"]').map((i) => i.parentElement.textContent.trim()).join('|') === 'Colonist|Colonist with glasses|Colonist with a headband');
+await render(h(withLooks(saved, { looks: ['colon', 'futur'] })));
+check('editor: an id with no translation yet shows the id itself, never a raw "editor.look.futur" key', qa('input[name="avatar-look"]').map((i) => i.parentElement.textContent.trim()).join('|') === 'Colon|futur');
 
 await vite.close();
 console.log(failures ? `\n${failures} FAILED` : '\nall world UI checks passed');

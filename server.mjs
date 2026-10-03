@@ -343,7 +343,9 @@ function eraseUser(id) {
 
 // F47: sensitive staff actions need a stated reason, kept in the audit trail.
 // Avatar choices the server accepts. The editor only offers what the 3D renderer really ships (its own catalogue); the server stays a superset.
-const avatarLooks = ['colon', 'ingenieur', 'medecin'];
+const avatarLooks = ['colon', 'lunettes', 'bandeau'];
+// Provisional looks agreed before the renderer shipped (never offered by any editor): explicitly mapped to the default look, never rejected or lost.
+const legacyAvatarIds = { ingenieur: 'colon', medecin: 'colon' };
 const avatarAccessories = ['none', 'sac', 'visiere'];
 const concernTopics = ['usage', 'sharing', 'storage', 'access', 'other'];
 const reasonOf = (body, required) => (required || body.reason ? text(body.reason, 5, 200, 'Le motif') : null);
@@ -434,7 +436,7 @@ async function route(request, response) {
     // Optional look and accessory (allowlisted ids). An older editor that only sends colours keeps what was chosen before.
     const before = user.avatar || {};
     for (const [key, allowed] of [['look', avatarLooks], ['accessory', avatarAccessories]]) {
-      const value = body[key] === undefined ? before[key] : body[key];
+      const value = typeof body[key] === 'string' && Object.hasOwn(legacyAvatarIds, body[key]) ? legacyAvatarIds[body[key]] : (body[key] === undefined ? before[key] : body[key]);
       if (value === undefined) continue;
       if (!allowed.includes(value)) fail(400, 'Apparence invalide.');
       avatar[key] = value;

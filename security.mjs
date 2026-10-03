@@ -77,7 +77,10 @@ function parseAvatar(value) {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    // provisional look ids from before the renderer shipped read back as the default look
+    if (parsed.look === 'ingenieur' || parsed.look === 'medecin') parsed.look = 'colon';
+    return parsed;
   } catch {
     return null;
   }
