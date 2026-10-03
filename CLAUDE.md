@@ -128,6 +128,13 @@ Wave 7 (H+8h, 2 880 XP) — A, in this order:
 20. **F47 (960) + F48 (640), audit log**: one `audit_log` table (`at`, `actor_id`, actor name/role snapshot, `action`, `target_type`, `target_id`, short `details`), written by every staff/admin mutation (message status, services, announcements/alerts, transports status, citizen admin, slots…) and account deletions. Staff space: "Journal des actions" newest first, filter by action/person/date, plain-language lines ("Agent Dupont a désactivé le compte de M. Martin — 03/10 16:40"). Append-only: no edit/delete route.
 21. **F45 (960) + F46 (320), find physical services**: each service gets an address, district, opening hours and nearest tram stop (`GET /api/services` fields, shared with B); service cards show "Où ? / Comment y aller ?" with the next tram from `GET /api/transports`; an always-visible "Urgences" block (112/15/18, centre de santé address and hours, nearest stop) on the home page and in the phone.
 
+Wave 8 (H+9h, 2 970 XP) — A, in this order:
+
+22. **F49 (330), status-change notice**: when a citizen's message changes status, the portal shows "Votre demande « … » est passée à En cours" (per-user last-seen status, cleared once read), and fires a `Notification` through the existing opt-in during the 30 s refresh.
+23. **F50 (990), staff dashboard**: top of the staff space — messages to handle / in progress / resolved, reports per district, average resolution time, active alerts, disrupted lines, new citizens this week, a 7-day activity bar chart (plain CSS/SVG with text values, not colour alone). Numbers link to the filtered lists.
+24. **F51 (990), "Vos données"**: plain-language page of what is stored, why and how long; JSON export of the citizen's own data; a "Question sur mes données" request kind with a reference number and tracked status, visible to staff; mention the account deletion (F33).
+25. **F52 (660), support a request**: public, anonymised list of incident reports (subject, place, date, status); one "Je soutiens" per citizen (unique constraint), visible count and "Vous soutenez cette demande depuis le …"; staff see the count.
+
 ## Original Session B scope — retained for traceability
 
 The active spec supersedes the implementation approach below, particularly the overlay-only phone and global curvature. All functional features remain required.
@@ -158,6 +165,10 @@ Wave 6 (accessibility) — A leads; B covers what lives in B files:
 Wave 7:
 
 14. **F45/F46 in the world**: from the phone's service or "Urgences" entry, a wayfinding cue (path highlight or arrow) to that service's building; a clear Santé/hospital sign. Uses the service address/district fields A adds to `GET /api/services`.
+
+Wave 8:
+
+15. **F49 tie-in (optional)**: the phone shows the citizen's status-change notices once A exposes them.
 
 World rules: no CDN or external fonts/assets (CSP blocks them; drei `<Text>` must get a local font). Canvas `aria-hidden="true"`; the phone is real HTML with `aria-live` for alerts; respect `prefers-reduced-motion`; a visible "Version accessible" link to `/`. The portal stays the accessible version and the fallback.
 
