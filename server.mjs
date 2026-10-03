@@ -344,8 +344,8 @@ function eraseUser(id) {
 // F47: sensitive staff actions need a stated reason, kept in the audit trail.
 // Avatar choices the server accepts. The editor only offers what the 3D renderer really ships (its own catalogue); the server stays a superset.
 const avatarLooks = ['colon', 'lunettes', 'bandeau'];
-// Provisional looks agreed before the renderer shipped (never offered by any editor): explicitly mapped to the default look, never rejected or lost.
-const legacyAvatarIds = { ingenieur: 'colon', medecin: 'colon' };
+// Provisional looks agreed before the renderer shipped (never offered by any editor): mapped to the visible models PM fixed (ingenieur -> lunettes, medecin -> bandeau), never rejected or lost.
+const legacyAvatarIds = { ingenieur: 'lunettes', medecin: 'bandeau' };
 const avatarAccessories = ['none', 'sac', 'visiere'];
 const concernTopics = ['usage', 'sharing', 'storage', 'access', 'other'];
 const reasonOf = (body, required) => (required || body.reason ? text(body.reason, 5, 200, 'Le motif') : null);
