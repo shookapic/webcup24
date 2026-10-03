@@ -16,7 +16,9 @@ const skyShader = {
       float h = clamp(vDir.y, 0.0, 1.0);
       vec3 color = mix(vec3(1.0, 0.45, 0.27), vec3(0.45, 0.12, 0.32), smoothstep(0.0, 0.15, h));
       color = mix(color, vec3(0.04, 0.02, 0.08), smoothstep(0.1, 0.6, h));
-      gl_FragColor = vec4(color, 1.0);
+      // Colours are picked in sRGB; convert to linear so composer/output conversion lands on them.
+      gl_FragColor = vec4(pow(color, vec3(2.2)), 1.0);
+      #include <colorspace_fragment>
     }`,
 };
 
@@ -39,7 +41,8 @@ const giantShader = {
       float bands = sin(lat * 22.0 + sin(lat * 7.0 + uTime * 0.05) * 1.5);
       vec3 color = mix(vec3(0.85, 0.42, 0.25), vec3(0.98, 0.78, 0.55), bands * 0.5 + 0.5);
       float light = clamp(dot(vNormal, normalize(vec3(0.6, 0.2, 0.8))), 0.0, 1.0);
-      gl_FragColor = vec4(color * (0.15 + light), 1.0);
+      gl_FragColor = vec4(pow(color * (0.15 + light), vec3(2.2)), 1.0);
+      #include <colorspace_fragment>
     }`,
 };
 
@@ -54,7 +57,8 @@ const glowShader = {
     varying vec3 vNormal;
     void main() {
       float rim = pow(1.0 - abs(vNormal.z), 3.0);
-      gl_FragColor = vec4(vec3(1.0, 0.55, 0.35) * rim, rim);
+      gl_FragColor = vec4(pow(vec3(1.0, 0.55, 0.35), vec3(2.2)) * rim, rim);
+      #include <colorspace_fragment>
     }`,
 };
 

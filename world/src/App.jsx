@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import { Sky } from './Sky.jsx';
 import { City, Ground, Rocks } from './City.jsx';
 import { LabelLayer, LabelProjector } from './Labels.jsx';
@@ -77,6 +78,11 @@ export function App() {
           </Suspense>
         ) : <City />}
         <LabelProjector />
+        {/* Glow materials use toneMapped={false} and intensity > 1, so only they cross the bloom threshold. */}
+        <EffectComposer multisampling={4}>
+          <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
+          <Vignette offset={0.3} darkness={0.55} />
+        </EffectComposer>
         {!user && <OrbitControls target={[0, 4, 0]} maxPolarAngle={1.45} minDistance={15} maxDistance={140} autoRotate={!reducedMotion} autoRotateSpeed={0.3} />}
       </Canvas>
       <LabelLayer />
