@@ -7,7 +7,7 @@ Updated 2026-10-03 (H+7h). Scope: A0 scope ledger, A1 phone/HUD/data hook, A2 po
 | What | Where |
 |---|---|
 | A0–A3, F34, F35, phone/HUD/editor, asset serving | commit `2fd14e4`; already on `main` through B's merge `d04f830` |
-| Wave 5 (F37–F40), D11 steps, F23 contrast fixes, QA harnesses | commit on branch **`sessionA-work`** (not pushed, not on `main`). `origin/main` (`b0aaa09`) is merged into it |
+| Wave 5 (F37–F40), D11 steps, F23 contrast fixes, QA harnesses | branch **`sessionA-work`** (not pushed, not on `main`): `3db1f0d` Wave 5, `6f88f02` merge of `origin/main` (`b0aaa09`), `ac006bc` docs + QA scripts |
 | Docs `docs/PM_STATUS.md`, `docs/CONTEST_REQUESTS_2026-10-03.md`, edits to `CODE_REVIEW.md`/`GAME_ROADMAP.md` | belong to the PM; **left uncommitted** in the working tree on purpose |
 
 The first draft of this file said "not committed" and "B must integrate"; both are now false.
