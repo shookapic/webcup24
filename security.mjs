@@ -39,9 +39,10 @@ export function clearSession(request, response) {
 export function currentUser(request) {
   const token = request.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith('tn_session='))?.slice(11);
   if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-  return db.prepare(`
-    SELECT users.id, users.email, users.name, users.role
+  const user = db.prepare(`
+    SELECT users.id, users.email, users.name, users.role, users.avatar
     FROM sessions JOIN users ON users.id = sessions.user_id
     WHERE sessions.token_hash = ? AND sessions.expires_at > ?
-  `).get(tokenHash(token), Date.now()) || null;
+  `).get(tokenHash(token), Date.now());
+  return user ? { ...user, avatar: user.avatar ? JSON.parse(user.avatar) : null } : null;
 }

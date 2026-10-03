@@ -54,6 +54,8 @@ db.exec(`
 const messageColumns = new Set(db.prepare('PRAGMA table_info(messages)').all().map((column) => column.name));
 if (!messageColumns.has('kind')) db.exec("ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'contact' CHECK (kind IN ('contact', 'incident'))");
 if (!messageColumns.has('location')) db.exec('ALTER TABLE messages ADD COLUMN location TEXT');
+const userColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
+if (!userColumns.has('avatar')) db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');
 
 if (db.prepare('SELECT COUNT(*) AS count FROM services').get().count === 0) {
   const insert = db.prepare('INSERT INTO services (title, description, details) VALUES (?, ?, ?)');
