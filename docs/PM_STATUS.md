@@ -1,6 +1,18 @@
 # Terra Nova coordination checkpoint
 
-2026-10-03, 17:16 Europe/Paris. PM integration/review only; no application code edited by Codex.
+2026-10-03, 17:52 Europe/Paris. PM integration/review only; no application code authored by Codex.
+
+## Correction release candidate (not pushed yet)
+
+PM merged reviewed A through52468bd and B963b08b as application source6b017a4, then cherry-picked A's QA-only c79083a to support valid affine screen placement. Wave8 application work remains separate on A's sessionA-wave8 branch. B is to validate the exact final integration HEAD, then perform the already-authorized normal push and live GET-only checks after PM accepts the proof.
+
+- **Model/rail correction PASS local:** B reproduced all22 buildings off their colliders, normalized cloned kit root offsets;22 building checks now pass (centres and all dimensions). Representative Mairie collision edge is.35m from visible wall (capsule radius).22 tram checks pass (rail contact/centres, spacing, rounded turns, stops/reversal, no body beyond ends, outward-facing cabs). PM inspected corrected straight/end captures. T1/T2 guideways are separate to avoid overlap.
+- **Phone mitigation ready; user Firefox acceptance UNVERIFIED:** physical device is held square to camera, HTML uses whole-pixel affine translation/scale, transform writes occur only on change, problematic projected rounded mask removed. Readable local captures and existing focus/click/race checks pass. Headed Firefox and Edge on this PC did not reproduce the user's original defect; user must retest after deploy. Diagnostic phonefix variants and legacy phoneproj remain opt-in, not proof of a fix.
+- **Wave7 source/UI now committed and merged:** place directory/emergency information in portal/phone, staff audit/history and reason prompts. PM found citizen actor masking and malformed audit-filter bugs; A reproduced and fixed both, with mutation checks that fail on old source.138 API,10 original-schema migration,96 portal,90 world UI,91 accessibility,121 world browser,22 physical and17 flat checks reported passing on A's source before B host correction; final combined gate remains pending.
+- **Coverage audit:** A's50-row matrix reports34 local PASS,12 PARTIAL,4 NOT STARTED. Portal audit40 checks covers previously missing request-history/breadcrumb/workload/feed/featured/audience/opt-in assertions. Authenticated production, real notification popups and real assistive technology remain unverified. New Wave8 F49-F52 remains explicitly excluded from this release, despite A's implementation now underway separately.
+- **Next world milestone:** vegetation clusters, continuous sidewalks/crossings, seated bench NPC cycles, richer persisted avatar variants/accessory and F45/F46 real-data wayfinding remain required and unfinished. A proposed optional look/accessory IDs with allowlist/options API, pending B's actual assets. No feature coverage is waived by deploying this correction.
+
+Durable original live proof: coordination/reports/host-smoke-de791f3.log (51 GET-only PASS). New exact combined proof and deployment result will be saved separately; source readiness is not host acceptance. Dated sections below retain earlier findings.
 
 ## Latest: live user test found visual failures
 
