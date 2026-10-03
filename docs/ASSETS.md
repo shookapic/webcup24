@@ -5,7 +5,7 @@ All shipped assets are local under `world/public/assets/` (no CDN). Only files u
 | Pack | Author / source | License | Local files | Use |
 |---|---|---|---|---|
 | Space Kit 2.0 | Kenney, https://kenney.nl/assets/space-kit | CC0 1.0 (`licenses/kenney-space-kit-LICENSE.txt`) | `models/kit/*.glb` (19 files, ~0.5 MB total) | Mairie, Santé, Marché, Habitat, Quartier sud buildings; tram cars; plaza props |
-| Blocky Characters 2.0 | Kenney, https://kenney.nl/assets/blocky-characters | CC0 1.0 (`licenses/kenney-blocky-characters-LICENSE.txt`) | `models/chars/character-{c,i,n}.glb`, `models/chars/Textures/texture-{c,i,n}.png` | Player, NPCs, remote players; looks `colon` = c (default), `lunettes` = i, `bandeau` = n (same rig and clips, different hair/face/clothes painted in the atlas) |
+| Blocky Characters 2.0 | Kenney, https://kenney.nl/assets/blocky-characters | CC0 1.0 (`licenses/kenney-blocky-characters-LICENSE.txt`) | `models/chars/character-{c,i,n}.glb`, `models/chars/Textures/texture-{c,i,n}.png` | Player, NPCs, remote players; looks `colon` = c (default), `ingenieur` = i, `medecin` = n (same rig and clips, different hair/face/clothes painted in the atlas) |
 
 | Nature Kit 2.1 | Kenney, https://kenney.nl/assets/nature-kit | CC0 1.0 (`licenses/kenney-nature-kit-LICENSE.txt`) | `models/nature/*.glb` (12 files, ~0.1 MB) | Trees (autumn oak/default/fat, thin), bushes, flowers, grass, column |
 

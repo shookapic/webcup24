@@ -3,15 +3,14 @@ import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import { AnimationMixer, BoxGeometry, Group, LoopRepeat, Mesh, MeshStandardMaterial, Source } from 'three';
 import { debug } from './debug.js';
+import { DEFAULT_LOOK, LOOK_MODEL, normalizeAccessory, normalizeLook } from './avatarCatalog.js';
 import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 // Rigged colonist: Kenney Blocky Characters "character-c" (CC0, see docs/ASSETS.md), clips idle / walk / sprint.
 // Origin = feet, faces +z, ~1.6 m tall. Skin / outfit / accent recolour the shared atlas per colour set (cached).
-// Stable look ids -> Kenney model letters (same rig, same clips; different hair, face and clothing painted in the atlas).
-export const LOOKS = { colon: 'c', lunettes: 'i', bandeau: 'n' };
-export const ACCESSORIES = ['none', 'sac', 'visiere'];
+// Look ids -> Kenney model letters live in avatarCatalog.js (same rig, same clips; different hair, face and clothing in the atlas).
 export const lookUrl = (letter) => `${import.meta.env.BASE_URL}assets/models/chars/character-${letter}.glb`;
-const URL = lookUrl(LOOKS.colon);
+const URL = lookUrl(LOOK_MODEL[DEFAULT_LOOK]);
 // The kit's character is 2.7 m tall (legs 1.0 + torso 0.9 + head 0.8, measured); scaled to a 1.7 m colonist.
 export const HEIGHT_SCALE = 0.64;
 export const FEET_BELOW_BODY = 0.96; // ecctrl body centre above the floor at rest (measured, docs/QA_B.md)
@@ -93,7 +92,7 @@ const idleState = { speed: 0, air: false };
 
 // `getState()` is read every frame: { speed (m/s horizontal), air }. Physics owns displacement; clips play in place.
 export function Colonist({ avatar, getState, visible = true, reducedMotion, letter: letterOverride, ...props }) {
-  const letter = letterOverride ?? LOOKS[avatar?.look] ?? LOOKS.colon; // unknown / missing look ids fall back to the default model
+  const letter = letterOverride ?? LOOK_MODEL[normalizeLook(avatar?.look)]; // unknown / missing ids fall back to the default model
   const { scene, animations } = useGLTF(lookUrl(letter));
   const colors = clean(avatar);
   const colorKey = `${letter}${colors.skin}${colors.outfit}${colors.accent}`;
@@ -126,7 +125,7 @@ export function Colonist({ avatar, getState, visible = true, reducedMotion, lett
   }, [object, material, scene, colorKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Optional accessory, built from primitives and parented to the rig's own head / torso nodes so it follows every clip.
-  const accessory = ACCESSORIES.includes(avatar?.accessory) ? avatar.accessory : 'none';
+  const accessory = normalizeAccessory(avatar?.accessory);
   useEffect(() => {
     const added = [];
     const attach = (parent, mesh) => { mesh.traverse((o) => { o.userData.accessory = true; }); parent?.add(mesh); added.push(mesh); };
