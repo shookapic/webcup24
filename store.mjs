@@ -223,6 +223,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS concerns_user ON concerns(user_id);
 `);
 
+// F52: a resident can choose to make one of their incident reports visible to other residents as a separate public record
+// (title, summary and district written for that purpose). The private message is never exposed. Withdrawing deletes the record and its supports.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS public_requests (
+    id INTEGER PRIMARY KEY,
+    message_id INTEGER NOT NULL UNIQUE REFERENCES messages(id) ON DELETE CASCADE,
+    public_title TEXT NOT NULL,
+    public_summary TEXT NOT NULL,
+    district TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS supports (
+    id INTEGER PRIMARY KEY,
+    public_request_id INTEGER NOT NULL REFERENCES public_requests(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (public_request_id, user_id)
+  );
+`);
+
 // F47 / F48: append-only audit trail with a hash chain (see audit.mjs). The triggers refuse any UPDATE or DELETE.
 db.exec(`
   CREATE TABLE IF NOT EXISTS audit_log (

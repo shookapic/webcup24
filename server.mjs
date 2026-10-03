@@ -273,11 +273,26 @@ function color(value) {
   return value.toLowerCase();
 }
 
+// F52: removing a public record removes its supports and every notice that quotes it, so nothing of it resurfaces.
+function dropPublic(publicId) {
+  db.prepare("DELETE FROM notices WHERE code LIKE 'public.%' AND ref_id = ?").run(publicId);
+  db.prepare('DELETE FROM supports WHERE public_request_id = ?').run(publicId);
+  db.prepare('DELETE FROM public_requests WHERE id = ?').run(publicId);
+}
+// Public text is written for strangers: no e-mail address, no phone number.
+function publicText(value, min, max, label) {
+  const clean = text(value, min, max, label);
+  if (/@|\d[\d .-]{6,}\d/.test(clean)) fail(400, `${label} ne doit contenir ni adresse e-mail ni numéro de téléphone.`);
+  return clean;
+}
+
 // Messages go with the account; sessions cascade from users.
 function eraseUser(id) {
   tx(() => {
     db.prepare("UPDATE appointments SET citizen_id = NULL, reason = NULL, booked_at = NULL, status = 'open' WHERE citizen_id = ? AND status = 'booked'").run(id);
     db.prepare('DELETE FROM appointments WHERE citizen_id = ?').run(id);
+    for (const row of db.prepare('SELECT public_requests.id FROM public_requests JOIN messages ON messages.id = public_requests.message_id WHERE messages.user_id = ?').all(id)) dropPublic(row.id);
+    db.prepare('DELETE FROM supports WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM messages WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM notices WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM concerns WHERE user_id = ?').run(id);
@@ -472,6 +487,7 @@ async function route(request, response) {
         booked_week: one("SELECT COUNT(*) AS n FROM appointments WHERE status = 'booked' AND starts_at > ? AND starts_at < ?", now, week).n,
         open_week: one("SELECT COUNT(*) AS n FROM appointments WHERE status = 'open' AND starts_at > ? AND starts_at < ?", now, week).n,
       },
+      public: { requests: one('SELECT COUNT(*) AS n FROM public_requests').n, supports: one('SELECT COUNT(*) AS n FROM supports').n },
       concerns: { received: one("SELECT COUNT(*) AS n FROM concerns WHERE status = 'received'").n },
       services: { total: one('SELECT COUNT(*) AS n FROM services').n, unavailable },
       alerts: { active: one('SELECT COUNT(*) AS n FROM announcements WHERE urgent = 1').n },
@@ -788,8 +804,8 @@ async function route(request, response) {
     const user = requireUser(request);
     const all = ['agent', 'admin'].includes(user.role);
     const messages = all
-      ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
-      : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
+      ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
+      : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT public_title FROM public_requests WHERE message_id = messages.id) AS public_title, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
     return sendJson(response, 200, { messages });
   }
   if (path === '/api/messages' && method === 'POST') {
@@ -821,6 +837,8 @@ async function route(request, response) {
       appointments: own('SELECT id, starts_at, duration_min, location, reason, status, booked_at FROM appointments WHERE citizen_id = ? ORDER BY starts_at'),
       concerns: own('SELECT id, topic, body, status, response, created_at, responded_at FROM concerns WHERE user_id = ? ORDER BY id'),
       notices: own('SELECT id, code, ref_id, label, note, at, seen_at FROM notices WHERE user_id = ? ORDER BY id'),
+      public_requests: own('SELECT pr.id, pr.message_id, pr.public_title, pr.public_summary, pr.district, pr.created_at, (SELECT COUNT(*) FROM supports WHERE public_request_id = pr.id) AS support_count FROM public_requests pr JOIN messages m ON m.id = pr.message_id WHERE m.user_id = ? ORDER BY pr.id'),
+      supports: own('SELECT supports.public_request_id, pr.public_title, supports.at FROM supports JOIN public_requests pr ON pr.id = supports.public_request_id WHERE supports.user_id = ? ORDER BY supports.id'),
     };
     response.setHeader('Content-Disposition', 'attachment; filename="mes-donnees-terra-nova.json"');
     return sendJson(response, 200, file);
@@ -864,6 +882,68 @@ async function route(request, response) {
     return sendJson(response, 200, { ok: true });
   }
 
+  // F52: supporting a request that its author chose to make public. The private message is never part of these answers.
+  if (path === '/api/public-requests' && method === 'GET') {
+    const user = requireUser(request);
+    const rows = db.prepare(`SELECT pr.id, pr.public_title, pr.public_summary, pr.district, pr.created_at, m.status, m.user_id AS owner_id,
+        (SELECT COUNT(*) FROM supports WHERE public_request_id = pr.id) AS support_count,
+        (SELECT at FROM supports WHERE public_request_id = pr.id AND user_id = ?) AS supported_at
+      FROM public_requests pr JOIN messages m ON m.id = pr.message_id ORDER BY (m.status = 'resolved'), pr.id DESC`).all(user.id);
+    return sendJson(response, 200, { requests: rows.map(({ owner_id, supported_at, ...row }) => ({ ...row, mine: owner_id === user.id, supported_by_me: Boolean(supported_at), supported_at })) });
+  }
+  if (path === '/api/me/supports' && method === 'GET') {
+    const user = requireUser(request, ['citizen']);
+    return sendJson(response, 200, { supports: db.prepare('SELECT pr.id, pr.public_title, supports.at AS supported_at, m.status FROM supports JOIN public_requests pr ON pr.id = supports.public_request_id JOIN messages m ON m.id = pr.message_id WHERE supports.user_id = ? ORDER BY supports.at DESC, supports.id DESC').all(user.id) });
+  }
+  const supportMatch = /^\/api\/public-requests\/(\d+)\/support$/.exec(path);
+  if (supportMatch && (method === 'POST' || method === 'DELETE')) {
+    const user = requireUser(request, ['citizen']);
+    const id = Number(supportMatch[1]);
+    const row = db.prepare('SELECT pr.id, m.status, m.user_id AS owner_id FROM public_requests pr JOIN messages m ON m.id = pr.message_id WHERE pr.id = ?').get(id);
+    if (!row) fail(404, 'Demande introuvable.');
+    const count = () => db.prepare('SELECT COUNT(*) AS n FROM supports WHERE public_request_id = ?').get(id).n;
+    if (method === 'DELETE') {
+      if (!Number(db.prepare('DELETE FROM supports WHERE public_request_id = ? AND user_id = ?').run(id, user.id).changes)) fail(404, 'Vous ne soutenez pas cette demande.');
+      return sendJson(response, 200, { supported: false, support_count: count() });
+    }
+    if (row.owner_id === user.id) fail(403, 'Vous ne pouvez pas soutenir votre propre demande.');
+    try {
+      // one statement: the unresolved check and the insert cannot be separated by a concurrent status change; UNIQUE refuses a second support
+      const added = db.prepare("INSERT INTO supports (public_request_id, user_id) SELECT pr.id, ? FROM public_requests pr JOIN messages m ON m.id = pr.message_id WHERE pr.id = ? AND m.status != 'resolved'").run(user.id, id);
+      if (!Number(added.changes)) fail(409, 'Cette demande est résolue : le soutien n’est plus possible.');
+    } catch (error) {
+      if (String(error.message).includes('UNIQUE')) fail(409, 'Vous soutenez déjà cette demande.');
+      throw error;
+    }
+    return sendJson(response, 201, { supported: true, support_count: count() });
+  }
+  const publishMatch = /^\/api\/messages\/(\d+)\/public$/.exec(path);
+  if (publishMatch && (method === 'POST' || method === 'DELETE')) {
+    const user = requireUser(request, ['citizen']);
+    const item = db.prepare('SELECT id, kind, status FROM messages WHERE id = ? AND user_id = ?').get(Number(publishMatch[1]), user.id);
+    if (!item) fail(404, 'Message introuvable.');
+    if (method === 'DELETE') {
+      const published = db.prepare('SELECT id FROM public_requests WHERE message_id = ?').get(item.id);
+      if (!published) fail(404, 'Ce signalement n’est pas publié.');
+      tx(() => dropPublic(published.id));
+      return sendJson(response, 200, { ok: true });
+    }
+    const body = await readJson(request);
+    if (body.consent !== true) fail(400, 'Cochez la case pour confirmer que ce texte peut être lu par les autres habitants.');
+    if (item.kind !== 'incident') fail(400, 'Seul un signalement de problème peut être publié.');
+    if (item.status === 'resolved') fail(409, 'Ce signalement est résolu : il ne peut plus être publié.');
+    const title = publicText(body.public_title, 5, 100, 'Le titre public');
+    const summary = publicText(body.public_summary, 10, 300, 'Le résumé public');
+    if (!placeDistricts.includes(body.district)) fail(400, 'Quartier invalide.');
+    try {
+      const created = db.prepare('INSERT INTO public_requests (message_id, public_title, public_summary, district) VALUES (?, ?, ?, ?)').run(item.id, title, summary, body.district);
+      return sendJson(response, 201, { id: Number(created.lastInsertRowid), public_title: title, public_summary: summary, district: body.district });
+    } catch (error) {
+      if (String(error.message).includes('UNIQUE')) fail(409, 'Ce signalement est déjà publié.');
+      throw error;
+    }
+  }
+
   // F49: the resident's own notices (newest first, unread flagged). Polling only; nothing is sent by e-mail or SMS.
   if (path === '/api/me/notices' && method === 'GET') {
     const user = requireUser(request, ['citizen']);
@@ -891,7 +971,11 @@ async function route(request, response) {
     tx(() => {
       db.prepare('UPDATE messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(body.status, item.id);
       // F49: only a real change tells the resident something; repeating the same status is silent.
-      if (body.status !== item.status) db.prepare('INSERT INTO notices (user_id, code, ref_id, label, note) VALUES (?, ?, ?, ?, ?)').run(item.user_id, `message.${body.status}`, item.id, item.subject, note);
+      if (body.status !== item.status) {
+        db.prepare('INSERT INTO notices (user_id, code, ref_id, label, note) VALUES (?, ?, ?, ?, ?)').run(item.user_id, `message.${body.status}`, item.id, item.subject, note);
+        const published = db.prepare('SELECT id, public_title FROM public_requests WHERE message_id = ?').get(item.id);
+        if (published) db.prepare('INSERT INTO notices (user_id, code, ref_id, label) SELECT user_id, ?, ?, ? FROM supports WHERE public_request_id = ?').run(`public.${body.status}`, published.id, published.public_title, published.id);
+      }
       audit(staff, { category: 'message', action: 'message.status', target: { type: 'message', id: item.id, label: item.subject }, summary: `a passé le message « ${item.subject} » de « ${names[item.status]} » à « ${names[body.status]} »`, details: { avant: item.status, apres: body.status } });
     });
     return sendJson(response, 200, { ok: true });
