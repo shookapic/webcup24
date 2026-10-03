@@ -4,6 +4,8 @@
 
 ## Latest: live user test found visual failures
 
+**Inventory update17:27:** Wave8 arrived17:25; latest authorized watcher has50 official requests. Exact refreshed snapshot is in CONTEST_REQUESTS_2026-10-03.md. A is assigned F49 status-change notices, F50 staff activity dashboard, F51 data-use information/concerns and F52 supporting existing requests, after its tested Wave7 handoff. New requests are **NOT STARTED/pending**, not included in deployed de791f3 or the imminent world correction. B maintains one existing watcher, critical visual corrections first. Wave9 expected~18:25.
+
 The combined release **de791f3** was normally pushed to main and deployed at16:56. GitHub Hodifly status success;51 live GET-only checks passed with matching hashed entry assets. These prove deployment/serving, not visual or authenticated production acceptance.
 
 User screenshots now establish **FAIL** for tram alignment and physical-phone text rendering. Browser: **Firefox, default zoom; text appears briefly while opening then disappears**. PM saved evidence under `coordination/evidence/user-world-2026-10-03/` and dispatched tasks to both sessions. A and B accepted at17:13.
