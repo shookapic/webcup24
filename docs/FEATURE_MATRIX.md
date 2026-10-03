@@ -1,12 +1,12 @@
 # Terra Nova — feature matrix (Session A)
 
-Official snapshot: **wave 6, 42 requests, H+7h31**, read from the contest API by `npm run watch-api` at 03/10/2026 15:56:51 (the watcher's `api-requests.md`, git-ignored). Codes, difficulty, XP and request text below are copied from that file by script, not retyped. Update: rerun the watcher, regenerate. Owner of this file: Session A. Wave numbers: `—` means the API reports no wave (available from the start).
+Official snapshot: **wave 6, 42 requests, H+7h39**, read from the contest API by `npm run watch-api` at 03/10/2026 16:04:01 (the watcher's `api-requests.md`, git-ignored). Codes, difficulty, XP and request text below are copied from that file by script, not retyped. Update: rerun the watcher, regenerate. Owner of this file: Session A. Wave numbers: `—` means the API reports no wave (available from the start).
 
 ## How to read the evidence
 
 - Local automated, no network except the contest feed: `node tools/smoke-a.mjs` (API, 104 checks), `tools/qa-a/portal.mjs` and `tools/qa-a/world-ui.mjs` (jsdom, need `npm i --no-save jsdom`).
 - Real browser (Chrome headless, puppeteer-core + axe-core, `npm i --no-save puppeteer-core axe-core`): `tools/qa-a/a11y-browser.mjs` (Wave 6: keyboard, focus rings, forms, colour cues, zoom/reflow matrix, 91 checks), `tools/qa-a/portal-browser.mjs`, `tools/qa-a/world-browser.mjs` (harness), `tools/qa-a/world-production.mjs` (npm run build + Node-served `/monde/` with B's real `App.jsx`).
-- **Nothing has run on Hodifly.** Every row's production status is UNVERIFIED until the final smoke route.
+- **Production host** (user-supplied): https://losfablitos.lareunion.webcup.hodi.cloud/ and /monde/. A read-only GET baseline (`tools/qa-a/host-smoke.mjs`, nothing posted) found the host serving the **earlier release** (Wave 4 routes and B's models present with correct MIME; Wave 5/6 routes, portal changes and the new hashed chunks absent). So every row below is a **local built-server result** until the final commit is pushed and the host smoke is re-run.
 - Status: **PASS** automated checks pass locally · **PARTIAL** part verified, rest in Evidence · **UNVERIFIED** nothing run, or needs a human / production · **NOT STARTED** · **PENDING-B** waits on Session B.
 
 ## Tally (42 official requests)
@@ -67,16 +67,16 @@ PASS 26 (11960 XP) · PARTIAL 14 (7300 XP) · UNVERIFIED 2 (1060 XP) · NOT STAR
 | `/monde/` serving: navigation-only fallback, real asset 404, MIME, traversal blocked, CSP, ETag/immutable cache, gzip | smoke + production Chrome: world chunks gzip + immutable, no 4xx/5xx, no CSP violation | PASS (local Node) |
 | World phone content: alerts (full text, audience, acknowledge once, withdrawal), news detail, services (with F38 outage), transports (nearest stop first), FR/EN | world-ui (jsdom), world-browser (Chrome harness), production Chrome with B's `App.jsx` | PASS (local) |
 | Phone/HUD/editor accessibility: dialog focus in/trap/return, Escape order, ≥ 44 px targets, 390px at 150 % text, reduced motion, axe | world-browser + production Chrome | PASS (local) |
-| Deploy: build, boot, persistent data, production smoke | `npm run build` + local boot pass; **not run on Hodifly** | UNVERIFIED |
+| Deploy: build, boot, persistent data, production smoke | Combined candidate b1f2751 builds and passes locally (docs/QA_A.md). Host baseline (GET only, pre-release build): HTML, CSP, MIME, 404s, gzip, immutable caching, 304 all PASS; version probes show Wave 5/6 not deployed yet. **Post-push smoke of the final commit not run** | UNVERIFIED |
 
-## Session B items (listed so nothing is dropped; A has not verified them)
+## Session B items (B's source; A re-ran B's own harnesses on the combined commit b1f2751)
 
-| Requirement | Owner | Status |
-|---|---|---|
-| Movement (roadmap §3) | B | B reports fixed and measured (docs/QA_B.md); A has not re-run |
-| Plaza/districts art, rigged avatar/NPCs, presence interpolation | B | NOT STARTED per docs/QA_B.md |
-| Physical phone (PhoneRig) and DOM bridge | B | NOT STARTED; the flat `PhoneFallback` is integrated |
-| F36 world: stations at the five stops, moving tram | B | NOT STARTED |
+| Requirement | Owner | Evidence | Status |
+|---|---|---|---|
+| Movement (roadmap §3): fixed oscillation, input lock, bounds/respawn, camera collision | B | B's `tools/qa/world-checks.mjs` re-run by A on b1f2751: ALL PASS at 60 Hz and at 30 Hz with uneven frame times (18 checks each). Human check on a real high-refresh monitor not done | PASS (local); human check UNVERIFIED |
+| Plaza/Mairie, rigged recolourable colonist, 12 animated NPCs, scoped curvature, sun shadows | B | Committed in 9fc332c/ffec17b (docs/ASSETS.md, docs/qa-captures). B's own visual gate is PARTIAL (wide foreground, Mairie small). A: loads and renders in the Node-served production build, screenshots reviewed. Full five-district world, performance on a reference laptop, presence interpolation not verified | PARTIAL |
+| Physical phone: handheld rig, DOM screen under CSS matrix3d | B (A owns the screen) | Committed in ffec17b. A on b1f2751 (real-time Node-served build, Chrome): host is a lit matrix3d dialog, exactly one dialog, on the viewport; **real mouse clicks at each projected tab centre hit that tab** and navigate; Escape closes; B's phone-capture.mjs and alert-flow.mjs ALL PASS. Text is drawn at about 0.76 scale (16 px reads as about 12 px at 1280x800). Real GPU, other browsers, touch: UNVERIFIED. Flat fallback: PASS | PASS (local, desktop Chrome) |
+| F36 world: stations at the five stops, moving tram | B | `layout.js` has stop positions with the contract names and districts (used for the nearest stop); no tram mesh or moving tram found in world/src of b1f2751 | PARTIAL until B's final handoff |
 
 ## Declaration guidance
 
