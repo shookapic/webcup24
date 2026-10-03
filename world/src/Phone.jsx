@@ -7,7 +7,7 @@
 // Additive, optional props beyond the contract: `onRetry` (announcements) and, on `services`/`transports`, either a
 // plain array or a polled-feed object { data | services | lines, status, lastUpdated, retry } as `useTransports()` returns.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { audience as audienceName, formatDate, formatTime, fold, getLocale, localized, normalizeLocale, t } from './ui/i18n.js';
+import { audience as audienceName, formatCityTime, formatDate, formatTime, fold, getLocale, localized, normalizeLocale, t } from './ui/i18n.js';
 import { loadSeen, saveSeen } from './ui/storage.js';
 import { usePolled, useServices, useTransports } from './ui/usePolled.js';
 import { useDialogFocus } from './ui/useDialog.js';
@@ -204,11 +204,22 @@ function ServicesPage({ items, feed, locale }) {
         const title = localized(item, 'title', locale);
         const description = localized(item, 'description', locale);
         const details = localized(item, 'details', locale);
+        const down = item.availability === 'unavailable';
+        const reason = down ? localized(item, 'unavailable_reason', locale) : null;
+        const alternative = down && item.alternative ? localized(item, 'alternative', locale) : null;
         return (
-          <article key={item.id} className={item.featured ? 'phone-card phone-featured' : 'phone-card'}>
+          <article key={item.id} className={`phone-card${item.featured ? ' phone-featured' : ''}${down ? ' phone-unavailable' : ''}`}>
             {item.featured ? <p className="phone-tag phone-tag-featured">{t(locale, 'services.featured')}</p> : null}
             <h3 lang={title.lang}>{title.text}{title.fallback && <> <FrTag locale={locale} /></>}</h3>
             <p lang={description.lang}>{description.text}</p>
+            {down && (
+              <div className="phone-outage">
+                <p><strong>{t(locale, 'services.unavailable')}</strong></p>
+                <p lang={reason.lang}>{reason.text}</p>
+                <p>{item.available_again ? t(locale, 'services.back', { date: formatCityTime(item.available_again, locale) }) : t(locale, 'services.backUnknown')}</p>
+                {alternative && <p><strong>{t(locale, 'services.meanwhile')}</strong> <span lang={alternative.lang}>{alternative.text}</span></p>}
+              </div>
+            )}
             <details>
               <summary>{t(locale, 'services.more')}</summary>
               <p lang={details.lang}>{details.text}</p>
@@ -433,7 +444,12 @@ export function PhoneFallback({ open, onClose, locale, ...screen }) {
   if (!open) return null;
   const loc = normalizeLocale(locale ?? getLocale());
   return (
-    <div className="phone-backdrop">
+    // A press on the backdrop (the scene behind) must not drop focus out of the dialog, or Escape and Tab stop working.
+    <div className="phone-backdrop" onMouseDown={(event) => {
+      if (event.target !== event.currentTarget) return;
+      event.preventDefault();
+      host.current?.querySelector('[data-autofocus]')?.focus({ preventScroll: true });
+    }}>
       <div className="phone-sheet" ref={host} role="dialog" aria-modal="true" aria-label={t(loc, 'phone.label')}>
         <PhoneScreen {...screen} locale={loc} onClose={onClose} />
       </div>
