@@ -37,8 +37,19 @@ export function clearSession(request, response) {
 }
 
 // The user fields any client may see; never the password hash.
+// A stored avatar that is not valid JSON must not break every request of that user: treat it as no avatar.
+function parseAvatar(value) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function publicUser({ id, email, name, role, avatar, district }) {
-  return { id, email, name, role, avatar: avatar ? JSON.parse(avatar) : null, district: district || null };
+  return { id, email, name, role, avatar: parseAvatar(avatar), district: district || null };
 }
 
 export function currentUser(request) {
