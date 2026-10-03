@@ -109,6 +109,12 @@ Wave 4 (H+5h, 1 740 XP) — in this order:
 10. **F34 (580)**: agents/admins administer citizen accounts: list + search, deactivate/reactivate, reset password (show a one-time password like `create-staff`), delete. Server-side role check on every route; staff accounts can't be modified from there; deactivated users can't log in and their sessions are revoked.
 11. **F35 (290)**: short contextual tips at the moment of first use (first message form, first report, first service search), dismissible, remembered per user. Builds on the D12 guide.
 
+Wave 5 (H+6h25, 2 400 XP) — triaged to A (portal-shaped), in this order:
+
+12. **F37 (900), login attack protection, visible but not annoying**: per-account and per-IP failed-login counters (not just per IP+email), growing delay then temporary lock; the login form says how many tries remain / when to retry; on next successful login the citizen sees "N failed attempts since your last login"; staff space lists accounts under attack. No CAPTCHA.
+13. **F39 + F40 (900), appointments + reminder**: agents publish slots (service, date-time, place); a citizen books one with a reason; the confirmation spells the slot out unambiguously (weekday, full date, time, Terra Nova time, place, what to bring) and can be cancelled. Reminder: "upcoming appointment" banner in the portal within 24 h, a browser `Notification` (reuse the opt-in), and an `.ics` download with a `VALARM` so the phone's calendar reminds them.
+14. **F38 (600), service status**: `status` (`ouvert` / `maintenance` / `incident`), `status_message`, `back_at` on services; admin sets it; the service card and the request form show "unavailable until …, meanwhile do …" before the citizen starts. Expose the fields in `GET /api/services` for B.
+
 ## Original Session B scope — retained for traceability
 
 The active spec supersedes the implementation approach below, particularly the overlay-only phone and global curvature. All functional features remain required.
@@ -125,6 +131,11 @@ The active spec supersedes the implementation approach below, particularly the o
 Steps 1–8 were previously reported implemented on `main`; the review identifies failures and quality gaps, so they are not acceptance-certified. Wave 4:
 
 9. **F36 (580), transports in the world**: a tram line with stations at the district stops and a moving tram; the phone gets a "Transports" view with the next departures (from `GET /api/transports`), the player's nearest stop first.
+
+Wave 5: all four requests go to A. Optional world tie-ins once A has shipped them:
+
+10. **F38 tie-in**: a "Fermé / En maintenance" sign on a district building when its service's `status` isn't `ouvert` (`GET /api/services`).
+11. **F39/F40 tie-in**: the phone lists the player's upcoming appointment (endpoint to be added to the contract by A).
 
 World rules: no CDN or external fonts/assets (CSP blocks them; drei `<Text>` must get a local font). Canvas `aria-hidden="true"`; the phone is real HTML with `aria-live` for alerts; respect `prefers-reduced-motion`; a visible "Version accessible" link to `/`. The portal stays the accessible version and the fallback.
 
