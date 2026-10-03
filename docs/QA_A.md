@@ -1,82 +1,89 @@
 # Session A — QA and handoff
 
-2026-10-03. Scope: A0 (scope ledger), A1 (transport API check, phone data hook/screen/fallback/HUD/alerts/i18n), A2 (editor polish, F34, F35), A3 (asset serving, README, evidence). Nothing is committed yet; all changes are in the working tree of `webcup24`.
+Updated 2026-10-03 (H+7h). Scope: A0 scope ledger, A1 phone/HUD/data hook, A2 portal citizen features (F33–F35), A3 delivery, and Wave 5 (F37–F40). Wave 6 (D13, D20, F41–F44) arrived at 15:25 and has **not been started**; see the end.
 
-## Milestone handoff
+## Where the work is
 
-**Not committed.** Suggested commit split, each naming its codes per `CLAUDE.md`:
-1. `Citizen administration API + portal (F34)` — `server.mjs`, `store.mjs`, `security.mjs`, `public/*`, `tools/qa-a/portal.mjs`
-2. `First-use tips (F35)` — `public/*`
-3. `World serving: real 404s, ETag, gzip` — `server.mjs`, `tools/smoke-a.mjs`, README
-4. `Phone screen/fallback, HUD, editor, i18n (D18, F29–F31, F36, D14/F27)` — `world/src/Phone.jsx`, `world/src/ui/**`, `world/src/AvatarEditor.jsx`, `world/src/styles.css`
-5. `Docs: feature matrix, QA_A` — `docs/*`
-
-### Found already done (verified, not rebuilt)
-`GET /api/transports` (contract-exact, incl. stop→district mapping and agent `PATCH`), the portal Transports section, and F33 were already on `main` (`fb11d85`, `4de1d7d`, `8b9c038`). F34 and F35 were not implemented anywhere.
-
-### Changed
-| Area | Change |
+| What | Where |
 |---|---|
-| F34 | `users.active` column (migration pattern), `GET /api/admin/citizens?q=`, `PATCH /api/admin/citizens/:id {active}`, `POST /api/admin/citizens/:id/password`, `DELETE /api/admin/citizens/:id`; agent/admin only; target must be `citizen` (staff → 403); deactivation deletes sessions and presence; `currentUser` ignores inactive users; login of a deactivated account returns 403 only after the password is right. `eraseUser()` is shared with F33. Portal panel "Comptes des habitants" with inline delete confirmation and a one-time password box. |
-| F35 | Tips for service search, first message, first report; `tipDone:<userId\|guest>:<name>` in localStorage; dismissal returns focus to the field; sending a message clears its tips. |
-| Serving | `/monde` → 301 `/monde/`; navigation (no extension) falls back to the app, anything with an extension that does not exist is a JSON 404; immutable cache only for hashed `assets/**/name-<hash>.ext`, everything else `no-cache` + ETag/304; gzip (level 9, cached per file version) for html/js/css/json/svg/wasm/gltf/glb/bin over 1 KB with `Vary`. Measured on the current build: world JS+CSS 5.67 MB raw → 1.96 MB gzip. |
-| Phone | `Phone.jsx`: `useAnnouncements`, `PhoneScreen`, `PhoneFallback`, `AlertAnnouncer`, legacy `Phone` (same props as before, now also fetching services/transports itself). `ui/`: `i18n.js`, `storage.js`, `usePolled.js` (also `useServices`, `useTransports`), `useDialog.js` (`useDialogFocus`), `WorldHud.jsx`. |
-| Editor | Locale, optional `preview`, saving state, `role=alert` error, keys stop at the dialog (Escape still cancels), cancel restores saved colours. |
-| CSS | `world/src/styles.css` rewritten: new phone/HUD/editor blocks; legacy `.hud`, `.welcome`, `.controls-help` kept until `App.jsx` switches. |
-| README | Dependency description fixed; new commands and features. |
+| A0–A3, F34, F35, phone/HUD/editor, asset serving | commit `2fd14e4`; already on `main` through B's merge `d04f830` |
+| Wave 5 (F37–F40), D11 steps, F23 contrast fixes, QA harnesses | commit on branch **`sessionA-work`** (not pushed, not on `main`). `origin/main` (`b0aaa09`) is merged into it |
+| Docs `docs/PM_STATUS.md`, `docs/CONTEST_REQUESTS_2026-10-03.md`, edits to `CODE_REVIEW.md`/`GAME_ROADMAP.md` | belong to the PM; **left uncommitted** in the working tree on purpose |
 
-### Interface changes for B (all additive; old named exports still work)
-`App.jsx` was **not** touched. Wiring B should do:
+The first draft of this file said "not committed" and "B must integrate"; both are now false.
 
-```jsx
-const { announcements, unseen, status, error, lastUpdated, acknowledge, retry } =
-  useAnnouncements({ userId: user ? user.id : null, ready: user !== undefined });
-```
-- **`ready`** is an addition to the contract: `false` reports no unseen alerts. Use it while `/api/me` is loading, otherwise a returning user's already-acknowledged alerts flash as new under the guest key.
-- `acknowledge(ids)` takes the shown IDs (what `PhoneScreen` passes to `onAcknowledge`); with no argument it acknowledges everything currently unseen (old behaviour).
-- `PhoneScreen` extras: optional `onRetry` (announcements). `services` / `transports` accept a plain array **or** the object `useTransports()` / `useServices()` return (`{ data, status, error, lastUpdated, retry }`), so transport fetch status stays separate from announcement status. `nearestStop` is a stop name (`'Mairie'`) or `{ name }`; accent/case-insensitive match against the API stop names; when absent nothing is highlighted.
-- Pending alerts (`pendingAlerts` non-empty) replace the page with the alert view, hide navigation and Close, and focus the heading; Escape acknowledges **exactly the rendered IDs**. When it empties, focus goes back to the page title. `AlertAnnouncer` is for the case where the phone is not showing them (editing); mount it with `active={!phoneShowsAlerts}` so text is not read twice.
-- 3D host: render `<PhoneScreen>` inside your DOM bridge element and call `useDialogFocus(hostRef, phoneOpen)` from `ui/useDialog.js` for focus entry/trap/return; give the host `role="dialog" aria-label`. Only one screen may be mounted (the hook warns otherwise). `PhoneScreen` fills 100 % of its parent (`height:100%`), is rem-based, scrolls inside, and never uses fixed positioning.
-- `WorldHud` renders only the controls whose handler you pass (`onEditAvatar` etc.), always shows the portal link, has `pointer-events:none` on its container. It sets no key listeners.
-- Strings for B's own UI: `import { t } from './ui/i18n.js'` (`help.controls` holds the movement help line in both languages); `getLocale()` reads the portal's `lang` preference.
-- Portal handoff links (`/#services`, `/#actualites`, `/#message-form`, `/`) open in a **new tab** so the world session survives.
+## Reconciling with B's integration (read from `world/src/App.jsx` on `main`)
 
-### CSS requirements answered
-B asked for none yet in `docs/QA_B.md`. A owns all world CSS; send requirements (e.g. host element size for the phone bridge) and I will add them.
+B's wiring matches the contract, so nothing is outstanding on the phone/HUD hand-off:
+`useAnnouncements({ userId: user?.id, ready: user !== undefined })`, `PhoneFallback` driven by B's phase machine (`closed → opening → open → closing`), `pendingAlerts` emptied while closing, `AlertAnnouncer active={editing && !phoneUp}`, `WorldHud`, `useServices(phoneUp)`, `useTransports(true)`, `nearestStop={stop?.name}`. Verified against it, not assumed: `tools/qa-a/world-production.mjs` loads this `App.jsx` from the Node-served build (below). Observations for B, none blocking:
+- B's key handler ignores events from a native `<dialog>` and inputs; the phone is a `div[role=dialog]`, so **T pressed inside the phone closes it** (intended: T toggles). Typing in the services search is ignored correctly.
+- `PhoneFallback` covers the HUD buttons in the middle of the screen (it is a centred 24 rem sheet with a backdrop). The physical device replaces this, so no change requested.
+- Headless software WebGL makes the client's 10 s request timeout fire occasionally: 3 `POST /api/presence` were aborted client-side during one production run. No server error. Treated as a test-environment effect, unproven on real hardware.
+
+## Wave 5 contract (all additive; existing fields, routes and data are unchanged)
+
+**Schema (migrations in `store.mjs`, `ALTER TABLE` pattern, existing rows keep working):** `users.active`; `services.availability` (`available|unavailable`), `unavailable_reason`, `unavailable_reason_en`, `available_again`, `alternative`, `alternative_en`; `messages.service_id`; new table `appointments(id, agent_id, starts_at, duration_min, location, instructions, citizen_id, reason, status open|booked|cancelled, booked_at, UNIQUE(agent_id, starts_at))`.
+
+**Service availability — what B consumes (F38).** `GET /api/services` (public) returns for each service, in addition to the old fields:
+- `availability`: `"available"` or `"unavailable"`. **Computed**: a stored outage with a return time in the past is reported `available` (it ends by itself).
+- `unavailable_reason`, `unavailable_reason_en`, `alternative`, `alternative_en`: text or `null` (only meaningful when unavailable). English falls back to French when `_en` is null.
+- `available_again`: `"YYYY-MM-DDTHH:MM"` in **Terra Nova time (UTC+4, no daylight saving)** or `null` (not announced). Show the digits as written; `formatCityTime()` in `world/src/ui/i18n.js` does this.
+The phone's services page already renders it (badge text, reason, return time, "Meanwhile" alternative, FR/EN). A world service marker should use `availability === 'unavailable'` to dim and must not invent a return time. `PATCH /api/services/:id/availability` (agent/admin) sets it.
+
+**Other endpoints**
+- `POST /api/auth/login` failures: `401 {error, attemptsLeft}`; blocked: `429 {error, retryAfter}` + `Retry-After` header; success after others' failures: `200 {user, notice: {failedAttempts}}`. `GET /api/admin/security` (staff).
+- Appointments: `POST /api/appointments` (staff, creates consecutive slots), `GET /api/appointments/staff`, `GET /api/appointments/slots` and `/mine` (citizen), `POST /api/appointments/:id/book`, `DELETE /api/appointments/:id` (citizen cancels own → slot reopens; staff on booked → `cancelled`, on open → removed), `GET /api/appointments/:id/ics`. Each appointment: `starts_at`, `ends_at`, `minutes_until`, `location`, `instructions`, `agent`, `status`, `reason`. Conflicts are `409` with a French message.
+- `POST /api/messages` accepts optional `service_id`; messages list returns `service_id`, `service_title`, `service_title_en`.
+- Deploy note: behind a proxy set `TRUST_PROXY=1` so sign-in limits apply per visitor (otherwise every client may look like loopback; the server warns once in production).
+
+## Phone/UI compatibility notes for B's PhoneRig (A keeps screen, CSS and focus semantics)
+
+- `PhoneScreen` fills **100 % of its parent** (`width/height:100%`), is rem-based, scrolls inside (`.phone-body`), and has no fixed positioning. Verified embedded in a **360 × 740 CSS px** host: nothing escapes, no horizontal overflow. Treat 360 × 740 as the design size; smaller than ~340 px wide is untested.
+- Keep the host at that CSS size and scale the *rendered* host with a CSS transform to match the 3D screen; do not shrink the CSS box, or the ≥ 44 px targets (verified at scale 1) shrink with it. Hit-testing through CSS 3D transforms is B's to prove.
+- Focus/semantics for the 3D host: `role="dialog" aria-label`, `useDialogFocus(hostRef, open)` from `ui/useDialog.js`, a single mounted screen. Escape is handled inside the screen, so focus must be inside it: on a pointer press on the canvas, refocus `host.querySelector('[data-autofocus]')`. `PhoneFallback` already does this for its backdrop (real-Chrome finding this wave: a press on the backdrop used to drop focus and Escape stopped working).
+- Narrow screens / accessible mode: keep using `PhoneFallback` (full-screen at ≤ 30 rem).
+- Nothing in A's components reads or writes the camera, keys or pointer lock.
 
 ## Evidence (all local, 2026-10-03)
 
 | Command | Result |
 |---|---|
-| `node tools/smoke-a.mjs` | 62/62 — API contracts, roles, F33, F34, `/monde/` serving incl. gzip |
-| `node tools/qa-a/portal.mjs` | all pass — real `index.html` + `app.js` in jsdom: F34 UI, F35 tips, D12, F28, F32, D14/F27, D18/F29 banner, F36 ordering |
-| `node tools/qa-a/world-ui.mjs` | all pass (≈70 checks) — screen pages/states, FR/EN, dialog focus, hook polling/storage/unmount, HUD, editor |
-| `npm run build` | passes; main 1.27 MB (347 KB gzip), PlayableCity 4.38 MB (1.61 MB gzip) |
-| Real build over Node | `/monde/` 200 `no-cache`; hashed JS immutable; `nope.glb` and `models/x.glb` JSON 404; `/monde/dashboard` serves the app |
-| Contrast (computed) | lowest phone/HUD/editor text pair 6.4:1 (teal on surface); body text 10–13:1 |
+| `node tools/smoke-a.mjs` | 104/104 — API contracts, roles, F33/F34, F37 (16), F38 (8), F39/F40 (16), `/monde/` serving |
+| `node tools/qa-a/portal.mjs` | all pass (jsdom, real `index.html` + `app.js`) |
+| `node tools/qa-a/world-ui.mjs` | all pass (jsdom) |
+| `node tools/qa-a/portal-browser.mjs` | all pass in **Chrome**: keyboard booking, reminder, lockout, 390 px at 150 % text, touch targets, axe 0 violations on citizen / staff / high-contrast views |
+| `node tools/qa-a/world-browser.mjs` | all pass in **Chrome** (A's components on a fake API): real focus trap/return, Escape order, alerts, polling, editor, 150 %, reduced motion, axe |
+| `node tools/qa-a/world-production.mjs` | all pass: `npm run build`, **Node-served `/monde/`** with B's `App.jsx`: HUD, alert takeover/acknowledge, F38 outage and F36 nearest stop in the phone, gzip + immutable chunks, no 4xx/5xx, no CSP violation, axe on the HUD |
+| Live feed | staff `GET /api/requests` 200 (42 requests, wave 6); anonymous 401; key not in the response |
 
-The two jsdom scripts were also run against deliberately broken input during development (leaked polling roots produced 29 vs 22 requests, which the unmount check detected), so they can fail.
+Screenshots: `SHOTS_DIR` (default the OS temp folder) — `p0*` production, `w*` world harness, numbered portal shots. The scripts can fail: during development they caught real defects (below).
+
+### Real defects the browser passes found and fixed this wave
+1. Portal contrast (F23): four pre-existing AA failures in the light news block (4.43, 3.70, 4.27, 4.04 : 1).
+2. Citizens logging in saw no "make a request" button until the next refresh (services were not re-rendered on login).
+3. Pressing the backdrop dropped focus out of the phone dialog, so Escape/Tab stopped working.
+4. Phone CSS at 150 % text on 390 px: status bar wrapped, tab labels broke mid-word, "nearest stop" tag stretched full width.
+5. The owner's own typos triggered the "attempts while you were away" notice (now only failures from other addresses).
 
 ## Not verified — do not claim these
 
-- **Anything in a real browser**: visual layout of phone/HUD/editor/portal panels, focus ring visibility, 150 % text, 390×844, reduced motion, touch targets, HUD over the 3D scene (its background is 88 % opaque; contrast over bright sky not measured).
-- **Browser `Notification` opt-in** (F30-era feature, unchanged code) — jsdom has none.
-- **Live contest feed** with a real key; **current-wave completeness** (see `FEATURE_MATRIX.md`).
-- **Hodifly**: boot, persistence of `data/`, whether the host also compresses (we send our own `Content-Encoding: gzip`), production CSP/console.
-- **Two users on one real browser** for world alerts (storage logic is unit-tested, the UI path is not).
-- Admin UI buttons for lifting an alert and toggling "featured" (the API is tested).
-- Anything depending on B: physical phone alignment/click handling, nearest stop from position, the 60 s poll in the app, alert-during-editing flow, tram/stations.
+| Area | Status |
+|---|---|
+| **Hodifly production**: boot, `data/` persistence, whether the host also compresses (we send our own gzip), `TRUST_PROXY` need, production CSP/console | UNVERIFIED |
+| Browser `Notification` popup for alerts (F30) and reminders (F40) | UNVERIFIED (headless) |
+| Real screen reader (NVDA/VoiceOver/TalkBack), real touch device, Safari/Firefox | UNVERIFIED (only Chrome headless + axe) |
+| F40 as e-mail/SMS | NOT PROVIDED: none exists; the reminder needs the page open (banner/notification) or a calendar app (.ics alarms) |
+| Rate-limit state survives a restart | NO: in memory, per process (documented in `throttle.mjs`) |
+| `sign-in limits per visitor on Hodifly` | depends on `TRUST_PROXY`; unknown until measured there |
+| Physical phone, stations/tram, plaza art (B) | not A's; B's `docs/QA_B.md` says not started |
 
-## Known limitations / decisions
-- F33/F34 deletion policy: messages and reports are **deleted with the account** (stated in the UI).
-- F34 reset returns the temporary password in the response body (shown once, never stored in plain text, never logged; the server logs only staff and citizen ids). There is no password-change screen for citizens yet, so the UI does not promise one.
-- No rate limit on `/api/admin/*` beyond the role check.
-- Deactivated users get "account deactivated" only after a correct password, so the message does not reveal which emails exist.
-- Services polled every 60 s in the phone legacy wrapper (no contract rate was specified; services rarely change).
-- jsdom is not a project dependency (`package.json` is B's): the scripts need `npm i --no-save jsdom`.
-- Old `.hud` / `.controls-help` CSS stays until B removes the old HUD from `App.jsx`.
+## Decisions and limits
+- F33/F34 deletion removes messages and reports with the account (stated in the UI); deleting a citizen frees their booked slots.
+- F34 reset returns the temporary password once in the response; nothing stores or logs it; there is no citizen password-change screen, so the UI does not promise one.
+- F37 limits: pair 5, account 20, address 40 failures per 15 min. Distributed attackers can still lock a victim's account for up to 15 min (the trade-off for stopping a spread attack); staff see it in "Sécurité des connexions".
+- Appointments: max 2 upcoming per citizen, no overlap, slots end the same day, ≤ 90 days ahead, 10–60 min each.
+- jsdom, puppeteer-core and axe-core are **not** project dependencies (`package.json` is B's): `npm i --no-save jsdom puppeteer-core axe-core`.
 
-## Next dependency / production pass
-1. B: swap `App.jsx` to `useAnnouncements({ userId, ready })`, `PhoneScreen` in the bridge, `WorldHud`, `AlertAnnouncer` during editing; feed `transports` (60 s) and `nearestStop`.
-2. A, once B has a build: browser pass — keyboard-only through every phone page, FR/EN long text at 150 %, 390×844 + desktop, alert while walking/reading/editing, acknowledge → reload, withdrawal, two users, malformed storage (set `world-seen-alerts:<id>` to garbage), offline/reconnect, capture handheld view.
-3. Both: Hodifly smoke including Wave 4 (F33–F36) with dedicated test accounts only.
+## Wave 6 (arrived 15:25, H+7h00): not started
+
+D13 plain wording (310), D20 inclusive use (930), F41 keyboard-only (620), F42 forms/errors with assistive tech (930), F43 colour distinction (310), F44 zoom without breaking layout (620): 3,720 XP, all accessibility, all portal-shaped, so A by default. Groundwork already in place: `portal-browser.mjs` (axe + keyboard + 150 % + 390 px) is the regression net. Watcher restarted (`npm run watch-api -- --exit-on-new`, one per machine); next wave expected at H+8h.
