@@ -1,40 +1,18 @@
-SESSION B (gameplay & art) — STOPPED HERE — 2026-10-03 ~16:55 (H+6h30)
-Pick up on another PC: git pull, read CLAUDE.md, docs/GAME_ROADMAP.md, docs/QA_B.md, then continue "Next" below.
+SESSION B (gameplay & art) — STOPPED HERE — 2026-10-03 ~17:35 (H+8h30)
+Pick up: git fetch, read CLAUDE.md, docs/GAME_ROADMAP.md, docs/QA_B.md (newest sections first), docs/ASSETS.md. Work in a worktree on branch `world`; PM owns merges into the integration worktree (webcup24-int) until the test release is pushed. Push only an exact HEAD the PM approved.
 
-DONE AS SESSION B (all on main)
-v1 world (/monde/, Vite + React Three Fiber, world/**):
-  - Vite skeleton, built to dist/monde, served by server.mjs at /monde/
-  - Planet scene: curved-horizon shader (world/src/curve.js, global ShaderChunk patch: roadmap says replace it),
-    shader sky + banded giant planet, 5 districts from primitives (City.jsx), own DOM labels (Labels.jsx)
-  - Player: ecctrl + Rapier, TPS/FPS toggle (V), logged-out orbit view + login card, physics lazy-loaded
-  - Avatar: 3 colours saved via PUT /api/me/avatar (AvatarEditor.jsx, now owned by A)
-  - NPCs: 14 bots on a waypoint graph (Npcs.jsx)
-  - Phone v1: CSS overlay, urgent alert -> FPS + phone, T to open (Phone.jsx, now owned by A; physical phone not done)
-  - Other players via /api/presence polling (Multiplayer.jsx)
-  - Bloom + vignette
-Tooling: tools/watch-api.mjs (npm run watch-api), API watcher on this PC reported waves 3, 4, 5.
-Docs: CLAUDE.md two-session plan; committed the review/roadmap handoff as the shared baseline.
+DONE AS SESSION B
+- B0 movement closed: own input.js (clear on blur/hidden/lock, fresh press, jump once), explicit footprints, bounds + respawn, camera collision, wheel guard. Harness tools/qa/world-checks.mjs: 15 checks PASS at 30/60/144 Hz with and without uneven frame times.
+- Integration with Session A: phone state machine in App.jsx (closed/opening/open/closing, source manual|alert), WorldHud, PhoneScreen, alerts; single cancellable transition timer (race found and fixed, tools/qa/phone-race.mjs 12 PASS).
+- B1: Kenney Space Kit + Blocky Characters (CC0, docs/ASSETS.md): plaza/Mairie, recolorable rigged Colonist (idle/walk/sprint), 12 walking NPCs on a shared path graph, scoped curvature (no ShaderChunk patch), sun shadows.
+- B3: physical phone (PhoneRig.jsx): device + hand, A's PhoneScreen aligned by matrix3d on a DOM host, flat fallback for narrow/guest/?flatphone.
+- B2 + F36 world: layout.js is the single source (buildings render+collision, roads, stops, tram lines, NPC graph, labels); five districts (Districts.jsx); elevated rail + two trams + stop shelters (Tram.jsx, tools/qa/tram-check.mjs 8 PASS). Tram is decorative, not timetable-synchronised.
 
-B0 MOVEMENT (this session's last task) — root cause found, measured, fixed (details + numbers in docs/QA_B.md):
-  1. Ground collider had no parent rigid body -> ecctrl never saw ground (no float, no friction, no jump);
-     grounding flickered over decoration colliders -> the reported oscillation. Fixed in PlayableCity.jsx.
-  2. ecctrl impulses per render frame vs fixed 60 Hz physics -> 55 mm/frame camera jitter at 144 Hz.
-     Fixed: Physics paused + one manual step per frame in a fixed order (FrameStep in Player.jsx).
-  3. Body tilt 5-9 deg -> locked pitch/roll. 4. Turn overshoot -> yaw damping 0.02.
-  5. Stop 0.5 s -> 0.28 s. 6. Hold-to-run (toggle run off), run 8 m/s.
-  Result at 30/60/144 Hz: lateral drift <= 3 mm, tilt 0, no heading reversals, no camera jitter, stop 0.27-0.28 s.
-  Debug tools: /monde/?debug (probe), &scene=floor, &fps=N (deterministic frames, window.__tn.run).
-  Harness: tools/qa/movement.mjs, tools/qa/realwalk.mjs (need puppeteer-core + BROWSER path).
-
-NEXT (in order)
-  - Finish B0: wire world/src/input.js (written, NOT wired) into Player.jsx with inputEnabled from App.jsx;
-    explicit building colliders; camera wall retract; FPS wheel guard; bounds + respawn; jump/run/blur tests.
-    Ask a human to retest on a high-refresh monitor.
-  - B1 plaza + licensed assets (docs/ASSETS.md), B2 districts + F36 tram/stations in the world,
-    B3 physical phone (PhoneRig.jsx + A's PhoneScreen), B4 release. See CLAUDE.md "Active Session B tasks".
-  - Wave 5 (F37-F40) is all Session A.
+NOT DONE / UNVERIFIED (details in docs/QA_B.md)
+- Visual gate PARTIAL (blocky character, kit-hangar architecture, wide foreground). Performance never measured (no 60 s route, draw calls, quality setting). Touch/mobile movement absent. Human high-refresh retest and UI-drag-vs-camera untested. Foot sliding unmeasured, no jump clip.
+- Wave 7 F45/F46 world wayfinding (service markers, E near building -> phone services page) waits for A's location data. B4 release items: loading/WebGL fallback, error boundary, quality settings, narrow-screen behaviour, performance route.
 
 NOTES
-  - The python API watcher was running in this PC's Claude session; it stops with it.
-    Run `npm run watch-api` on the new machine (one watcher per machine).
-  - Remote branch `world` is stale (pre-rebase); B pushes with `git push origin world:main`. Safe to delete it.
+- QA tooling needs puppeteer-core (not a project dependency): npm i puppeteer-core in a scratch dir and junction it as tools/qa/node_modules; BROWSER env for Chrome/Edge. Servers for tests: PORT=3100 DATA_PATH=<temp sqlite> node server.mjs.
+- Debug: /monde/?debug&fps=N (deterministic frames, window.__tn), &scene=floor, &flatphone, ?gallery=name,name (kit contact sheet).
+- Watcher: npm run watch-api -- --exit-on-new (restart after each wave; last seen wave 7 at 16:25).

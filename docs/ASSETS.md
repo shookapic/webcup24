@@ -4,7 +4,7 @@ All shipped assets are local under `world/public/assets/` (no CDN). Only files u
 
 | Pack | Author / source | License | Local files | Use |
 |---|---|---|---|---|
-| Space Kit 2.0 | Kenney, https://kenney.nl/assets/space-kit | CC0 1.0 (`licenses/kenney-space-kit-LICENSE.txt`) | `models/kit/*.glb` (11 files, ~0.3 MB total) | Mairie, wings, canopy, antenna, plaza props |
+| Space Kit 2.0 | Kenney, https://kenney.nl/assets/space-kit | CC0 1.0 (`licenses/kenney-space-kit-LICENSE.txt`) | `models/kit/*.glb` (19 files, ~0.5 MB total) | Mairie, Santé, Marché, Habitat, Quartier sud buildings; tram cars; plaza props |
 | Blocky Characters 2.0 | Kenney, https://kenney.nl/assets/blocky-characters | CC0 1.0 (`licenses/kenney-blocky-characters-LICENSE.txt`) | `models/chars/character-c.glb`, `models/chars/Textures/texture-c.png` | Player, NPCs, remote players (one rig, recoloured per instance) |
 
 Downloaded 2026-10-03 from the Kenney asset pages (zip links on those pages). Not mandatory to credit; credited here.
@@ -12,6 +12,7 @@ Downloaded 2026-10-03 from the Kenney asset pages (zip links on those pages). No
 ## Modifications
 
 - **Kit palette**: kit materials are replaced at load by name (`kit.jsx`): `metal` chalk `#e5e0d4`, `metalDark` slate `#4b5a63`, `metalRed` terracotta `#a9654a`, `dark` inset window `#27363f`, `rock`, `rockTrack`. One shared material per name, never mutated per instance. Geometry untouched.
+- **District accents** (`kit.jsx` `variants`): the terracotta `metalRed` is replaced per building: Santé teal `#4a8c87`, Marché amber `#d09a3e`, Habitat foliage `#688c73`, Quartier sud blue `#3f6f8f`, tram cars the API line colours.
 - **Kit scale**: kit units are small (hangar_largeA = 2 x 1 x 3). The scene scales by piece: Mairie hall x6, wings x4, canopy platform x(2.6, 3, 2.1), antenna dish x4, props x2–3. One unit = one metre after scaling; avatar 1.6 m; paths 3–4 m. Origin of every kit piece is the base centre; front (doors) faces +z.
 - **Character recolour** (`Colonist.jsx`): the single 1024 px atlas is recoloured on a canvas per distinct (skin, outfit, accent): skin-coloured pixels (face, hands) -> skin, torso + sleeves -> outfit, trousers -> accent; shading kept by scaling each pixel with its luminance relative to the region mean. Result is a new `Texture` with its own `Source` (cloning the glTF texture shares its Source: replacing `.image` on the clone corrupts the original and every later recolour). Cached per colour set. The glTF's `KHR_materials_unlit` material is replaced by `MeshStandardMaterial` so characters take light and shadows. Accent therefore means trousers on this model (the editor label is A's).
 - Skinned clones use `SkeletonUtils.clone`; clips used: `idle`, `walk`, `sprint` (the pack also has sit, die, emotes, etc., unused). There is **no jump/fall clip**: airborne freezes the walk pose.
@@ -30,4 +31,4 @@ Initial playable transfer: the world chunk is ~4.4 MB (1.6 MB gzip) of JS + 0.4 
 
 ## Not used / rejected
 
-Kenney Space Kit monorail pieces are intended for the F36 tram (B2) and will be added with that work. Quaternius packs were not used: Kenney Blocky Characters already ships matching idle/walk/sprint clips on a single rig, which avoids retargeting.
+The Space Kit monorail cars (`monorail_trainFront/Passenger/End`, scaled x3.3) are used for the F36 tram; the track and columns are plain boxes because the kit's track pieces are too short and thin to read at colony scale. Quaternius packs were not used: Kenney Blocky Characters already ships matching idle/walk/sprint clips on a single rig, which avoids retargeting.

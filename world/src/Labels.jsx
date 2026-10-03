@@ -1,15 +1,8 @@
 import { useFrame } from '@react-three/fiber';
 import { Vector3 } from 'three';
+import { districts } from './layout.js';
 
-// Own label overlay: drei <Html> drops its first instance under React 19.
-export const districts = [
-  { name: 'Mairie', position: [0, 28, -22] },
-  { name: 'Santé', position: [32, 11, -6] },
-  { name: 'Quartier sud', position: [0, 8, 38] },
-  { name: 'Marché', position: [-32, 7, -2] },
-  { name: 'Habitat', position: [-24, 15, -40] },
-];
-
+// Own label overlay: drei <Html> drops its first instance under React 19. Positions come from layout.districts.
 const elements = [];
 const point = new Vector3();
 
