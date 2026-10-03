@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
@@ -7,14 +7,18 @@ import { City, Ground, Rocks } from './City.jsx';
 import { LabelLayer, LabelProjector } from './Labels.jsx';
 import { AvatarEditor } from './AvatarEditor.jsx';
 import { Npcs } from './Npcs.jsx';
-import { Phone, useAnnouncements } from './Phone.jsx';
+import { AlertAnnouncer, PhoneFallback, useAnnouncements, useServices, useTransports } from './Phone.jsx';
+import { WorldHud } from './ui/WorldHud.jsx';
+import { getLocale, t } from './ui/i18n.js';
 import { defaultAvatar } from './Avatar.jsx';
+import { nearestStop, playerPos } from './layout.js';
 import { api } from './api.js';
 import { debug } from './debug.js';
 
 const PlayableCity = lazy(() => import('./PlayableCity.jsx'));
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const PHONE_MS = reducedMotion ? 0 : 300; // raise / lower time; the PhoneRig animates over this
 
 // ?debug&fps=N: frames are driven by window.__tn.run(seconds, input) at exactly N Hz.
 function SimDriver() {
@@ -37,27 +41,57 @@ function SimDriver() {
 }
 
 export function App() {
+  const locale = getLocale();
   const [user, setUser] = useState();
   const [view, setView] = useState('tps');
   const [avatar, setAvatar] = useState(defaultAvatar);
   const [editing, setEditing] = useState(false);
-  const [phoneOpen, setPhoneOpen] = useState(false);
-  const { announcements, unseen, acknowledge } = useAnnouncements();
-  const viewBeforeAlert = useRef('tps');
-  const alerting = unseen.length > 0;
+  const [page, setPage] = useState('home');
+  const [help, setHelp] = useState(true);
+  const [stop, setStop] = useState(null);
+  // closed -> opening -> open -> closing -> closed. `source`: who raised it, the player or an urgent alert.
+  const [phone, setPhone] = useState({ phase: 'closed', source: 'manual' });
+  const viewBeforePhone = useRef('tps'); // snapshot once per phone session
+  const phoneRef = useRef(phone);
+  phoneRef.current = phone;
+  const timers = useRef([]);
 
-  // A new urgent broadcast switches to first person and holds the phone up in front of the player.
-  useEffect(() => {
-    if (!alerting) return;
-    setView((current) => {
-      viewBeforeAlert.current = current;
-      return 'fps';
+  const { announcements, unseen: pending, status, error, lastUpdated, acknowledge, retry } = useAnnouncements({ userId: user?.id, ready: user !== undefined });
+  const phoneUp = phone.phase !== 'closed';
+  const services = useServices(phoneUp);
+  const transports = useTransports(true);
+
+  const later = (fn) => (PHONE_MS ? timers.current.push(setTimeout(fn, PHONE_MS)) : fn());
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const openPhone = useCallback((source) => {
+    const { phase } = phoneRef.current;
+    if (phase === 'opening' || phase === 'open') return;
+    if (phase === 'closed') setView((current) => { viewBeforePhone.current = current; return 'fps'; });
+    setPhone({ phase: 'opening', source });
+    later(() => setPhone((p) => (p.phase === 'opening' ? { ...p, phase: 'open' } : p)));
+  }, []);
+
+  const closePhone = useCallback(() => {
+    if (!['opening', 'open'].includes(phoneRef.current.phase)) return;
+    setPhone((p) => ({ ...p, phase: 'closing' }));
+    later(() => {
+      setPhone((p) => (p.phase === 'closing' ? { ...p, phase: 'closed' } : p));
+      setView(viewBeforePhone.current);
+      setPage('home');
     });
-  }, [alerting]);
+  }, []);
 
-  const acknowledgeAlerts = () => {
-    acknowledge();
-    setView(viewBeforeAlert.current);
+  // New urgent alert raises the phone, unless the avatar editor is open (AlertAnnouncer covers that meanwhile).
+  // An alert withdrawn before acknowledgement puts the phone away if the alert raised it.
+  useEffect(() => {
+    if (pending.length && !editing && phone.phase === 'closed') openPhone('alert');
+    if (!pending.length && phone.source === 'alert' && (phone.phase === 'open' || phone.phase === 'opening')) closePhone();
+  }, [pending.length, editing, phone.phase, phone.source, openPhone, closePhone]);
+
+  const acknowledgeAlerts = (ids) => {
+    acknowledge(ids);
+    if (phoneRef.current.source === 'alert') closePhone();
   };
 
   useEffect(() => {
@@ -68,20 +102,43 @@ export function App() {
     }, () => setUser(null));
   }, []);
 
+  const toggleView = () => {
+    if (phoneRef.current.phase === 'closed') setView((v) => (v === 'tps' ? 'fps' : 'tps'));
+  };
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+  const togglePhone = () => {
+    const { phase } = phoneRef.current;
+    if (phase === 'closed' || phase === 'closing') openPhone('manual');
+    else if (!pendingRef.current.length) closePhone(); // an alert must be acknowledged first
+  };
   const edit = () => {
+    if (phoneRef.current.phase !== 'closed') return;
     setView('tps');
     setEditing(true);
   };
 
   useEffect(() => {
-    const toggle = (event) => {
-      if (event.target.closest('input, textarea, select')) return;
-      if (event.code === 'KeyV') setView((v) => (v === 'tps' ? 'fps' : 'tps'));
-      if (event.code === 'KeyT') setPhoneOpen((open) => !open);
+    const keys = (event) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable], dialog')) return;
+      if (event.code === 'KeyV') toggleView();
+      if (event.code === 'KeyT') togglePhone();
     };
-    addEventListener('keydown', toggle);
-    return () => removeEventListener('keydown', toggle);
+    addEventListener('keydown', keys);
+    return () => removeEventListener('keydown', keys);
   }, []);
+
+  // Nearest stop (physical, from the player position) and help hiding once the player has walked away from spawn.
+  useEffect(() => {
+    if (!user) return undefined;
+    const timer = setInterval(() => {
+      const next = nearestStop(playerPos);
+      setStop((current) => (current === next ? current : next));
+      if (Math.hypot(playerPos.x, playerPos.z - 8) > 4) setHelp(false);
+    }, 500);
+    return () => clearInterval(timer);
+  }, [user]);
 
   return (
     <>
@@ -96,7 +153,7 @@ export function App() {
         {!debug.floorOnly && <Npcs reducedMotion={reducedMotion} />}
         {user ? (
           <Suspense fallback={<City />}>
-            <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} inputEnabled={!editing && !phoneOpen && !alerting} />
+            <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} inputEnabled={!editing && !phoneUp} />
           </Suspense>
         ) : <City />}
         <LabelProjector />
@@ -108,18 +165,17 @@ export function App() {
         {!user && <OrbitControls target={[0, 4, 0]} maxPolarAngle={1.45} minDistance={15} maxDistance={140} autoRotate={!reducedMotion} autoRotateSpeed={0.3} />}
       </Canvas>
       <LabelLayer />
-      <nav className="hud" aria-label="Monde">
-        <a href="/">Version accessible</a>
-        <button type="button" onClick={() => setPhoneOpen((open) => !open)} aria-expanded={phoneOpen || alerting}>Téléphone (T)</button>
-        {user && (
-          <>
-            <button type="button" onClick={() => setView((v) => (v === 'tps' ? 'fps' : 'tps'))}>
-              {view === 'tps' ? 'Vue première personne' : 'Vue troisième personne'} (V)
-            </button>
-            <button type="button" onClick={edit}>Personnaliser mon colon</button>
-          </>
-        )}
-      </nav>
+      <WorldHud
+        locale={locale}
+        view={view}
+        phoneOpen={phoneUp}
+        unreadCount={pending.length}
+        district={user ? stop?.district : undefined}
+        onTogglePhone={togglePhone}
+        onToggleView={user ? toggleView : undefined}
+        onEditAvatar={user ? edit : undefined}
+        onToggleHelp={user ? () => setHelp((h) => !h) : undefined}
+      />
       {user === null && (
         <div className="welcome">
           <h1>Terra Nova</h1>
@@ -127,9 +183,26 @@ export function App() {
           <a href="/">Se connecter</a>
         </div>
       )}
-      <Phone open={phoneOpen || alerting} alerts={unseen} announcements={announcements} onAcknowledge={acknowledgeAlerts} onClose={() => setPhoneOpen(false)} />
-      {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} />}
-      {user && <p className="controls-help">ZQSD / WASD ou flèches pour marcher · Maj pour courir · Espace pour sauter · glisser pour tourner la caméra</p>}
+      <AlertAnnouncer alerts={pending} locale={locale} active={editing && !phoneUp} />
+      <PhoneFallback
+        open={phoneUp}
+        page={page}
+        onPageChange={setPage}
+        announcements={announcements}
+        pendingAlerts={phone.phase === 'closing' ? [] : pending}
+        services={services}
+        transports={transports}
+        nearestStop={stop?.name}
+        status={status}
+        error={error}
+        lastUpdated={lastUpdated}
+        onRetry={retry}
+        onAcknowledge={acknowledgeAlerts}
+        onClose={closePhone}
+        locale={locale}
+      />
+      {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} locale={locale} />}
+      {user && help && <p className="controls-help">{t(locale, 'help.controls')}</p>}
     </>
   );
 }

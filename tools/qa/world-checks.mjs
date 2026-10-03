@@ -11,12 +11,14 @@ await page.goto(base + '/', { waitUntil: 'networkidle0' });
 await page.evaluate(async () => {
   await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Probe', email: `p${Date.now()}${Math.random()}@example.org`, password: 'motdepasse-solide-123' }) });
   await fetch('/api/me/avatar', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skin: '#e0ac69', outfit: '#3a6ea5', accent: '#ff4fa3' }) });
-  localStorage.setItem('world-seen-alerts', JSON.stringify(Array.from({ length: 100 }, (_, i) => i)));
+  const { user } = await (await fetch('/api/me')).json();
+  localStorage.setItem(`world-seen-alerts:${user.id}`, JSON.stringify(Array.from({ length: 100 }, (_, i) => i)));
 });
 await page.goto(`${base}/monde/?debug&fps=${fps}${jitter === '1' ? '&jitter' : ''}`, { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => window.__tn && window.__tn.run, { timeout: 30000 });
 await page.evaluate(async () => { const tn = window.__tn; for (let i = 0; i < 40 && !tn.ecctrl; i++) await tn.run(0.5); await tn.run(2); });
 
+const settle = () => new Promise((r) => setTimeout(r, 600)); // phone raise/lower runs on a real-time 300 ms timer
 const run = (s) => page.evaluate((s) => window.__tn.run(s), s);
 const pos = () => page.evaluate(() => { const t = window.__tn.ecctrl.body.translation(); const v = window.__tn.ecctrl.body.linvel(); return { x: t.x, y: t.y, z: t.z, speed: Math.hypot(v.x, v.z), vy: v.y }; });
 const tele = (x, y, z) => page.evaluate((x, y, z) => { const b = window.__tn.ecctrl.body; b.setTranslation({ x, y, z }, true); b.setLinvel({ x: 0, y: 0, z: 0 }, true); }, x, y, z);
@@ -40,10 +42,10 @@ p1 = await pos();
 check('hidden tab stops', p0.speed < 0.05 && dist(p0, p1) < 0.01, { speed: p0.speed.toFixed(3) });
 await page.evaluate(() => { delete document.hidden; }); await page.keyboard.up('KeyW');
 // 4. phone open (T) locks input, close + fresh press resumes
-await page.keyboard.press('KeyT'); await run(0.3); p0 = await pos();
+await page.keyboard.press('KeyT'); await settle(); await run(0.3); p0 = await pos();
 await page.keyboard.down('KeyW'); await run(1.5); p1 = await pos();
 check('phone open ignores movement keys', dist(p0, p1) < 0.05, { moved: dist(p0, p1).toFixed(3) });
-await page.keyboard.up('KeyW'); await page.keyboard.press('KeyT'); await run(0.3);
+await page.keyboard.up('KeyW'); await page.keyboard.press('KeyT'); await settle(); await run(0.3);
 await page.keyboard.down('KeyW'); await run(1); p1 = await pos(); await page.keyboard.up('KeyW');
 check('phone closed, fresh press walks', dist(p0, p1) > 2, { moved: dist(p0, p1).toFixed(2) });
 // 5. jump once per press even with Space held (key repeat)

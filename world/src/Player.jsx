@@ -8,7 +8,7 @@ import { Multiplayer } from './Multiplayer.jsx';
 import { debug, record } from './debug.js';
 import { useMovementInput } from './input.js';
 import { Euler, Vector3 } from 'three';
-import { BOUNDS, SPAWN, cameraBlockers } from './layout.js';
+import { BOUNDS, SPAWN, cameraBlockers, playerPos } from './layout.js';
 
 const probeEuler = new Euler();
 const probeRendered = new Vector3();
@@ -59,6 +59,8 @@ export function Player({ avatar, view, reducedMotion, inputEnabled }) {
       [x, y, z] = SPAWN;
     }
     controls.current.moveTo(x, y + HEAD, z, !reducedMotion);
+    playerPos.x = x;
+    playerPos.z = z;
     if (debug.enabled) {
       const e = ecctrl.current;
       probeEuler.setFromQuaternion(e.currQuat, 'YXZ');

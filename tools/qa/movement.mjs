@@ -12,7 +12,8 @@ await page.goto(base + '/', { waitUntil: 'networkidle0' });
 await page.evaluate(async () => {
   await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Probe', email: `p${Date.now()}${Math.random()}@example.org`, password: 'motdepasse-solide-123' }) });
   await fetch('/api/me/avatar', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skin: '#e0ac69', outfit: '#3a6ea5', accent: '#ff4fa3' }) });
-  localStorage.setItem('world-seen-alerts', JSON.stringify(Array.from({ length: 100 }, (_, i) => i)));
+  const { user } = await (await fetch('/api/me')).json();
+  localStorage.setItem(`world-seen-alerts:${user.id}`, JSON.stringify(Array.from({ length: 100 }, (_, i) => i)));
 });
 await page.goto(`${base}/monde/?debug&${query}`, { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => window.__tn && window.__tn.run, { timeout: 30000 });
