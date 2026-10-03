@@ -4,6 +4,7 @@ let user = null;
 let feed = null;
 let knownCodes = null;
 let loadingFeed = false;
+let services = [];
 let alertsKey = null;
 let knownAlerts = null;
 const memoryPreferences = new Map();
@@ -52,20 +53,48 @@ function setFormStatus(selector, message, error = false) {
   target.dataset.error = String(error);
 }
 
+// Case- and accent-insensitive, so "sante" finds "Santé".
+function fold(value) {
+  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('fr');
+}
+
+function renderServices() {
+  const query = fold($('#service-search').value.trim());
+  const shown = services.filter((service) => fold(`${service.title} ${service.description} ${service.details}`).includes(query));
+  const list = $('#services-list');
+  list.replaceChildren();
+  for (const service of shown) {
+    const card = element('article', service.featured ? 'service-card service-featured' : 'service-card');
+    card.append(element('span', 'service-number', service.featured ? 'À la une' : String(service.id).padStart(2, '0')));
+    card.append(element('h3', '', service.title));
+    card.append(element('p', 'service-description', service.description));
+    card.append(element('p', 'service-details', service.details));
+    if (user?.role === 'admin') {
+      const toggle = element('button', 'feature-button', service.featured ? 'Retirer de la une' : 'Mettre à la une');
+      toggle.type = 'button';
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          await api(`/api/services/${service.id}`, 'PATCH', { featured: !service.featured });
+          await loadServices();
+        } catch (error) {
+          alert(error.message);
+          toggle.disabled = false;
+        }
+      });
+      card.append(toggle);
+    }
+    list.append(card);
+  }
+  $('#services-status').textContent = !services.length ? 'Aucun service publié pour le moment.'
+    : !shown.length ? 'Aucun service ne correspond à votre recherche.'
+    : query ? `${shown.length} service${shown.length > 1 ? 's' : ''} trouvé${shown.length > 1 ? 's' : ''}.` : '';
+}
+
 async function loadServices() {
   try {
-    const { services } = await api('/api/services');
-    const list = $('#services-list');
-    list.replaceChildren();
-    for (const service of services) {
-      const card = element('article', 'service-card');
-      card.append(element('span', 'service-number', String(service.id).padStart(2, '0')));
-      card.append(element('h3', '', service.title));
-      card.append(element('p', 'service-description', service.description));
-      card.append(element('p', 'service-details', service.details));
-      list.append(card);
-    }
-    $('#services-status').textContent = services.length ? '' : 'Aucun service publié pour le moment.';
+    ({ services } = await api('/api/services'));
+    renderServices();
   } catch (error) {
     $('#services-status').textContent = error.message;
   }
@@ -158,6 +187,7 @@ function clearIdentity() {
   $('#requests-list').replaceChildren();
   renderIdentity();
   loadNews();
+  renderServices();
 }
 
 function renderMessages(messages) {
@@ -224,9 +254,9 @@ async function loadMessages() {
 }
 
 function renderRequests() {
-  const query = $('#search').value.trim().toLocaleLowerCase('fr');
+  const query = fold($('#search').value.trim());
   const requests = (feed?.requests || []).filter((item) =>
-    `${item.request_code || ''} ${item.requester_name || ''} ${item.message_public || ''}`.toLocaleLowerCase('fr').includes(query)
+    fold(`${item.request_code || ''} ${item.requester_name || ''} ${item.message_public || ''}`).includes(query)
   );
   const list = $('#requests-list');
   list.replaceChildren();
@@ -281,7 +311,7 @@ async function loadFeed() {
 async function afterAuthentication(nextUser) {
   user = nextUser;
   renderIdentity();
-  if (user?.role === 'admin') loadNews();
+  if (user?.role === 'admin') { loadNews(); renderServices(); }
   await loadMessages();
   await loadFeed();
 }
@@ -349,7 +379,7 @@ $('#service-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    await api('/api/services', 'POST', { title: formValue(form, 'title'), description: formValue(form, 'description'), details: formValue(form, 'details') });
+    await api('/api/services', 'POST', { title: formValue(form, 'title'), description: formValue(form, 'description'), details: formValue(form, 'details'), featured: form.elements.featured.checked });
     form.reset();
     setFormStatus('#service-form-status', 'Service publié.');
     await loadServices();
@@ -372,6 +402,7 @@ $('#news-form').addEventListener('submit', async (event) => {
 });
 
 $('#search').addEventListener('input', renderRequests);
+$('#service-search').addEventListener('input', renderServices);
 $('#refresh-button').addEventListener('click', loadFeed);
 
 let textScale = Math.min(1.5, Math.max(1, Number(preference('textScale')) || 1));

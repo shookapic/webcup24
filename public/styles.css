@@ -182,3 +182,10 @@ html[data-contrast=high] .request-code,html[data-contrast=high] .news-date,html[
 html[data-contrast=high] .alert-item,html[data-contrast=high] .news-badge,html[data-contrast=high] .lift-button{background:#000;color:#ffeb00;border:2px solid #ffeb00}
 html[data-contrast=high] .news-card .news-audience{color:#fff}
 html[data-contrast=high] .notify-button{background:#ffeb00;color:#000}
+.service-search{max-width:450px;margin-bottom:20px}
+.service-featured{border-top:4px solid #ec8a62;background:#163049}
+.service-featured .service-number{color:#ffb08f}
+.feature-button{margin-top:auto;align-self:start;background:transparent;color:#70e7d4;border:1px solid #70e7d477;border-radius:3px;padding:9px 13px;font-size:.75rem;font-weight:700;cursor:pointer}
+.service-card .service-details{margin-bottom:16px!important}
+html[data-contrast=high] .service-featured{border:3px solid #ffeb00}
+html[data-contrast=high] .feature-button{color:#ffeb00;border-color:#ffeb00}

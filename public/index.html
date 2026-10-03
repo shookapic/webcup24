@@ -44,6 +44,7 @@
       <section class="overview" id="services" aria-labelledby="services-title">
         <nav class="breadcrumb" aria-label="Fil d’Ariane des services"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Services</span></nav>
         <div class="section-heading"><div><span class="section-kicker">01 / VIE QUOTIDIENNE</span><h2 id="services-title">Les services de la cité</h2></div><p>Choisissez le service qui répond à votre besoin et retrouvez les informations utiles.</p></div>
+        <label class="search-field service-search"><span class="visually-hidden">Rechercher un service</span><span aria-hidden="true">⌕</span><input id="service-search" type="search" placeholder="Rechercher un service : santé, signalement…" aria-describedby="services-status"></label>
         <div id="services-list" class="service-grid"></div>
         <p id="services-status" class="section-status" role="status"></p>
       </section>
@@ -105,7 +106,7 @@
           </div>
 
           <div id="admin-area" class="admin-grid" hidden>
-            <form id="service-form" class="panel"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <form id="service-form" class="panel"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><label class="check-field"><input name="featured" type="checkbox"> Mettre en avant (affiché en premier)</label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
             <form id="news-form" class="panel"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><label>Public concerné <input name="audience" list="audiences" minlength="2" maxlength="80" placeholder="Tous"></label><datalist id="audiences"><option value="Tous"></option><option value="Quartier sud"></option><option value="Personnes vulnérables"></option></datalist><label class="check-field"><input name="urgent" type="checkbox"> Alerte urgente : afficher en bandeau sur toutes les pages et notifier les habitants</label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
           </div>
         </div>

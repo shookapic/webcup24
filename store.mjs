@@ -88,4 +88,13 @@ if (!announcementColumns.has('urgent')) {
   );
 }
 
+const serviceColumns = new Set(db.prepare('PRAGMA table_info(services)').all().map((column) => column.name));
+if (!serviceColumns.has('featured')) {
+  db.exec('ALTER TABLE services ADD COLUMN featured INTEGER NOT NULL DEFAULT 0 CHECK (featured IN (0, 1))');
+  const insert = db.prepare('INSERT INTO services (title, description, details, featured) VALUES (?, ?, ?, ?)');
+  insert.run('Centre de santé', 'Consultations, vaccinations et soins de proximité.', 'Le centre de santé municipal reçoit les habitants pour la médecine générale, les vaccinations et les soins infirmiers. Pour prendre rendez-vous, envoyez un message depuis votre espace personnel.', 1);
+  insert.run('Signaler un problème', 'Lampadaire cassé, voirie, propreté…', 'Depuis votre espace personnel, choisissez « Signaler un problème », décrivez ce qui s’est passé et indiquez le lieu. Vous suivez ensuite son traitement.', 1);
+  insert.run('Prévention et santé publique', 'Chaleur, montée des eaux, épidémies : les bons gestes.', 'Le service de prévention informe sur les risques sanitaires et accompagne les personnes vulnérables. Les alertes en cours s’affichent en haut de chaque page ; activez les notifications pour être prévenu.', 0);
+}
+
 db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());

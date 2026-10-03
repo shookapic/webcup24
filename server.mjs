@@ -245,7 +245,7 @@ async function route(request, response) {
   }
 
   if (path === '/api/services' && method === 'GET') {
-    return sendJson(response, 200, { services: db.prepare('SELECT * FROM services ORDER BY id').all() });
+    return sendJson(response, 200, { services: db.prepare('SELECT * FROM services ORDER BY featured DESC, id').all() });
   }
   if (path === '/api/services' && method === 'POST') {
     requireUser(request, ['admin']);
@@ -253,8 +253,18 @@ async function route(request, response) {
     const title = text(body.title, 3, 100, 'Le titre');
     const description = text(body.description, 5, 180, 'La description');
     const details = text(body.details, 10, 2000, 'Les informations');
-    const result = db.prepare('INSERT INTO services (title, description, details) VALUES (?, ?, ?)').run(title, description, details);
+    if (body.featured !== undefined && typeof body.featured !== 'boolean') fail(400, 'La mise en avant est invalide.');
+    const result = db.prepare('INSERT INTO services (title, description, details, featured) VALUES (?, ?, ?, ?)').run(title, description, details, body.featured ? 1 : 0);
     return sendJson(response, 201, { id: Number(result.lastInsertRowid) });
+  }
+  const serviceMatch = /^\/api\/services\/(\d+)$/.exec(path);
+  if (serviceMatch && method === 'PATCH') {
+    requireUser(request, ['admin']);
+    const body = await readJson(request);
+    if (typeof body.featured !== 'boolean') fail(400, 'La mise en avant est invalide.');
+    const result = db.prepare('UPDATE services SET featured = ? WHERE id = ?').run(body.featured ? 1 : 0, Number(serviceMatch[1]));
+    if (!result.changes) fail(404, 'Service introuvable.');
+    return sendJson(response, 200, { ok: true });
   }
 
   if (path === '/api/announcements' && method === 'GET') {
