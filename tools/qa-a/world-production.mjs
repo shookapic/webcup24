@@ -1,6 +1,6 @@
 // Session A: the world UI exactly as production serves it: `npm run build`, then Node serving dist/monde (CSP, gzip,
 // cache headers, real App.jsx wiring). Seeds a citizen, an urgent alert (store default) and a service outage.
-// Modes: `physical` (default; desktop, B's PhoneRig: DOM screen under a CSS matrix3d) and `flat` (/monde/?flatphone, the accessible dialog).
+// Modes: `physical` (default; desktop, B's PhoneRig: the A-owned DOM screen, placed on the projected 3D screen by a CSS transform: 2D translate+scale in the released build, full matrix3d only with the ?phoneproj diagnostic) and `flat` (/monde/?flatphone, the accessible dialog).
 // Needs: npm i --no-save puppeteer-core axe-core. Env: CHROME_PATH, SHOTS_DIR. Usage: node tools/qa-a/world-production.mjs [physical|flat]
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -91,14 +91,20 @@ try {
       if (!h) return null;
       const r = h.getBoundingClientRect();
       const cs = getComputedStyle(h);
-      return { matrix3d: cs.transform.startsWith('matrix3d'), opacity: cs.opacity, role: h.getAttribute('role'), modal: h.getAttribute('aria-modal'), label: h.getAttribute('aria-label'), dialogs: document.querySelectorAll('[role=dialog]').length, flatSheets: document.querySelectorAll('.phone-sheet').length, w: Math.round(r.width), h: Math.round(r.height), onScreen: r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1, focusInside: Boolean(document.activeElement?.closest('.phone-host')) };
+      // Computed transforms: translate+scale reads back as matrix(a,b,c,d,e,f); a projective placement as matrix3d(...).
+      // 'affine' also requires no rotation or skew (b = c = 0) and a positive scale on both axes, i.e. an upright, unmirrored screen.
+      const parsed = /^matrix(3d)?\((.*)\)$/.exec(cs.transform);
+      const v = parsed ? parsed[2].split(',').map(Number) : [];
+      const placement = !parsed ? 'none' : parsed[1] ? 'projective' : Math.abs(v[1]) < 1e-6 && Math.abs(v[2]) < 1e-6 && v[0] > 0 && v[3] > 0 ? 'affine' : 'affine-rotated';
+      return { placement, transform: cs.transform.slice(0, 80), opacity: cs.opacity, role: h.getAttribute('role'), modal: h.getAttribute('aria-modal'), label: h.getAttribute('aria-label'), dialogs: document.querySelectorAll('[role=dialog]').length, flatSheets: document.querySelectorAll('.phone-sheet').length, w: Math.round(r.width), h: Math.round(r.height), onScreen: r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1, focusInside: Boolean(document.activeElement?.closest('.phone-host')) };
     });
-    check('physical phone: the screen is the DOM host under a CSS matrix3d, lit, labelled, modal', Boolean(host) && host.matrix3d && host.opacity === '1' && host.role === 'dialog' && host.modal === 'true' && Boolean(host.label), JSON.stringify(host));
+    check('physical phone: the screen is the DOM host placed by an upright affine (translate+scale) or a projective (matrix3d) transform, lit, labelled, modal', Boolean(host) && ['affine', 'projective'].includes(host.placement) && host.opacity === '1' && host.role === 'dialog' && host.modal === 'true' && Boolean(host.label), JSON.stringify(host));
     check('physical phone: exactly one focusable screen instance, no flat sheet beside it, and it is on the viewport', host.dialogs === 1 && host.flatSheets === 0 && host.onScreen, JSON.stringify(host));
+    console.log(`NOTE  placement: ${host.placement} (${host.transform})`);
     console.log(`NOTE  physical screen drawn ${host.w}x${host.h}px for a 360x740 layout: text scale about ${(host.w / 360).toFixed(2)} (16px body text reads as about ${(16 * host.w / 360).toFixed(1)}px)`);
     // click alignment: a real mouse click at each tab's on-screen centre (after the 3D transform) must hit that tab
     const tabs = await page.$$eval(".phone-nav button", (nodes) => nodes.map((n) => { const r = n.getBoundingClientRect(); return { label: n.textContent.trim(), x: r.left + r.width / 2, y: r.top + r.height / 2, hit: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('button') === n }; }));
-    check('physical phone: every tab button is hit-testable at its projected centre (' + tabs.length + ' tabs)', tabs.length === 5 && tabs.every((t) => t.hit), JSON.stringify(tabs));
+    check('physical phone: every tab button is hit-testable at its projected centre (' + tabs.length + ' tabs)', tabs.length === 6 && tabs.every((t) => t.hit), JSON.stringify(tabs));
     const target = tabs.find((t) => t.label.startsWith('Services'));
     await page.mouse.click(target.x, target.y);
     await wait(500);
@@ -110,6 +116,16 @@ try {
     await page.screenshot({ path: join(shots, 'p05-physical-phone-open.png') });
     await nav('Transports');
   }
+  // F45 / F46 in production: real seeded places through the real API
+  await nav('Accueil');
+  const homeText = await page.$eval('.phone-body', (n) => n.textContent);
+  check('F46 in production: the phone home answers an emergency first (call 112 and the closest care, by the player position)', homeText.includes('Urgence ?') && homeText.includes('Appelez le 112.') && homeText.includes('Soins les plus proches'), homeText.slice(0, 300));
+  await nav('Lieux');
+  const placeNames = await page.$$eval('.phone-place h3', (nodes) => nodes.map((n) => n.textContent.trim()));
+  const placeKinds = await page.$$eval('.phone-place .phone-tag-kind', (nodes) => nodes.map((n) => n.textContent.trim()));
+  check('F45 in production: the Places page lists the seeded places, emergency and hospital first, with a 112 call link and a nearest tag', placeNames.length >= 7 && placeKinds[0] === 'Urgences' && placeKinds.indexOf('Service de la ville') > placeKinds.lastIndexOf('Hôpital') && (await page.$('a[href="tel:112"]')) !== null && (await page.$('.phone-tag-nearest')) !== null, JSON.stringify({ placeNames, placeKinds }));
+  await page.screenshot({ path: join(shots, `p06-production-places-${mode}.png`) });
+  await nav('Transports');
   const hudBefore = await page.$eval('.hud-district strong', (n) => n.textContent).catch(() => null);
   check('HUD shows the district of the nearest stop', Boolean(hudBefore), String(hudBefore));
   await page.keyboard.press('Escape');

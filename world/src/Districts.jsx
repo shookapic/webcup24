@@ -2,7 +2,8 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { CanvasTexture, Color, DoubleSide, MeshStandardMaterial, RepeatWrapping } from 'three';
 import { Prop } from './kit.jsx';
-import { buildings, lines, stops } from './layout.js';
+import { buildings, footprintOf, lines, stops } from './layout.js';
+import { debug } from './debug.js';
 
 // Buildings (from layout.buildings, which also feeds collision), district dressing, stop shelters and the Quartier sud water.
 const make = (color, extra = {}) => new MeshStandardMaterial({ color: new Color(color), roughness: 0.85, ...extra });
@@ -150,11 +151,14 @@ function Stop({ stop }) {
 }
 
 export function Districts({ reducedMotion }) {
+  if (debug.enabled) debug.footprintOf = footprintOf;
   return (
     <group>
       {buildings.map((b, i) => (
         <group key={`${b.model}${b.x}${b.z}`}>
-          <Prop name={b.model} variant={b.variant} position={[b.x, 0, b.z]} rotation-y={b.ry} scale={b.scale} />
+          <group ref={(g) => { if (debug.enabled && g) (debug.buildingObjects ??= new Map()).set(b, g); }}>
+            <Prop name={b.model} variant={b.variant} position={[b.x, 0, b.z]} rotation-y={b.ry} scale={b.scale} />
+          </group>
           {b.booth && <Booth b={b} index={i} />}
           {b.garden && <Garden b={{ ...b, ry: b.garden > 0 ? 0 : Math.PI }} />}
           {b.cross && <HealthCross b={b} />}

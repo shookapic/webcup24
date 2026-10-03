@@ -124,3 +124,26 @@ html, body, #root { margin: 0; height: 100%; background: #0b0614; color: #fff; f
 .phone-nav { grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr)); }
 .phone-nav button { overflow-wrap: normal; word-break: normal; hyphens: none; }
 @media (hover: none) { .phone-close kbd { display: none; } }
+
+/* ---- Wave 7: places (F45 / F46) ---- */
+.phone-emergency { border-color: var(--ph-alert); }
+.phone-place-emergency { border-color: var(--ph-alert); background: var(--ph-alert-bg); }
+.phone-tag-kind { margin-left: 0; margin-right: 0.35rem; }
+.phone-place-emergency .phone-tag-kind { background: var(--ph-alert); border-color: var(--ph-alert); color: #2a0f08; }
+.phone-call { display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0.4rem 1rem; background: var(--ph-amber); color: #1d1208; border-radius: 999px; font-weight: 700; text-decoration: none; }
+.phone-filter { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.6rem; padding: 0; border: 0; }
+.phone-chip { position: relative; display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0.3rem 0.85rem; border: 1px solid var(--ph-line); border-radius: 999px; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+.phone-chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.phone-chip-on { background: var(--ph-teal); border-color: var(--ph-teal); color: #10181d; }
+.phone-chip:focus-within { outline: 3px solid #ffd58a; outline-offset: 2px; }
+/* six tabs fit one row at the 360 px design width; they still wrap into rows at large text */
+.phone-nav { grid-template-columns: repeat(auto-fit, minmax(3.5rem, 1fr)); }
+.phone-nav button { padding: 0.4rem 0.1rem; font-size: 0.6875rem; }
+
+/* Opt-in experiments for sliced/missing phone text on some GPUs (use /monde/?phonefix=layer|nomask|smooth); nothing changes without them.
+   layer: rasterise the host once as its own layer instead of re-rasterising text on every transform change.
+   nomask: no rounded overflow clip on the transformed host (a clip + 3D transform makes a mask layer).
+   smooth: grayscale anti-aliasing and geometric text positioning. */
+html[data-phonefix=layer] .phone-host { will-change: transform; backface-visibility: hidden; }
+html[data-phonefix=nomask] .phone-host { overflow: visible !important; border-radius: 0 !important; }
+html[data-phonefix=smooth] .phone-host { -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }

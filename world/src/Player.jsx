@@ -63,7 +63,7 @@ export function Player({ avatar, view, reducedMotion, inputEnabled }) {
       body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       [x, y, z] = SPAWN;
     }
-    controls.current.moveTo(x, y + HEAD, z, !reducedMotion);
+    if (!debug.freecam) controls.current.moveTo(x, y + HEAD, z, !reducedMotion); // freecam: QA drives the camera itself
     playerPos.x = x;
     playerPos.z = z;
     if (debug.enabled) {

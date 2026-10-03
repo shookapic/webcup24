@@ -159,4 +159,64 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS appointments_citizen ON appointments(citizen_id);
 `);
 
+// F45 / F46: physical places residents look for (city services, hospitals, emergency services). Additive table.
+// `stop` is the nearest tram stop (one of the five contract names); `district` uses the portal list. Admins maintain it.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS places (
+    id INTEGER PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL CHECK (kind IN ('service', 'hospital', 'emergency')),
+    name TEXT NOT NULL,
+    name_en TEXT,
+    district TEXT NOT NULL,
+    stop TEXT NOT NULL,
+    address TEXT NOT NULL,
+    address_en TEXT,
+    hours TEXT,
+    hours_en TEXT,
+    open_24h INTEGER NOT NULL DEFAULT 0 CHECK (open_24h IN (0, 1)),
+    phone TEXT,
+    service_id INTEGER REFERENCES services(id) ON DELETE SET NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+if (db.prepare('SELECT COUNT(*) AS count FROM places').get().count === 0) {
+  // Starting content for the city to confirm and edit (README: official details remain to be confirmed with the team).
+  const healthService = db.prepare("SELECT id FROM services WHERE title = 'Centre de santé'").get()?.id ?? null;
+  const insert = db.prepare('INSERT INTO places (code, kind, name, name_en, district, stop, address, address_en, hours, hours_en, open_24h, phone, service_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  insert.run('mairie', 'service', 'Mairie', 'Town hall', 'Centre-ville', 'Mairie', 'Sur la place centrale, le grand bâtiment avec l’antenne. Accueil et rendez-vous à l’entrée sous l’auvent.', 'On the central square, the large building with the antenna. Reception and appointments at the entrance under the canopy.', 'Du lundi au vendredi, de 8 h à 17 h', 'Monday to Friday, 8 am to 5 pm', 0, null, null);
+  insert.run('hopital-terra-nova', 'hospital', 'Hôpital de Terra Nova', 'Terra Nova hospital', 'Quartier est', 'Santé', 'Quartier est, à côté de l’arrêt Santé. Grand bâtiment clair avec une croix verte.', 'East district, next to the Santé stop. Large pale building with a green cross.', 'Ouvert 24 h sur 24', 'Open 24 hours', 1, '112', null);
+  insert.run('urgences-hopital', 'emergency', 'Urgences de l’hôpital', 'Hospital emergency room', 'Quartier est', 'Santé', 'Entrée des urgences sur le côté nord de l’hôpital, bien indiquée. Elle est ouverte jour et nuit.', 'Emergency entrance on the north side of the hospital, clearly signposted. Open day and night.', 'Ouvert 24 h sur 24', 'Open 24 hours', 1, '112', null);
+  insert.run('centre-sante', 'service', 'Centre de santé', 'Health centre', 'Quartier est', 'Santé', 'Quartier est, en face de l’arrêt Santé. Soins de proximité, vaccinations, consultations.', 'East district, opposite the Santé stop. Local care, vaccinations, consultations.', 'Du lundi au samedi, de 8 h à 18 h', 'Monday to Saturday, 8 am to 6 pm', 0, null, healthService);
+  insert.run('secours-quartier-sud', 'emergency', 'Poste de secours du quartier sud', 'South district rescue post', 'Quartier sud', 'Quartier sud', 'Quartier sud, près des berges, à côté de l’arrêt Quartier sud. Secours en cas d’inondation.', 'South district, near the riverbank, next to the Quartier sud stop. Rescue in case of flooding.', 'Ouvert 24 h sur 24', 'Open 24 hours', 1, '112', null);
+  insert.run('point-accueil-habitat', 'service', 'Point d’accueil d’Habitat', 'Habitat help desk', 'Quartier nord', 'Habitat', 'Quartier nord, au pied des logements, près de l’arrêt Habitat. Aide pour vos démarches.', 'North district, at the foot of the housing blocks, near the Habitat stop. Help with your procedures.', 'Du mardi au jeudi, de 9 h à 16 h', 'Tuesday to Thursday, 9 am to 4 pm', 0, null, null);
+  insert.run('marche-couvert', 'service', 'Marché couvert', 'Covered market', 'Quartier ouest', 'Marché', 'Quartier ouest, à côté de l’arrêt Marché. Étals sous auvent ; information pour les commerçants.', 'West district, next to the Marché stop. Stalls under awnings; information for traders.', 'Du mardi au samedi, de 7 h à 13 h', 'Tuesday to Saturday, 7 am to 1 pm', 0, null, null);
+}
+
+// F47 / F48: append-only audit trail with a hash chain (see audit.mjs). The triggers refuse any UPDATE or DELETE.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL,
+    actor_id INTEGER,
+    actor_name TEXT NOT NULL,
+    actor_role TEXT NOT NULL,
+    category TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    target_label TEXT,
+    summary TEXT NOT NULL,
+    reason TEXT,
+    details TEXT,
+    prev_hash TEXT NOT NULL,
+    hash TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS audit_log_actor ON audit_log(actor_id);
+  CREATE INDEX IF NOT EXISTS audit_log_target ON audit_log(target_type, target_id);
+  CREATE INDEX IF NOT EXISTS audit_log_category ON audit_log(category);
+  CREATE TRIGGER IF NOT EXISTS audit_log_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+  CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+`);
+
 db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());

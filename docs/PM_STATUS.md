@@ -1,6 +1,35 @@
 # Terra Nova coordination checkpoint
 
-2026-10-03, 16:47 Europe/Paris. PM integration/review only; no application code edited by Codex.
+2026-10-03, 17:52 Europe/Paris. PM integration/review only; no application code authored by Codex.
+
+## Correction release candidate (not pushed yet)
+
+**Final gate17:57:** exact b365f28 passed build, API138, original-schema migration10, physical-phone22 and flat-phone17. Clean tree/no source changes, disposable DBs. Saved proof is under release-evidence-2026-10-03/correction-b365f28/. PM accepts the identical application source for the authorized normal test-release push; live proof and user Firefox retest still pending. Final evidence commit adds only docs/logs over the validated candidate.
+
+PM merged reviewed A through52468bd and B963b08b as application source6b017a4, then cherry-picked A's QA-only c79083a to support valid affine screen placement. Wave8 application work remains separate on A's sessionA-wave8 branch. B is to validate the exact final integration HEAD, then perform the already-authorized normal push and live GET-only checks after PM accepts the proof.
+
+- **Model/rail correction PASS local:** B reproduced all22 buildings off their colliders, normalized cloned kit root offsets;22 building checks now pass (centres and all dimensions). Representative Mairie collision edge is.35m from visible wall (capsule radius).22 tram checks pass (rail contact/centres, spacing, rounded turns, stops/reversal, no body beyond ends, outward-facing cabs). PM inspected corrected straight/end captures. T1/T2 guideways are separate to avoid overlap.
+- **Phone mitigation ready; user Firefox acceptance UNVERIFIED:** physical device is held square to camera, HTML uses whole-pixel affine translation/scale, transform writes occur only on change, problematic projected rounded mask removed. Readable local captures and existing focus/click/race checks pass. Headed Firefox and Edge on this PC did not reproduce the user's original defect; user must retest after deploy. Diagnostic phonefix variants and legacy phoneproj remain opt-in, not proof of a fix.
+- **Wave7 source/UI now committed and merged:** place directory/emergency information in portal/phone, staff audit/history and reason prompts. PM found citizen actor masking and malformed audit-filter bugs; A reproduced and fixed both, with mutation checks that fail on old source.138 API,10 original-schema migration,96 portal,90 world UI,91 accessibility,121 world browser,22 physical and17 flat checks reported passing on A's source before B host correction; final combined gate remains pending.
+- **Coverage audit:** A's50-row matrix reports34 local PASS,12 PARTIAL,4 NOT STARTED. Portal audit40 checks covers previously missing request-history/breadcrumb/workload/feed/featured/audience/opt-in assertions. Authenticated production, real notification popups and real assistive technology remain unverified. New Wave8 F49-F52 remains explicitly excluded from this release, despite A's implementation now underway separately.
+- **Next world milestone:** vegetation clusters, continuous sidewalks/crossings, seated bench NPC cycles, richer persisted avatar variants/accessory and F45/F46 real-data wayfinding remain required and unfinished. A proposed optional look/accessory IDs with allowlist/options API, pending B's actual assets. No feature coverage is waived by deploying this correction.
+
+Durable original live proof: coordination/reports/host-smoke-de791f3.log (51 GET-only PASS). New exact combined proof and deployment result will be saved separately; source readiness is not host acceptance. Dated sections below retain earlier findings.
+
+## Latest: live user test found visual failures
+
+**Inventory update17:27:** Wave8 arrived17:25; latest authorized watcher has50 official requests. Exact refreshed snapshot is in CONTEST_REQUESTS_2026-10-03.md. A is assigned F49 status-change notices, F50 staff activity dashboard, F51 data-use information/concerns and F52 supporting existing requests, after its tested Wave7 handoff. New requests are **NOT STARTED/pending**, not included in deployed de791f3 or the imminent world correction. B maintains one existing watcher, critical visual corrections first. Wave9 expected~18:25.
+
+The combined release **de791f3** was normally pushed to main and deployed at16:56. GitHub Hodifly status success;51 live GET-only checks passed with matching hashed entry assets. These prove deployment/serving, not visual or authenticated production acceptance.
+
+User screenshots now establish **FAIL** for tram alignment and physical-phone text rendering. Browser: **Firefox, default zoom; text appears briefly while opening then disappears**. PM saved evidence under `coordination/evidence/user-world-2026-10-03/` and dispatched tasks to both sessions. A and B accepted at17:13.
+
+- **B first:** fix measured exported model origin offsets and tram consist bounds; reproduce/fix Firefox phone rendering with A for any CSS changes. All19 kit models have root translation[2,0,1.5], retained by Prop; train scale3.3 produces6.6m lateral and4.95m longitudinal displacement. Building visuals likewise drift from layout colliders. Existing tram motion tests did not cover actual rendered alignment.
+- **B next:** user-required vegetation, continuous pedestrian detail/sidewalks, crossing markings, visible bench sit/stand NPC cycles, then richer avatar variants with A's editor/persistence. First convincing spawn slice, then all districts; measured performance remains required.
+- **A:** complete separate Wave7 milestone, reconcile full46-request matrix and close focused portal workflow evidence gaps. Last committed42-row matrix:26 local PASS,14 PARTIAL,2 UNVERIFIED. Do not claim all portal features work on production. A's server Wave7 b83ca3d is committed locally and source merged with release as30db1bf; UI/checks still in progress, not deployed.
+- **Contract:** A's /api/places now has stable code/kind/district/stop/address/hours/contact fields, no world coordinates; B maps positions. A's phone places page is pending confirmation. Staff reason requirements are deliberate request changes and need regression evidence. Avatar currently persists three colors only; new variant/accessory schema must be agreed before either owner implements it.
+
+Critical visual corrections may be released independently of unfinished Wave7. Require exact fix commit, rendered captures (Firefox explicitly), geometric asset/collider checks, phone interactions and focused regressions before another normal push. No application change by PM. Sections below retain the earlier release record and are superseded by this checkpoint where dated statements differ.
 
 ## Authorized test release
 

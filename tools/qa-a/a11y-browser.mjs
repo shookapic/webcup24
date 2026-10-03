@@ -63,7 +63,7 @@ const helpers = () => {
   window.qa = {
     interactive() {
       const visible = (e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && !e.closest('[hidden], [inert]'); };
-      const list = [...document.querySelectorAll('a[href], button, input:not([type=hidden]), select, textarea, summary, [tabindex]')].filter((e) => !e.disabled && e.tabIndex >= 0 && visible(e));
+      const list = [...document.querySelectorAll('a[href], button, input:not([type=hidden]), select, textarea, summary, [tabindex]')].filter((e) => !e.disabled && e.tabIndex >= 0 && visible(e) && !(e.type === 'radio' && !e.checked && [...document.getElementsByName(e.name)].some((r) => r.checked)));
       list.forEach((e, i) => { e.dataset.qaId = String(i); });
       return list.length;
     },
@@ -286,7 +286,7 @@ try {
 
   // plain wording (D13)
   const visibleText = await page.evaluate(() => [...document.querySelectorAll('main')].map((m) => { const clone = m.cloneNode(true); clone.querySelectorAll('[hidden], #staff-area, #admin-area, script, style').forEach((n) => n.remove()); return clone.innerText; }).join('\n'));
-  const interfaceText = await page.evaluate(() => [...document.querySelectorAll('main')].map((m) => { const clone = m.cloneNode(true); clone.querySelectorAll('[hidden], #staff-area, #admin-area, #services-list, #news-list, #transports-list, #alert-banner, .message-list, script, style').forEach((n) => n.remove()); return clone.innerText; }).join('\n'));
+  const interfaceText = await page.evaluate(() => [...document.querySelectorAll('main')].map((m) => { const clone = m.cloneNode(true); clone.querySelectorAll('[hidden], #staff-area, #admin-area, #services-list, #news-list, #transports-list, #places-list, #urgences-list, #alert-banner, .message-list, script, style').forEach((n) => n.remove()); return clone.innerText; }).join('\n'));
   const jargon = ['UTC+4', '.ics', ' API', 'JSON', 'flux officiel', 'Origine non autorisée', 'session ', 'créneau ', 'créneaux', 'booléen', 'token'].filter((w) => visibleText.toLowerCase().includes(w.toLowerCase()));
   check('D13: no technical or administrative jargon in citizen-facing text', jargon.length === 0, jargon.join(' | '));
   const glossary = await page.evaluate(() => { const g = document.querySelector('#mots, .glossary'); return g ? { terms: g.querySelectorAll('dt').length, reachable: Boolean(document.querySelector('a[href="#mots"]')) } : null; });
