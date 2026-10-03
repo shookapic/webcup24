@@ -2,6 +2,12 @@
 
 Two people, two Claude Code sessions, one repo. Read this whole file before touching code.
 
+## Active polish handoff — 2026-10-03
+
+Read [the code review](docs/CODE_REVIEW.md) and [the roadmap/spec](docs/GAME_ROADMAP.md) before implementing. The user requested a playable, deliberately designed game and a physical handheld phone. The active tasks below supersede the old v1 execution order. Existing contest requirements, including Wave 4, remain mandatory. Component existence or build success is not proof of runtime quality.
+
+**Priority:** stable movement → convincing plaza/animated character → physical phone integration → all districts → regression/performance. A advances civic features and UI concurrently with B. Do not wait for all art work before testing the phone bridge.
+
 ## The contest in 5 lines
 
 - Requests arrive through `GET https://24h.webcup.fr/wp-json/webcup/v1/requests` (header `X-Webcup-Api-Key`), in waves roughly every hour. `request_code` is the stable id.
@@ -25,10 +31,44 @@ Edit only files you own. Need a change in the other person's file? Ask them (or 
 
 | Session | Owns | Mission |
 |---|---|---|
-| **A — Portal & API** | `server.mjs`, `store.mjs`, `security.mjs`, `public/**`, `hodifly.json`, `README.md` | Contest requests in the portal + the API the world needs |
-| **B — World** | `world/**`, `package.json`, `package-lock.json`, `vite.config.*` | The 3D planet, avatars, NPCs, shaders, TPS/FPS "phone" |
+| **A — Experience & API** | `server.mjs`, `store.mjs`, `security.mjs`, `create-staff.mjs`, `public/**`, `hodifly.json`, `README.md`; `world/src/Phone.jsx`, `world/src/AvatarEditor.jsx`, `world/src/styles.css`, `world/src/ui/**`; `docs/FEATURE_MATRIX.md`, `docs/QA_A.md` | Civic features, accessible phone content/HUD, localization, API and regression |
+| **B — Gameplay & art** | All remaining `world/**` (including `App.jsx`, `Player.jsx`, `City.jsx`, new `PhoneRig.jsx` and assets), `package.json`, `package-lock.json`, `vite.config.*`, `.gitignore`; `docs/ASSETS.md`, `docs/QA_B.md` | Movement, camera, city, animated characters/NPCs, tram, physical phone and integration |
 
 Shared: this `CLAUDE.md` (edit the contract below only together).
+
+The review/spec are the shared baseline. Propose changes in your own QA file and coordinate before modifying contracts. B alone wires components in `App.jsx`; A owns all world CSS. B supplies any CSS requirements in `docs/QA_B.md`. Watcher files remain with their current owner; do not create duplicate watchers.
+
+## Active Session A tasks — in order
+
+1. **A0 / protect scope:** create `docs/FEATURE_MATRIX.md` from the latest authorized feed or watcher snapshot. Include exact codes/requirements, implementation, owner, tests and pass/fail/unverified. Preserve all baseline and Wave 4 features. Existing portal features should be verified rather than rebuilt.
+2. **A1 / unblock integration:** finish/preserve the Wave 4 transport API contract below first if outstanding. Implement the phone data hook, accessible screen/fallback and compact HUD under the interfaces below. Include real alerts, full news, services and transport departures, French/English, focus handling and stale/error states. Fix corrupt storage and unmount polling leaks. Keep old named exports until B integrates replacements.
+3. **A2 / citizen experience:** polish avatar editor/save/cancel/error and onboarding; deliver remaining F33/F34/F35 portal work listed below without regression. Coordinate modal input boundaries with B. No unauthenticated or fake account-management actions.
+4. **A3 / delivery:** correct missing asset 404/cache behavior, check model MIME/CSP via Node serving, run the full feature matrix and fix README's obsolete dependency description. Record evidence and outstanding blockers in `docs/QA_A.md`.
+
+## Active Session B tasks — in order
+
+1. **B0 / blocking movement:** reproduce oscillation on a floor-only scene, instrument physical position/rotation/camera, inspect installed ecctrl, isolate automatic colliders/balance/update order. Fix the measured cause, central input lock, camera and hold-to-run. Pass roadmap §3 before art expansion.
+2. **B1 / visual slice:** select compatible licensed local assets and record provenance; build spawn plaza/Mairie, one rigged recolorable avatar, a walking NPC, lighting and shadows. Replace global shader mutation with scoped distant curvature. Pass the visual gate before repeating districts.
+3. **B2 / complete colony:** all five districts, shared path/collider/label data, animated NPC routes, remote avatar interpolation/expiry, contextual service access. Preserve/complete F36 stations and moving tram; see transport acceptance below.
+4. **B3 / physical phone:** camera-relative modeled device plus hand/forearm, aligned A-owned HTML screen, state machine, focus/input integration and camera restoration. Start the bridge during B1 rather than waiting until B2 ends. CSS-only phone is the fallback, not final desktop presentation.
+5. **B4 / release:** loading/WebGL/asset fallbacks, tested quality settings and narrow-screen behavior, performance route, captures and production smoke. Record evidence in `docs/QA_B.md`. Preserve required features when reducing optional art/effect scope.
+
+## Frontend integration contracts — target interfaces
+
+These are agreed implementation targets, not existing exports. Changes require a handoff before editing the other side.
+
+- A exports `useAnnouncements({ userId })` from `Phone.jsx`: `{ announcements, unseen, status, error, lastUpdated, acknowledge(ids), retry }`; status is `loading | ready | stale | error`. Per-user guarded storage, explicit acknowledged IDs, withdrawal reconciliation, cleanup guards; 15 s polling.
+- A exports `PhoneScreen({ page, onPageChange, announcements, pendingAlerts, services, transports, nearestStop, status, error, lastUpdated, onAcknowledge, onClose, locale })`: semantic HTML with no Canvas/camera access or fixed viewport positioning. Pages `home | alerts | news | services | transports`; news-detail state may be internal. Acknowledgement passes only shown IDs. Keep transport fetch status distinct from announcement status.
+- A exports `PhoneFallback` as an accessible dialog wrapper around the same content: focus entry/trap/return, Escape and scrolling. Provide reusable dialog semantics for the 3D screen's DOM host too; only one focusable screen instance exists at a time.
+- A adds `ui/WorldHud.jsx`: `WorldHud({ locale, view, phoneOpen, unreadCount, district, onTogglePhone, onToggleView, onEditAvatar, onToggleHelp })`. DOM only, visible portal fallback, compact labeled controls; no independent gameplay shortcut listener.
+- A retains `AvatarEditor({ open, avatar, onChange, onClose })`, optionally accepting a `preview` React node supplied by B. Cancel restores saved colors, save failures remain visible.
+- A owns translated strings in `ui/i18n.js`. B owns `App.jsx` locale/data wiring and fetches services/transports using existing API contracts. Transport polling is 60 s; nearest stop derives from player world coordinates and stop mapping, never list order or invented service IDs.
+- B's `PhoneRig` owns device/hand geometry, camera pose and screen alignment through a DOM bridge. Never render HTML directly as R3F objects. Reproduce any claimed drei compatibility problem before choosing a workaround; prove alignment/click handling early.
+- B's `App.jsx` owns `view`, `phonePhase`, `editing`, `inputEnabled`, pending-alert presentation and pre-phone camera snapshot. One input/camera authority. A UI components invoke callbacks instead of manipulating camera/keys.
+
+### F36 world acceptance
+
+Preserve the moving tram and stations requirement. B maps all five named stops to the shared district/path data, provides visible stop signs and a non-obstructing tram route; doors/boarding are optional unless the official request requires them. A supplies real API departures/disruption text in portal and phone. Portal prioritizes profile district; world prioritizes physical nearest stop. Do not present decorative tram position as live authoritative timetable tracking unless actually synchronized. Verify both lines, nearest-stop changes, disruptions, empty/offline state and 60 s refresh. Keep tram routes clear of NPC/player paths or handle intersections deliberately.
 
 ## Contract between A and B
 
@@ -42,7 +82,7 @@ A implements, B consumes. Same origin, same session cookie: a user logged in on 
 | `POST /api/presence` | body `{ x, z, ry }` (finite numbers). Auth required. In memory only. → `204` |
 | `GET /api/presence` | `{ players: [{ id, name, avatar, x, z, ry }] }`, positions updated < 15 s ago, excluding the caller. |
 | `GET /api/transports` | Public. `{ lines: [{ code, name, color, status, message, stops: [{ name, district, next }] }] }`. `code` e.g. `"T1"`; `color` `#rrggbb`; `status` `"normal"` \| `"perturbé"`; `message` text or `null`; `next` = the next 3 departures from that stop as `"HH:MM"` (Terra Nova local time, computed server-side from first/last/frequency). Stop names are world places: `Mairie`, `Santé`, `Quartier sud`, `Marché`, `Habitat`. `district` uses the portal profile list: Mairie → `Centre-ville`, Habitat → `Quartier nord`, Santé → `Quartier est`, Marché → `Quartier ouest`, Quartier sud → `Quartier sud`. |
-| `GET /monde/*` | Files from `dist/monde/`, unknown paths → `dist/monde/index.html`. Path traversal blocked. |
+| `GET /monde/*` | Files from `dist/monde/`; SPA fallback for navigation only; missing assets return 404. Path traversal blocked. |
 
 CSP for `/monde/*` responses (the world needs it; keep the portal's strict CSP as is):
 `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' blob: data:; worker-src 'self' blob:; base-uri 'none'; object-src 'none'`
@@ -50,7 +90,9 @@ CSP for `/monde/*` responses (the world needs it; keep the portal's strict CSP a
 
 Polling rates: announcements every 15 s, presence every 2 s, transports every 60 s. Nothing faster.
 
-## Session A — Portal & API (in order)
+## Original Session A feature backlog — preserve and verify
+
+The active tasks above set execution order. Items below retain original request details; do not repeat completed implementation blindly.
 
 1. **Unblock B** (~30 min): `/monde/*` serving + its CSP, `avatar` column (JSON text) on `users` + `PUT /api/me/avatar`, `currentUser` returns `avatar`, in-memory presence endpoints. Use the `ALTER TABLE` migration pattern already in `store.mjs`.
 2. **Alerts — D18, F29, F30, F31 (3 080 XP)**: `urgent` + `audience` columns on `announcements`; "Urgent" checkbox + audience field on the admin news form; newest urgent item shown in a `role="alert"` banner on every page; add `loadNews()` to the 30 s refresh and fire a browser `Notification` (opt-in button) for new urgent items.
@@ -67,7 +109,9 @@ Wave 4 (H+5h, 1 740 XP) — in this order:
 10. **F34 (580)**: agents/admins administer citizen accounts: list + search, deactivate/reactivate, reset password (show a one-time password like `create-staff`), delete. Server-side role check on every route; staff accounts can't be modified from there; deactivated users can't log in and their sessions are revoked.
 11. **F35 (290)**: short contextual tips at the moment of first use (first message form, first report, first service search), dismissible, remembered per user. Builds on the D12 guide.
 
-## Session B — World (in order)
+## Original Session B scope — retained for traceability
+
+The active spec supersedes the implementation approach below, particularly the overlay-only phone and global curvature. All functional features remain required.
 
 1. **Skeleton first, push early**: Vite + React + R3F in `world/` (`base: '/monde/'`, `outDir: '../dist/monde'`), `"build": "vite build"`, `"dev:world"` script, dev proxy `/api` → `http://127.0.0.1:3000`. Commit the lockfile. Merge as soon as `npm run build` passes so the Hodifly pipeline is proven before the scene gets big. Add `dist/` to `.gitignore`.
 2. **Planet scene**: flat ground bent by a curved-horizon vertex shader (no spherical gravity), sky + a real 3D planet/atmosphere shader in the sky, buildings from CC0 kits (Kenney / Quaternius / KayKit, glTF in `world/public/`) grouped by district: Mairie, Santé, Quartier sud…
@@ -78,7 +122,7 @@ Wave 4 (H+5h, 1 740 XP) — in this order:
 7. **Other players**: presence polling, interpolate positions.
 8. **Shaders polish**: `@react-three/postprocessing` (bloom, vignette, tone mapping). Cap `dpr` at 1.5.
 
-Steps 1–8 are done and on `main`. Wave 4:
+Steps 1–8 were previously reported implemented on `main`; the review identifies failures and quality gaps, so they are not acceptance-certified. Wave 4:
 
 9. **F36 (580), transports in the world**: a tram line with stations at the district stops and a moving tram; the phone gets a "Transports" view with the next departures (from `GET /api/transports`), the player's nearest stop first.
 
@@ -96,6 +140,8 @@ One watcher per machine is enough. Both sessions add new waves to the lists abov
 ## Git workflow
 
 - A works on branch `portal`, B on branch `world`. Only `main` deploys.
+- On one machine use separate worktrees; never switch branches underneath another live session or overwrite its uncommitted changes.
+- Milestone handoff in each owner's QA file: commit, interface/asset changes, tests/evidence, unresolved issues and next dependency. Gates: movement → plaza plus physical phone → full districts/features → production acceptance. See roadmap §8.
 - Merge to `main` often (small steps). Before merging: `git pull --rebase origin main`, `npm run build` passes, `npm start` boots, click through what you changed.
 - Never push a broken `main`: a failed build means no deploy, and a broken server means the jury sees nothing.
 - Commit messages say which request codes they cover (e.g. `Alerts banner (D18, F29, F31)`), so the final jury declaration is easy to write.
