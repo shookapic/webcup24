@@ -4,6 +4,7 @@ import { KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import { Ecctrl } from 'ecctrl';
 import { EcctrlCameraControls } from 'ecctrl/camera';
 import { Avatar } from './Avatar.jsx';
+import { Multiplayer } from './Multiplayer.jsx';
 
 const keyboardMap = [
   { name: 'forward', keys: ['ArrowUp', 'KeyW', 'KeyZ'] },
@@ -47,6 +48,7 @@ function Character({ avatar, view, reducedMotion }) {
       <Ecctrl ref={ecctrl} position={[0, 3, 8]} capsuleHalfHeight={0.4} capsuleRadius={0.35} maxWalkVel={4} maxRunVel={9} jumpVel={6}>
         <Avatar avatar={avatar} visible={view !== 'fps'} />
       </Ecctrl>
+      <Multiplayer ecctrl={ecctrl} />
       <EcctrlCameraControls
         ref={controls}
         makeDefault
