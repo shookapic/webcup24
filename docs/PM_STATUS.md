@@ -1,6 +1,6 @@
 # Terra Nova coordination checkpoint
 
-2026-10-03, 16:07 Europe/Paris. PM integration/review only; no application code edited by Codex.
+2026-10-03, 16:47 Europe/Paris. PM integration/review only; no application code edited by Codex.
 
 ## Authorized test release
 
@@ -8,11 +8,12 @@ The user explicitly authorizes combining every completed A+B delivery and a norm
 
 ## Current combined candidate
 
-- `b1f2751`: clean merge of A `4749bdf` (Wave 5/6) and B `ffec17b` (plaza, rigged characters, physical phone). No source conflicts.
-- A is release-ready; only the four PM documents remain dirty in A's checkout. Its additive migrations were tested against a database made by the original store: old user login/message preserved, services available, appointment routes usable and second boot idempotent (A-reported PASS).
-- B has not finished. B2 districts, tram/stations and composition are in progress on `world`; PM will merge B's exact final committed HEAD after its handoff.
-- Latest remote state is session-reported `ffec17b`. PM's Git SSH read failed with Windows `sh.exe` CreateFileMapping error 5. A is asked to fetch and report the actual tip before release.
-- PM build attempt on the combined candidate is **UNAVAILABLE**: Vite fails spawning a child process (`EPERM`) in this tool sandbox. This does not prove a build defect. A is asked to run build/API/portal/Node-served world gates through its working execution environment, covering the physical phone rather than assuming the old flat-dialog selectors.
+- **Approved code candidate `ece7ba60f22de0d6a75ced1704d48c4265874e5a`**, combining all A commits through `4f3cd39`, all B commits through `5b00a4d`, and remote `main` through `6fed34a`. All merges were clean. Ancestry checks confirm all three branches are included.
+- A and B application worktrees are clean. The four earlier PM documents in A's checkout were preserved in `coordination/archive/pm-docs-before-combined-release`; their refreshed canonical versions are committed here. A can merge the deployed main when it resumes without those stale dirty files blocking it.
+- A's additive migrations were tested against a database made by the original store: old user login/message preserved, services available, appointment routes usable and second boot idempotent (A-reported PASS).
+- B finished B2 districts, tram/stations and the phone timer fix, handed off `5b00a4d`, and reported no release blocker. Art/performance/mobile gaps remain explicit below.
+- PM's own build/SSH execution is unavailable in this tool sandbox (`spawn EPERM`, Git shell mapping/network errors). B successfully validated the exact integrated candidate using its working environment: build, API104, physical-world20 and flat-world15, disposable databases only, no source/ref changes. Durable logs are under `release-evidence-2026-10-03/`.
+- All20 GLB files have valid GLB2 headers, no remote image/buffer URI; the character PNG and both license files are tracked (PM static check PASS). No `.env` or database file is tracked.
 - Public Hodifly URLs supplied by the user: https://losfablitos.lareunion.webcup.hodi.cloud/ and `/monde/`. Host deployment and runtime checks remain **UNVERIFIED** until the combined release is pushed and checked. GitHub reports Hodifly success for B's earlier `ffec17b` slice; that is not proof of the combined release.
 
 ## Evidence and scope
@@ -20,11 +21,11 @@ The user explicitly authorizes combining every completed A+B delivery and a norm
 | Area | Status | Evidence / remaining work |
 | --- | --- | --- |
 | Movement | PASS reported for deterministic local checks; human hardware UNVERIFIED | B0: ground rigid body, explicit colliders, controlled physics order, yaw/upright/run/input fixes; 30/60/144 Hz and irregular frames. Below 30 FPS the timestep clamp slows simulation. |
-| Plaza, avatar, NPCs | PARTIAL | Kenney CC0 local assets; idle/walk/sprint, 12 moving NPCs, scoped distant curvature, sun shadows; captures reviewed. Other districts/composition still in progress. |
-| Physical phone | PASS reported locally; combined regression pending | Modeled device, buttons, gloved hand/sleeve; projected DOM screen, one dialog, narrow/guest/`?flatphone` fallback; phone/services/alert captures. |
-| Wave 5/6 API and accessibility | PASS/PARTIAL as matrix states | A reports 473 checks on `4749bdf`; exact combined physical-phone source was not covered by that earlier proof. |
-| F36 world | IN PROGRESS | API/portal/phone already present; B finishing stations and moving tram. |
-| Production | UNVERIFIED | Push authorized after B final handoff and release checks. Actual host URL, build result, assets/CSP and persistence still need checking. |
+| Plaza, avatar, NPCs | PARTIAL visual acceptance; local functionality PASS reported | Five districts and rigged animated characters delivered; local models/captures reviewed. Real hardware performance, quality settings, foot sliding and further art polish remain open. |
+| Physical phone | PASS local combined checks |20 exact-candidate checks; modeled device/hand, projected HTML, one dialog, real clicks/focus/alerts;15 flat fallback checks. Reduced displayed text size remains a readability consideration. |
+| Wave 5/6 API and accessibility | PASS/PARTIAL as matrix states | A's full earlier portal/browser proof reused where unchanged; exact final API104 and both world UI modes passed. Real assistive technology remains UNVERIFIED. |
+| F36 world | PASS local B checks; host pending | Five stops, both moving trams, nearest-stop API phone integration;8 tram checks passed. Tram animation is decorative, not synchronized live tracking. |
+| Production | READY FOR AUTHORIZED PUSH; host pending | Exact merged source build/boot/API/world gates pass. B will perform normal push, then GET-only live version/assets/CSP checks. Real host persistence/proxy identity still needs observation. |
 
 Official inventory: Wave 7, **46 requests**, from the existing B watcher snapshot at 16:27. The contest snapshot contains all exact wording. A's `FEATURE_MATRIX.md` currently covers 42 through Wave 6; its remaining four rows are queued to A after quota recovery. Reminders are in-app/opt-in browser/calendar; no email or SMS implementation exists.
 
@@ -41,7 +42,7 @@ Queue task `A-wave7-1` preserves these requests for A after its Claude quota res
 
 ### Validation update, 16:20
 
-A committed `4f3cd39` before hitting its quota; PM merged it and remote `f06be69` (README only) cleanly. A's exact archive of combined source `b1f2751` passed build, API104, portal60, world-UI75, portal-browser15, accessibility91, world-browser113, physical-world20, flat-world15, B movement at60/30+jitter, phone clicks and alert flow. Its old-host GET baseline passed existing HTML/assets/CSP/404 behavior; nine expected version failures remain until the new release deploys. B confirmed the rapid close/reopen defect (2 failures before fix), fixed it with one cancellable timer, and reports12 phone-race checks passing,8 tram checks and movement at60/30+jitter/144 passing on its current source. Final B commit and combined final build/runtime/host checks remain pending.
+A committed `4f3cd39` before hitting its quota; PM merged it and remote `f06be69` (README only) cleanly. A's exact archive of combined source `b1f2751` passed build, API104, portal60, world-UI75, portal-browser15, accessibility91, world-browser113, physical-world20, flat-world15, B movement at60/30+jitter, phone clicks and alert flow. Its old-host GET baseline passed existing HTML/assets/CSP/404 behavior; nine expected version failures remain until the new release deploys. B confirmed the rapid close/reopen defect (2 failures before fix), fixed it with one cancellable timer, and reports12 phone-race checks passing,8 tram checks and movement at60/30+jitter/144 passing on its current source. The final B commit and combined checks are now complete; actual new host deployment remains pending.
 
 ## Release sequence
 
