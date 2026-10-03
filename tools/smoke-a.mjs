@@ -13,6 +13,7 @@ const port = 3100 + Math.floor(Math.random() * 500);
 const base = `http://127.0.0.1:${port}`;
 const env = { ...process.env, DATA_PATH: join(dataDir, 'smoke.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TRUST_PROXY: '1' };
 const bigLine = 'export const x = 1;\n';
+const R = 'Motif de test pour le journal des actions';
 const results = [];
 const created = [];
 
@@ -100,7 +101,7 @@ try {
   const alert = await admin.call('/api/announcements', 'POST', { title: 'Alerte test', body: 'Contenu d’alerte de test.', urgent: true, audience: 'Quartier sud', title_en: 'Test alert', body_en: 'English test alert body.' });
   check('admin publishes urgent alert', alert.status === 201);
   check('alert listed urgent with audience', (await anon.call('/api/announcements')).data.announcements.find((n) => n.id === alert.data.id)?.audience === 'Quartier sud');
-  check('admin lifts alert', (await admin.call(`/api/announcements/${alert.data.id}`, 'PATCH', { urgent: false })).status === 200);
+  check('admin lifts alert (a reason is required)', (await admin.call(`/api/announcements/${alert.data.id}`, 'PATCH', { urgent: false })).status === 400 && (await admin.call(`/api/announcements/${alert.data.id}`, 'PATCH', { urgent: false, reason: R })).status === 200);
   const featured = await admin.call('/api/services', 'POST', { title: 'Service test', description: 'Résumé test', details: 'Informations utiles test', featured: true });
   check('admin publishes featured service', featured.status === 201 && (await anon.call('/api/services')).data.services[0].title === 'Service test' || (await anon.call('/api/services')).data.services.some((s) => s.title === 'Service test' && s.featured === 1));
   check('agent updates traffic', (await agent.call('/api/transports/T2', 'PATCH', { status: 'perturbé', message: 'Travaux sur la ligne T2' })).status === 200 && (await anon.call('/api/transports')).data.lines.find((l) => l.code === 'T2').status === 'perturbé');
@@ -131,13 +132,14 @@ try {
   ].reduce(async (all, run) => [...await all, (await run()).status], Promise.resolve([]))).every((s) => s === 403));
   check('F34 unknown id → 404', (await agent.call('/api/admin/citizens/99999', 'DELETE')).status === 404);
   check('F34 invalid status body → 400', (await agent.call(`/api/admin/citizens/${target.id}`, 'PATCH', { active: 'no' })).status === 400);
-  check('F34 deactivate revokes session', (await agent.call(`/api/admin/citizens/${target.id}`, 'PATCH', { active: false })).status === 200 && (await victim.call('/api/me')).data.user === null);
+  check('F34 deactivate needs a reason, then revokes the session', (await agent.call(`/api/admin/citizens/${target.id}`, 'PATCH', { active: false })).status === 400 && (await agent.call(`/api/admin/citizens/${target.id}`, 'PATCH', { active: false, reason: R })).status === 200 && (await victim.call('/api/me')).data.user === null);
   check('F34 deactivated cannot log in', (await victim.call('/api/auth/login', 'POST', { email: 'victim@smoke.test', password: 'victim-password-1' })).status === 403);
   check('F34 reactivate allows login', (await agent.call(`/api/admin/citizens/${target.id}`, 'PATCH', { active: true })).status === 200 && (await victim.call('/api/auth/login', 'POST', { email: 'victim@smoke.test', password: 'victim-password-1' })).status === 200);
-  const reset = await agent.call(`/api/admin/citizens/${target.id}/password`, 'POST');
+  check('F34 reset needs a reason', (await agent.call(`/api/admin/citizens/${target.id}/password`, 'POST', {})).status === 400);
+  const reset = await agent.call(`/api/admin/citizens/${target.id}/password`, 'POST', { reason: R });
   check('F34 reset returns one-time password, ends sessions, old password dead', reset.status === 200 && reset.data.password.length >= 20 && (await victim.call('/api/me')).data.user === null && (await victim.call('/api/auth/login', 'POST', { email: 'victim@smoke.test', password: 'victim-password-1' })).status === 401);
   check('F34 new password works', (await victim.call('/api/auth/login', 'POST', { email: 'victim@smoke.test', password: reset.data.password })).status === 200);
-  check('F34 delete removes account', (await agent.call(`/api/admin/citizens/${target.id}`, 'DELETE')).status === 200 && (await victim.call('/api/me')).data.user === null && (await agent.call('/api/admin/citizens?q=victim')).data.citizens.length === 0);
+  check('F34 delete needs a reason, then removes the account', (await agent.call(`/api/admin/citizens/${target.id}`, 'DELETE', {})).status === 400 && (await agent.call(`/api/admin/citizens/${target.id}`, 'DELETE', { reason: R })).status === 200 && (await victim.call('/api/me')).data.user === null && (await agent.call('/api/admin/citizens?q=victim')).data.citizens.length === 0);
 
   // F38 — service availability
   const svcs = (await anon.call('/api/services')).data.services;
@@ -203,7 +205,7 @@ try {
   const staffView = (await agent.call('/api/appointments/staff')).data.appointments;
   check('F39 staff see who booked what and why', staffView.find((a) => a.id === s1.id)?.citizen?.email === (winner === apCit ? 'rdv1@smoke.test' : 'rdv2@smoke.test') && (winner !== apCit || staffView.find((a) => a.id === s1.id).reason === 'Première demande'));
   check('F39 citizens cannot read the staff list', (await winner.call('/api/appointments/staff')).status === 403);
-  check('F39 staff cancel a booking: the citizen sees it cancelled, it is not offered again', (await agent.call(`/api/appointments/${s1.id}`, 'DELETE')).status === 200 && (await winner.call('/api/appointments/mine')).data.appointments.find((a) => a.id === s1.id).status === 'cancelled' && (await loser.call('/api/appointments/slots')).data.slots.every((s) => s.id !== s1.id));
+  check('F39 staff cancel a booking (reason required): the citizen sees it cancelled, it is not offered again', (await agent.call(`/api/appointments/${s1.id}`, 'DELETE', {})).status === 400 && (await agent.call(`/api/appointments/${s1.id}`, 'DELETE', { reason: R })).status === 200 && (await winner.call('/api/appointments/mine')).data.appointments.find((a) => a.id === s1.id).status === 'cancelled' && (await loser.call('/api/appointments/slots')).data.slots.every((s) => s.id !== s1.id));
   check('F39 staff remove an open slot', (await agent.call(`/api/appointments/${s4.id}`, 'DELETE')).status === 200 && (await loser.call('/api/appointments/slots')).data.slots.every((s) => s.id !== s4.id));
   await winner.call(`/api/appointments/${s3.id}/book`, 'POST', {});
   check('F39/F33 deleting an account frees its booked slot', (await winner.call('/api/me', 'DELETE', { password: winner === apCit ? 'rendezvous-pass-1' : 'rendezvous-pass-2' })).status === 200 && (await loser.call('/api/appointments/slots')).data.slots.some((s) => s.id === s3.id));
@@ -249,6 +251,73 @@ try {
   for (let i = 0; i < 5; i++) del5.push((await del.call('/api/me', 'DELETE', { password: 'x' })).status);
   const del6 = await del.call('/api/me', 'DELETE', { password: 'delete-guard-pass' });
   check('F37 account deletion confirmation is also rate limited', del5.every((s) => s === 403) && del6.status === 429 && del6.data.retryAfter > 0, del5.join() + del6.status);
+
+  // F45 / F46 — places
+  const places = (await new Client().call('/api/places')).data.places;
+  const stopNames = ['Mairie', 'Habitat', 'Santé', 'Marché', 'Quartier sud'];
+  const districtNames = ['Centre-ville', 'Quartier nord', 'Quartier est', 'Quartier ouest', 'Quartier sud'];
+  check('F45 public places list: >= 7 places with address, hours, nearest stop and district', places.length >= 7 && places.every((p) => p.code && p.name && p.address && stopNames.includes(p.stop) && districtNames.includes(p.district)), JSON.stringify(places[0]));
+  check('F46 emergency services and hospitals come first, 24 h flagged, with the 112 number', places[0].kind === 'emergency' && places.filter((p) => p.kind !== 'service').every((p) => p.open_24h === 1 && p.phone === '112') && places.findIndex((p) => p.kind === 'service') > places.findLastIndex((p) => p.kind !== 'service'));
+  const care = (await new Client().call('/api/places?kind=care')).data.places;
+  check('F46 ?kind=care returns only hospitals and emergency services (incl. the nearest-stop mapping)', care.length >= 3 && care.every((p) => ['hospital', 'emergency'].includes(p.kind)) && care.some((p) => p.stop === 'Santé') && care.some((p) => p.stop === 'Quartier sud'));
+  check('F45 ?district filter works', (await new Client().call('/api/places?district=Quartier%20est')).data.places.every((p) => p.district === 'Quartier est'));
+  check('F45 the health centre place links to the health service', places.find((p) => p.code === 'centre-sante')?.service_id === healthService.id);
+  const newPlace = { kind: 'service', name: 'Bibliothèque centrale', name_en: 'Central library', district: 'Centre-ville', stop: 'Mairie', address: 'Rue des Livres, derrière la mairie.', hours: 'Du mardi au samedi, 10 h–18 h', open_24h: false, phone: '+262 262 00 00 00' };
+  check('F45 role isolation on place writes: anonymous 401, citizen 403, agent 403 (admin only)', (await new Client().call('/api/places', 'POST', newPlace)).status === 401 && (await citizen.call('/api/places', 'POST', newPlace)).status === 403 && (await agent.call('/api/places', 'POST', newPlace)).status === 403);
+  check('F45 place validation: kind, stop, district, phone, unknown service, name', (await Promise.all([
+    admin.call('/api/places', 'POST', { ...newPlace, kind: 'castle' }), admin.call('/api/places', 'POST', { ...newPlace, stop: 'Lune' }), admin.call('/api/places', 'POST', { ...newPlace, district: 'Nulle part' }),
+    admin.call('/api/places', 'POST', { ...newPlace, phone: 'appelez-moi' }), admin.call('/api/places', 'POST', { ...newPlace, service_id: 99999 }), admin.call('/api/places', 'POST', { ...newPlace, name: 'ab' }),
+  ])).map((r) => r.status).join() === '400,400,400,400,400,400');
+  const auditCount = async () => (await agent.call('/api/admin/audit?limit=1')).data.entries[0]?.id ?? 0;
+  const lastBefore = await auditCount();
+  check('F48 a rejected action leaves no audit entry (nothing happened)', (await auditCount()) === lastBefore);
+  const spoof = await admin.call('/api/places', 'POST', { ...newPlace, actor: 'Quelqu’un d’autre', actor_name: 'Agent Smoke', actor_role: 'agent', actor_id: 1 }, { 'X-Actor': 'agent@smoke.test' });
+  check('F45 admin creates a place; a second one with the same name gets its own code', spoof.status === 201 && (await admin.call('/api/places', 'POST', newPlace)).data.code === `${spoof.data.code}-2`, JSON.stringify(spoof.data));
+  const placeId = spoof.data.id;
+  check('F45 admin edits a place; the public list shows it with a newer updated_at', (await admin.call(`/api/places/${placeId}`, 'PATCH', { ...newPlace, hours: 'Du lundi au samedi, 9 h–19 h' })).status === 200 && (await new Client().call('/api/places')).data.places.find((p) => p.id === placeId).hours.includes('lundi'));
+  check('F45 agents and citizens cannot edit or delete places', (await agent.call(`/api/places/${placeId}`, 'PATCH', newPlace)).status === 403 && (await citizen.call(`/api/places/${placeId}`, 'DELETE', { reason: R })).status === 403 && (await agent.call(`/api/places/${placeId}`, 'DELETE', { reason: R })).status === 403);
+  check('F45 deleting a place needs a reason', (await admin.call(`/api/places/${placeId}`, 'DELETE', {})).status === 400 && (await admin.call(`/api/places/${placeId}`, 'DELETE', { reason: R })).status === 200 && (await admin.call(`/api/places/${placeId}`, 'DELETE', { reason: R })).status === 404);
+
+  // F47 / F48 — audit trail
+  const everyone = [new Client(), citizen];
+  check('F48 the journal is for staff only: anonymous 401, citizen 403 (list, verify, csv)', (await Promise.all(everyone.flatMap((c) => ['/api/admin/audit', '/api/admin/audit/verify', '/api/admin/audit?format=csv'].map((p) => c.call(p))))).map((r) => r.status).join() === '401,401,401,403,403,403');
+  const adminMe = (await admin.call('/api/me')).data.user;
+  const agentMe = (await agent.call('/api/me')).data.user;
+  const journal = (await agent.call('/api/admin/audit?limit=200')).data;
+  const actions = new Set(journal.entries.map((e) => e.action));
+  const expected = ['auth.staff_login', 'service.create', 'service.unavailable', 'service.available', 'announcement.alert', 'announcement.lift', 'transport.status', 'message.status', 'account.deactivate', 'account.reactivate', 'account.reset_password', 'account.delete', 'account.self_delete', 'appointment.slots.create', 'appointment.book', 'appointment.cancel_own', 'appointment.cancel_by_staff', 'appointment.slot.remove', 'place.create', 'place.update', 'place.delete'];
+  check('F47 every kind of admin and sensitive action is in the journal', expected.every((a) => actions.has(a)), expected.filter((a) => !actions.has(a)).join(', '));
+  const placeCreated = journal.entries.find((e) => e.action === 'place.create' && e.target_id === String(placeId));
+  check('F48 actor, action, target and time come from the session: the spoofed actor fields and header were ignored', placeCreated && placeCreated.actor_id === adminMe.id && placeCreated.actor_name === adminMe.name && placeCreated.actor_role === 'admin' && placeCreated.target_label === newPlace.name && !Number.isNaN(Date.parse(placeCreated.at)) && placeCreated.summary.includes('Bibliothèque'), JSON.stringify(placeCreated));
+  const selfDelete = journal.entries.find((e) => e.action === 'account.self_delete' && e.target_label.includes('Doomed'));
+  check('F47 a citizen deleting their own account is recorded with the citizen as actor', selfDelete?.actor_role === 'citizen' && selfDelete.target_label.includes('Doomed'), JSON.stringify(selfDelete));
+  const sensitive = journal.entries.filter((e) => ['account.deactivate', 'account.reset_password', 'account.delete', 'announcement.lift', 'appointment.cancel_by_staff', 'place.delete'].includes(e.action));
+  check('F47 sensitive actions all carry their reason', sensitive.length >= 6 && sensitive.every((e) => e.reason === R), JSON.stringify(sensitive.map((e) => [e.action, e.reason])));
+  const dump = JSON.stringify(journal.entries);
+  check('F47 data handling: no raw citizen e-mail, no password, no temporary password in the journal; citizens appear masked', !dump.includes('victim@smoke.test') && !dump.includes('doomed@smoke.test') && !dump.includes(reset.data.password) && !dump.includes('password_hash') && journal.entries.some((e) => /v\*\*\*@smoke\.test \(n°\d+\)/.test(e.target_label || '')), dump.slice(0, 200));
+  check('F47 entries are ordered newest first and times never go backwards', journal.entries.every((e, i) => i === 0 || (e.id < journal.entries[i - 1].id && e.at <= journal.entries[i - 1].at)));
+  check('F48 before/after values are kept (service outage: before available, after unavailable)', (() => { const e = journal.entries.find((x) => x.action === 'service.unavailable'); return e?.details?.avant?.availability === 'available' && e.details.apres.availability === 'unavailable' && Boolean(e.reason); })());
+  check('F48 who changed what: filter by actor, by category, by target, by dump', (await agent.call(`/api/admin/audit?actor=${agentMe.id}`)).data.entries.every((e) => e.actor_id === agentMe.id) && (await agent.call('/api/admin/audit?category=account')).data.entries.every((e) => e.category === 'account') && (await agent.call(`/api/admin/audit?target_type=service&target_id=${healthService.id}`)).data.entries.every((e) => e.target_type === 'service' && e.target_id === String(healthService.id)) && (await agent.call('/api/admin/audit?q=Biblioth')).data.entries.length >= 1);
+  const day = cityLocal(0).slice(0, 10);
+  check('F47 date filters (city day) and an empty result for a past period', (await agent.call(`/api/admin/audit?from=${day}&to=${day}`)).data.entries.length > 0 && (await agent.call('/api/admin/audit?from=2020-01-01&to=2020-01-02')).data.entries.length === 0);
+  const page1 = (await agent.call('/api/admin/audit?limit=5')).data;
+  const page2 = (await agent.call(`/api/admin/audit?limit=5&before=${page1.next_before}`)).data;
+  check('F47 history is paginated without gaps or repeats, and the first page lists the actors and categories to filter by', page1.entries.length === 5 && page1.next_before === page1.entries[4].id && page2.entries[0].id < page1.entries[4].id && page1.facets.actors.length >= 3 && page1.facets.categories.length >= 6 && !page2.facets);
+  await admin.call('/api/services', 'POST', { title: '=SOMME(1+1) test', description: 'Un service de test', details: 'Informations utiles de test' });
+  const csv = await fetch(`${base}/api/admin/audit?format=csv`, { headers: { Cookie: agent.cookie } });
+  const csvText = Buffer.from(await csv.arrayBuffer()).toString('utf8');
+  check('F47 CSV export for the city: text/csv attachment, spreadsheet-safe cells, header and rows', csv.status === 200 && csv.headers.get('content-type').startsWith('text/csv') && csv.headers.get('content-disposition').includes('attachment') && csvText.startsWith('﻿n°;date (UTC)') && csvText.includes("'=SOMME(1+1) test") && !/;=SOMME/.test(csvText) && csvText.split('\r\n').length > 20);
+  const verify = (await agent.call('/api/admin/audit/verify')).data;
+  const total = (await agent.call('/api/admin/audit?limit=200')).data.entries.length;
+  check('F47 the hash chain verifies over the whole journal', verify.ok === true && verify.checked >= total && verify.brokenAt === null, JSON.stringify(verify));
+  const trail = new DatabaseSync(env.DATA_PATH);
+  const refused = [() => trail.prepare("UPDATE audit_log SET summary = 'modifié' WHERE id = 1").run(), () => trail.prepare('DELETE FROM audit_log WHERE id = 1').run()].map((run) => { try { run(); return false; } catch (error) { return /append-only/.test(error.message); } });
+  check('F47 the journal is append-only at the database level: UPDATE and DELETE are refused', refused.every(Boolean), refused.join());
+  trail.exec('DROP TRIGGER audit_log_no_update');
+  trail.prepare("UPDATE audit_log SET summary = 'falsifié' WHERE id = 3").run();
+  const tampered = (await agent.call('/api/admin/audit/verify')).data;
+  check('F47 tampering (even with the trigger removed) is detected and the first broken entry is named', tampered.ok === false && tampered.brokenAt === 3, JSON.stringify(tampered));
+  trail.close();
 
   // /monde/ serving
   const worldDir = join(root, 'dist', 'monde');

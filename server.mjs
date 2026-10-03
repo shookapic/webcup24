@@ -7,6 +7,7 @@ import { dirname, extname, join, sep } from 'node:path';
 import { db } from './store.mjs';
 import { clearSession, createSession, currentUser, hashPassword, publicUser, verifyPassword } from './security.mjs';
 import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from './throttle.mjs';
+import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const apiUrl = 'https://24h.webcup.fr/wp-json/webcup/v1/requests';
@@ -274,27 +275,50 @@ function color(value) {
 
 // Messages go with the account; sessions cascade from users.
 function eraseUser(id) {
-  db.exec('BEGIN');
-  try {
+  tx(() => {
     db.prepare("UPDATE appointments SET citizen_id = NULL, reason = NULL, booked_at = NULL, status = 'open' WHERE citizen_id = ? AND status = 'booked'").run(id);
     db.prepare('DELETE FROM appointments WHERE citizen_id = ?').run(id);
     db.prepare('DELETE FROM messages WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
+  });
   presence.delete(id);
 }
 
+// F47: sensitive staff actions need a stated reason, kept in the audit trail.
+const reasonOf = (body, required) => (required || body.reason ? text(body.reason, 5, 200, 'Le motif') : null);
+
 // F34: staff manage citizens only; staff accounts are never reachable from these routes.
 function citizenTarget(id) {
-  const target = db.prepare('SELECT id, role FROM users WHERE id = ?').get(id);
+  const target = db.prepare('SELECT id, role, name, email FROM users WHERE id = ?').get(id);
   if (!target) fail(404, 'Compte introuvable.');
   if (target.role !== 'citizen') fail(403, 'Les comptes du personnel ne peuvent pas être modifiés ici.');
   return target;
 }
+
+// F45 / F46 places
+const placeKinds = ['service', 'hospital', 'emergency'];
+const placeDistricts = ['Centre-ville', 'Quartier nord', 'Quartier est', 'Quartier ouest', 'Quartier sud'];
+const slug = (value) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'lieu';
+function placeFields(body) {
+  if (!placeKinds.includes(body.kind)) fail(400, 'Type de lieu invalide.');
+  if (!placeDistricts.includes(body.district)) fail(400, 'Quartier invalide.');
+  if (!Object.hasOwn(stopDistricts, body.stop)) fail(400, 'Arrêt invalide.');
+  if (body.open_24h !== undefined && typeof body.open_24h !== 'boolean') fail(400, 'Le champ « ouvert 24 h sur 24 » est invalide.');
+  const phone = body.phone ? String(body.phone).trim() : null;
+  if (phone && !/^[0-9 +().-]{3,20}$/.test(phone)) fail(400, 'Le numéro de téléphone est invalide.');
+  let serviceId = null;
+  if (body.service_id !== undefined && body.service_id !== null && body.service_id !== '') {
+    serviceId = Number(body.service_id);
+    if (!Number.isInteger(serviceId) || !db.prepare('SELECT 1 FROM services WHERE id = ?').get(serviceId)) fail(400, 'Service inconnu.');
+  }
+  return {
+    kind: body.kind, name: text(body.name, 3, 100, 'Le nom'), name_en: body.name_en ? text(body.name_en, 3, 100, 'Le nom') : null,
+    district: body.district, stop: body.stop, address: text(body.address, 5, 240, 'L’adresse'), address_en: body.address_en ? text(body.address_en, 5, 240, 'L’adresse') : null,
+    hours: body.hours ? text(body.hours, 3, 120, 'Les horaires') : null, hours_en: body.hours_en ? text(body.hours_en, 3, 120, 'Les horaires') : null,
+    open_24h: body.open_24h ? 1 : 0, phone, service_id: serviceId,
+  };
+}
+const placeChanges = (before, after) => Object.fromEntries(Object.keys(after).filter((key) => before[key] !== after[key]).map((key) => [key, { avant: before[key] ?? null, apres: after[key] ?? null }]));
 
 function coordinate(value) {
   if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1e6) fail(400, 'Position invalide.');
@@ -334,7 +358,10 @@ async function route(request, response) {
       deletions.add(key);
       fail(403, 'Mot de passe incorrect.');
     }
-    eraseUser(user.id);
+    tx(() => {
+      audit(user, { category: 'account', action: 'account.self_delete', target: { type: 'user', id: user.id, label: citizenLabel(user) }, summary: 'a supprimé son propre compte (messages et signalements effacés)' });
+      eraseUser(user.id);
+    });
     deletions.reset(key);
     clearSession(request, response);
     return sendJson(response, 200, { ok: true });
@@ -409,6 +436,7 @@ async function route(request, response) {
     const earlierFailures = loginSucceeded(ip, address);
     clearSession(request, response);
     createSession(response, user.id);
+    if (user.role !== 'citizen') audit(user, { category: 'security', action: 'auth.staff_login', summary: 's’est connecté à l’espace de travail' });
     // The account owner is told about failed attempts made while they were away.
     return sendJson(response, 200, { user: publicUser(user), ...(earlierFailures >= 3 ? { notice: { failedAttempts: earlierFailures } } : {}) });
   }
@@ -440,29 +468,39 @@ async function route(request, response) {
     const actor = requireUser(request, ['agent', 'admin']);
     const id = Number(citizenMatch[1]);
     if (citizenMatch[2] && method === 'POST') {
-      citizenTarget(id);
+      const target = citizenTarget(id);
+      const reason = reasonOf(await readJson(request), true);
       // One-time password, shown once to the agent; every session of the citizen ends.
       const temporary = randomBytes(18).toString('base64url');
-      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(temporary), id);
-      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+      const hash = await hashPassword(temporary);
+      tx(() => {
+        db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id);
+        db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+        audit(actor, { category: 'account', action: 'account.reset_password', target: { type: 'user', id, label: citizenLabel(target) }, summary: 'a réinitialisé le mot de passe d’un habitant (sessions fermées)', reason });
+      });
       presence.delete(id);
-      console.log(`Staff ${actor.id} reset the password of citizen ${id}`);
       return sendJson(response, 200, { password: temporary });
     }
     if (!citizenMatch[2] && method === 'PATCH') {
-      citizenTarget(id);
+      const target = citizenTarget(id);
       const body = await readJson(request);
       if (typeof body.active !== 'boolean') fail(400, 'Statut invalide.');
-      db.prepare('UPDATE users SET active = ? WHERE id = ?').run(body.active ? 1 : 0, id);
-      if (!body.active) {
-        db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
-        presence.delete(id);
-      }
+      const reason = reasonOf(body, !body.active);
+      tx(() => {
+        db.prepare('UPDATE users SET active = ? WHERE id = ?').run(body.active ? 1 : 0, id);
+        if (!body.active) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+        audit(actor, { category: 'account', action: body.active ? 'account.reactivate' : 'account.deactivate', target: { type: 'user', id, label: citizenLabel(target) }, summary: body.active ? 'a réactivé le compte d’un habitant' : 'a désactivé le compte d’un habitant (sessions fermées)', reason });
+      });
+      if (!body.active) presence.delete(id);
       return sendJson(response, 200, { ok: true });
     }
     if (!citizenMatch[2] && method === 'DELETE') {
-      citizenTarget(id);
-      eraseUser(id);
+      const target = citizenTarget(id);
+      const reason = reasonOf(await readJson(request), true);
+      tx(() => {
+        audit(actor, { category: 'account', action: 'account.delete', target: { type: 'user', id, label: citizenLabel(target) }, summary: 'a supprimé le compte d’un habitant (messages et signalements effacés)', reason });
+        eraseUser(id);
+      });
       return sendJson(response, 200, { ok: true });
     }
   }
@@ -476,7 +514,7 @@ async function route(request, response) {
     return sendJson(response, 200, { services: db.prepare('SELECT * FROM services ORDER BY featured DESC, id').all().map(serviceView) });
   }
   if (path === '/api/services' && method === 'POST') {
-    requireUser(request, ['admin']);
+    const admin = requireUser(request, ['admin']);
     const body = await readJson(request);
     const title = text(body.title, 3, 100, 'Le titre');
     const description = text(body.description, 5, 180, 'La description');
@@ -486,25 +524,33 @@ async function route(request, response) {
     const titleEn = body.title_en ? text(body.title_en, 3, 100, 'Le titre') : null;
     const descriptionEn = body.description_en ? text(body.description_en, 5, 180, 'La description') : null;
     const detailsEn = body.details_en ? text(body.details_en, 10, 2000, 'Les informations') : null;
-    const result = db.prepare('INSERT INTO services (title, description, details, featured, title_en, description_en, details_en) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(title, description, details, body.featured ? 1 : 0, titleEn, descriptionEn, detailsEn);
+    const result = tx(() => {
+      const inserted = db.prepare('INSERT INTO services (title, description, details, featured, title_en, description_en, details_en) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(title, description, details, body.featured ? 1 : 0, titleEn, descriptionEn, detailsEn);
+      audit(admin, { category: 'service', action: 'service.create', target: { type: 'service', id: inserted.lastInsertRowid, label: title }, summary: `a publié le service « ${title} »`, details: { featured: Boolean(body.featured) } });
+      return inserted;
+    });
     return sendJson(response, 201, { id: Number(result.lastInsertRowid) });
   }
   const serviceMatch = /^\/api\/services\/(\d+)$/.exec(path);
   if (serviceMatch && method === 'PATCH') {
-    requireUser(request, ['admin']);
+    const admin = requireUser(request, ['admin']);
     const body = await readJson(request);
     if (typeof body.featured !== 'boolean') fail(400, 'La mise en avant est invalide.');
-    const result = db.prepare('UPDATE services SET featured = ? WHERE id = ?').run(body.featured ? 1 : 0, Number(serviceMatch[1]));
-    if (!result.changes) fail(404, 'Service introuvable.');
+    const service = db.prepare('SELECT id, title, featured FROM services WHERE id = ?').get(Number(serviceMatch[1]));
+    if (!service) fail(404, 'Service introuvable.');
+    tx(() => {
+      db.prepare('UPDATE services SET featured = ? WHERE id = ?').run(body.featured ? 1 : 0, service.id);
+      audit(admin, { category: 'service', action: 'service.feature', target: { type: 'service', id: service.id, label: service.title }, summary: body.featured ? `a mis « ${service.title} » à la une` : `a retiré « ${service.title} » de la une`, details: { avant: Boolean(service.featured), apres: body.featured } });
+    });
     return sendJson(response, 200, { ok: true });
   }
-
   const availabilityMatch = /^\/api\/services\/(\d+)\/availability$/.exec(path);
   if (availabilityMatch && method === 'PATCH') {
-    requireUser(request, ['agent', 'admin']);
+    const staff = requireUser(request, ['agent', 'admin']);
     const body = await readJson(request);
     if (!['available', 'unavailable'].includes(body.availability)) fail(400, 'Statut invalide.');
+    const service = db.prepare('SELECT id, title, availability, unavailable_reason, available_again FROM services WHERE id = ?').get(Number(availabilityMatch[1]));
     let fields = [null, null, null, null, null];
     if (body.availability === 'unavailable') {
       const now = cityNow();
@@ -515,9 +561,16 @@ async function route(request, response) {
         body.alternative ? text(body.alternative, 5, 200, 'L’alternative') : null, body.alternative_en ? text(body.alternative_en, 5, 200, 'L’alternative') : null,
       ];
     }
-    const result = db.prepare('UPDATE services SET availability = ?, unavailable_reason = ?, unavailable_reason_en = ?, available_again = ?, alternative = ?, alternative_en = ? WHERE id = ?')
-      .run(body.availability, ...fields, Number(availabilityMatch[1]));
-    if (!result.changes) fail(404, 'Service introuvable.');
+    if (!service) fail(404, 'Service introuvable.');
+    tx(() => {
+      db.prepare('UPDATE services SET availability = ?, unavailable_reason = ?, unavailable_reason_en = ?, available_again = ?, alternative = ?, alternative_en = ? WHERE id = ?')
+        .run(body.availability, ...fields, service.id);
+      audit(staff, {
+        category: 'service', action: body.availability === 'unavailable' ? 'service.unavailable' : 'service.available', target: { type: 'service', id: service.id, label: service.title },
+        summary: body.availability === 'unavailable' ? `a signalé « ${service.title} » indisponible` : `a rétabli « ${service.title} »`,
+        reason: fields[0], details: { avant: { availability: service.availability, motif: service.unavailable_reason, reprise: service.available_again }, apres: { availability: body.availability, reprise: fields[2], alternative: fields[3] } },
+      });
+    });
     return sendJson(response, 200, { ok: true });
   }
 
@@ -525,7 +578,7 @@ async function route(request, response) {
     return sendJson(response, 200, { announcements: db.prepare('SELECT * FROM announcements ORDER BY published_at DESC, id DESC').all() });
   }
   if (path === '/api/announcements' && method === 'POST') {
-    requireUser(request, ['admin']);
+    const admin = requireUser(request, ['admin']);
     const body = await readJson(request);
     const title = text(body.title, 3, 120, 'Le titre');
     const content = text(body.body, 10, 4000, 'Le contenu');
@@ -533,20 +586,28 @@ async function route(request, response) {
     const audience = body.audience ? text(body.audience, 2, 80, 'Le public concerné') : 'Tous';
     const titleEn = body.title_en ? text(body.title_en, 3, 120, 'Le titre') : null;
     const contentEn = body.body_en ? text(body.body_en, 10, 4000, 'Le contenu') : null;
-    const result = db.prepare('INSERT INTO announcements (title, body, audience, urgent, title_en, body_en) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(title, content, audience, body.urgent ? 1 : 0, titleEn, contentEn);
+    const result = tx(() => {
+      const inserted = db.prepare('INSERT INTO announcements (title, body, audience, urgent, title_en, body_en) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(title, content, audience, body.urgent ? 1 : 0, titleEn, contentEn);
+      audit(admin, { category: 'announcement', action: body.urgent ? 'announcement.alert' : 'announcement.create', target: { type: 'announcement', id: inserted.lastInsertRowid, label: title }, summary: body.urgent ? `a diffusé l’alerte « ${title} »` : `a publié l’actualité « ${title} »`, details: { public: audience, urgent: Boolean(body.urgent) } });
+      return inserted;
+    });
     return sendJson(response, 201, { id: Number(result.lastInsertRowid) });
   }
   const announcementMatch = /^\/api\/announcements\/(\d+)$/.exec(path);
   if (announcementMatch && method === 'PATCH') {
-    requireUser(request, ['admin']);
+    const admin = requireUser(request, ['admin']);
     const body = await readJson(request);
     if (typeof body.urgent !== 'boolean') fail(400, 'Le niveau d’urgence est invalide.');
-    const result = db.prepare('UPDATE announcements SET urgent = ? WHERE id = ?').run(body.urgent ? 1 : 0, Number(announcementMatch[1]));
-    if (!result.changes) fail(404, 'Actualité introuvable.');
+    const reason = reasonOf(body, !body.urgent);
+    const item = db.prepare('SELECT id, title, urgent FROM announcements WHERE id = ?').get(Number(announcementMatch[1]));
+    if (!item) fail(404, 'Actualité introuvable.');
+    tx(() => {
+      db.prepare('UPDATE announcements SET urgent = ? WHERE id = ?').run(body.urgent ? 1 : 0, item.id);
+      audit(admin, { category: 'announcement', action: body.urgent ? 'announcement.raise' : 'announcement.lift', target: { type: 'announcement', id: item.id, label: item.title }, summary: body.urgent ? `a remis « ${item.title} » en alerte` : `a levé l’alerte « ${item.title} »`, reason, details: { avant: { urgent: Boolean(item.urgent) }, apres: { urgent: body.urgent } } });
+    });
     return sendJson(response, 200, { ok: true });
   }
-
   if (path === '/api/transports' && method === 'GET') {
     const now = cityMinutes();
     const statuses = new Map(db.prepare('SELECT * FROM transport_status').all().map((row) => [row.code, row]));
@@ -562,16 +623,19 @@ async function route(request, response) {
   }
   const transportMatch = /^\/api\/transports\/(T\d)$/.exec(path);
   if (transportMatch && method === 'PATCH') {
-    requireUser(request, ['agent', 'admin']);
+    const staff = requireUser(request, ['agent', 'admin']);
     if (!transportLines.some((line) => line.code === transportMatch[1])) fail(404, 'Ligne introuvable.');
     const body = await readJson(request);
     if (!['normal', 'perturbé'].includes(body.status)) fail(400, 'Statut invalide.');
     const message = body.status === 'perturbé' || body.message ? text(body.message, 5, 200, 'Le message') : null;
-    db.prepare('INSERT INTO transport_status (code, status, message) VALUES (?, ?, ?) ON CONFLICT(code) DO UPDATE SET status = excluded.status, message = excluded.message')
-      .run(transportMatch[1], body.status, message);
+    const before = db.prepare('SELECT status, message FROM transport_status WHERE code = ?').get(transportMatch[1]);
+    tx(() => {
+      db.prepare('INSERT INTO transport_status (code, status, message) VALUES (?, ?, ?) ON CONFLICT(code) DO UPDATE SET status = excluded.status, message = excluded.message')
+        .run(transportMatch[1], body.status, message);
+      audit(staff, { category: 'transport', action: 'transport.status', target: { type: 'transport', id: transportMatch[1], label: `Ligne ${transportMatch[1]}` }, summary: body.status === 'perturbé' ? `a signalé la ligne ${transportMatch[1]} perturbée` : `a rétabli la ligne ${transportMatch[1]}`, reason: body.status === 'perturbé' ? message : null, details: { avant: before || { status: 'normal', message: null }, apres: { status: body.status, message } } });
+    });
     return sendJson(response, 200, { ok: true });
   }
-
   // F39 appointments + F40 reminders (calendar file). Slots are published by staff, booked by citizens.
   if (path === '/api/appointments' && method === 'POST') {
     const staff = requireUser(request, ['agent', 'admin']);
@@ -580,7 +644,7 @@ async function route(request, response) {
     const first = localDateTime(`${body.date}T${body.start}`, 'La date ou l’heure');
     const count = Number(body.count ?? 1);
     const duration = Number(body.duration ?? 20);
-    if (!Number.isInteger(count) || count < 1 || count > 12) fail(400, 'Le nombre de horaires doit être compris entre 1 et 12.');
+    if (!Number.isInteger(count) || count < 1 || count > 12) fail(400, 'Le nombre d’horaires doit être compris entre 1 et 12.');
     if (!Number.isInteger(duration) || duration < 10 || duration > 60) fail(400, 'La durée doit être comprise entre 10 et 60 minutes.');
     const now = cityNow();
     if (first <= now) fail(400, 'Le premier horaire doit être dans le futur.');
@@ -590,15 +654,11 @@ async function route(request, response) {
     const instructions = body.instructions ? text(body.instructions, 10, 500, 'Les consignes') : defaultInstructions;
     const insert = db.prepare('INSERT OR IGNORE INTO appointments (agent_id, starts_at, duration_min, location, instructions) VALUES (?, ?, ?, ?, ?)');
     let created = 0;
-    db.exec('BEGIN');
-    try {
+    tx(() => {
       for (let i = 0; i < count; i += 1) created += Number(insert.run(staff.id, addMinutes(first, i * duration), duration, location, instructions).changes);
-      db.exec('COMMIT');
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
-    if (!created) fail(409, 'Ces horaires existent déjà.');
+      if (!created) fail(409, 'Ces horaires existent déjà.');
+      audit(staff, { category: 'appointment', action: 'appointment.slots.create', target: { type: 'appointment', label: `${first.replace('T', ' ')} (${count} × ${duration} min)` }, summary: `a publié ${created} horaire${created > 1 ? 's' : ''} de rendez-vous`, details: { debut: first, nombre: created, duree_min: duration, lieu: location } });
+    });
     return sendJson(response, 201, { created });
   }
   if (path === '/api/appointments/staff' && method === 'GET') {
@@ -636,7 +696,11 @@ async function route(request, response) {
       const end = addMinutes(row.starts_at, row.duration_min);
       if (mine.some((other) => other.starts_at < end && addMinutes(other.starts_at, other.duration_min) > row.starts_at)) fail(409, 'Vous avez déjà un rendez-vous à ce moment-là.');
       // Single statement: of two people clicking the same slot, exactly one changes a row.
-      const result = db.prepare("UPDATE appointments SET citizen_id = ?, reason = ?, status = 'booked', booked_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open' AND starts_at > ?").run(user.id, reason, id, now);
+      const result = tx(() => {
+        const claimed = db.prepare("UPDATE appointments SET citizen_id = ?, reason = ?, status = 'booked', booked_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open' AND starts_at > ?").run(user.id, reason, id, now);
+        if (claimed.changes) audit(user, { category: 'appointment', action: 'appointment.book', target: { type: 'appointment', id, label: row.starts_at.replace('T', ' ') }, summary: 'a réservé un horaire de rendez-vous', details: { debut: row.starts_at, agent: row.agent_name, lieu: row.location } });
+        return claimed;
+      });
       if (!result.changes) fail(409, taken);
       return sendJson(response, 201, { appointment: appointmentView(db.prepare(`${appointmentSelect} WHERE a.id = ?`).get(id), now) });
     }
@@ -656,12 +720,22 @@ async function route(request, response) {
         if (row.citizen_id !== user.id || row.status !== 'booked') fail(404, 'Rendez-vous introuvable.');
         if (row.starts_at <= now) fail(409, 'Ce rendez-vous est déjà passé.');
         // The slot goes back on offer for someone else.
-        db.prepare("UPDATE appointments SET citizen_id = NULL, reason = NULL, booked_at = NULL, status = 'open' WHERE id = ?").run(id);
+        tx(() => {
+          db.prepare("UPDATE appointments SET citizen_id = NULL, reason = NULL, booked_at = NULL, status = 'open' WHERE id = ?").run(id);
+          audit(user, { category: 'appointment', action: 'appointment.cancel_own', target: { type: 'appointment', id, label: row.starts_at.replace('T', ' ') }, summary: 'a annulé son rendez-vous (horaire libéré)', details: { debut: row.starts_at } });
+        });
       } else if (row.status === 'booked' && row.starts_at > now) {
-        // The citizen keeps seeing it, marked cancelled by the city, instead of the slot silently vanishing.
-        db.prepare("UPDATE appointments SET status = 'cancelled' WHERE id = ?").run(id);
+        // The citizen keeps seeing it, marked cancelled by the city, instead of the slot silently vanishing. A reason is required.
+        const reason = reasonOf(await readJson(request), true);
+        tx(() => {
+          db.prepare("UPDATE appointments SET status = 'cancelled' WHERE id = ?").run(id);
+          audit(user, { category: 'appointment', action: 'appointment.cancel_by_staff', target: { type: 'appointment', id, label: row.starts_at.replace('T', ' ') }, summary: `a annulé le rendez-vous de ${citizenLabel({ id: row.citizen_id, name: row.citizen_name, email: row.citizen_email })}`, reason, details: { debut: row.starts_at, agent: row.agent_name } });
+        });
       } else {
-        db.prepare('DELETE FROM appointments WHERE id = ?').run(id);
+        tx(() => {
+          db.prepare('DELETE FROM appointments WHERE id = ?').run(id);
+          audit(user, { category: 'appointment', action: 'appointment.slot.remove', target: { type: 'appointment', id, label: row.starts_at.replace('T', ' ') }, summary: 'a retiré un horaire de rendez-vous', details: { debut: row.starts_at, etat: row.status } });
+        });
       }
       return sendJson(response, 200, { ok: true });
     }
@@ -693,12 +767,85 @@ async function route(request, response) {
   }
   const messageMatch = /^\/api\/messages\/(\d+)$/.exec(path);
   if (messageMatch && method === 'PATCH') {
-    requireUser(request, ['agent', 'admin']);
+    const staff = requireUser(request, ['agent', 'admin']);
     const body = await readJson(request);
     if (!['new', 'in_progress', 'resolved'].includes(body.status)) fail(400, 'Statut invalide.');
-    const result = db.prepare('UPDATE messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(body.status, Number(messageMatch[1]));
-    if (!result.changes) fail(404, 'Message introuvable.');
+    const item = db.prepare('SELECT id, subject, status FROM messages WHERE id = ?').get(Number(messageMatch[1]));
+    if (!item) fail(404, 'Message introuvable.');
+    const names = { new: 'à traiter', in_progress: 'en cours', resolved: 'résolu' };
+    tx(() => {
+      db.prepare('UPDATE messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(body.status, item.id);
+      audit(staff, { category: 'message', action: 'message.status', target: { type: 'message', id: item.id, label: item.subject }, summary: `a passé le message « ${item.subject} » de « ${names[item.status]} » à « ${names[body.status]} »`, details: { avant: item.status, apres: body.status } });
+    });
     return sendJson(response, 200, { ok: true });
+  }
+
+  // F45 / F46: places (public read, admin write). F47 / F48: the audit trail (staff read, nobody writes through the API).
+  if (path === '/api/places' && method === 'GET') {
+    const params = new URL(request.url, 'http://localhost').searchParams;
+    const kind = params.get('kind');
+    const where = [];
+    const args = [];
+    if (kind === 'care') where.push("kind IN ('hospital', 'emergency')");
+    else if (placeKinds.includes(kind)) { where.push('kind = ?'); args.push(kind); }
+    if (placeDistricts.includes(params.get('district'))) { where.push('district = ?'); args.push(params.get('district')); }
+    const rows = db.prepare(`SELECT * FROM places ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY CASE kind WHEN 'emergency' THEN 0 WHEN 'hospital' THEN 1 ELSE 2 END, name COLLATE NOCASE`).all(...args);
+    return sendJson(response, 200, { places: rows });
+  }
+  if (path === '/api/places' && method === 'POST') {
+    const admin = requireUser(request, ['admin']);
+    const body = await readJson(request);
+    const fields = placeFields(body);
+    let code = body.code ? slug(String(body.code)) : slug(fields.name);
+    for (let n = 2; db.prepare('SELECT 1 FROM places WHERE code = ?').get(code); n += 1) code = `${slug(fields.name)}-${n}`;
+    const created = tx(() => {
+      const inserted = db.prepare('INSERT INTO places (code, kind, name, name_en, district, stop, address, address_en, hours, hours_en, open_24h, phone, service_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(code, fields.kind, fields.name, fields.name_en, fields.district, fields.stop, fields.address, fields.address_en, fields.hours, fields.hours_en, fields.open_24h, fields.phone, fields.service_id);
+      audit(admin, { category: 'place', action: 'place.create', target: { type: 'place', id: inserted.lastInsertRowid, label: fields.name }, summary: `a ajouté le lieu « ${fields.name} »`, details: { type: fields.kind, quartier: fields.district, arret: fields.stop } });
+      return inserted;
+    });
+    return sendJson(response, 201, { id: Number(created.lastInsertRowid), code });
+  }
+  const placeMatch = /^\/api\/places\/(\d+)$/.exec(path);
+  if (placeMatch && ['PATCH', 'DELETE'].includes(method)) {
+    const admin = requireUser(request, ['admin']);
+    const id = Number(placeMatch[1]);
+    const before = db.prepare('SELECT * FROM places WHERE id = ?').get(id);
+    if (!before) fail(404, 'Lieu introuvable.');
+    const body = await readJson(request);
+    if (method === 'PATCH') {
+      const fields = placeFields(body);
+      const changes = placeChanges(before, fields);
+      tx(() => {
+        db.prepare('UPDATE places SET kind = ?, name = ?, name_en = ?, district = ?, stop = ?, address = ?, address_en = ?, hours = ?, hours_en = ?, open_24h = ?, phone = ?, service_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(fields.kind, fields.name, fields.name_en, fields.district, fields.stop, fields.address, fields.address_en, fields.hours, fields.hours_en, fields.open_24h, fields.phone, fields.service_id, id);
+        audit(admin, { category: 'place', action: 'place.update', target: { type: 'place', id, label: fields.name }, summary: Object.keys(changes).length ? `a modifié le lieu « ${fields.name} » (${Object.keys(changes).join(', ')})` : `a ré-enregistré le lieu « ${fields.name} » sans changement`, details: changes });
+      });
+      return sendJson(response, 200, { ok: true });
+    }
+    const reason = reasonOf(body, true);
+    tx(() => {
+      db.prepare('DELETE FROM places WHERE id = ?').run(id);
+      audit(admin, { category: 'place', action: 'place.delete', target: { type: 'place', id, label: before.name }, summary: `a supprimé le lieu « ${before.name} »`, reason, details: { type: before.kind, quartier: before.district } });
+    });
+    return sendJson(response, 200, { ok: true });
+  }
+
+  if (path === '/api/admin/audit' && method === 'GET') {
+    requireUser(request, ['agent', 'admin']);
+    const params = Object.fromEntries(new URL(request.url, 'http://localhost').searchParams);
+    if (params.format === 'csv') {
+      const { entries } = listAudit({ ...params, limit: 5000 }, { limitMax: 5000 });
+      response.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="journal-des-actions.csv"', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+      return response.end('﻿' + auditCsv(entries));
+    }
+    const page = listAudit(params);
+    return sendJson(response, 200, { ...page, ...(params.before ? {} : { facets: auditFacets() }), now: cityNow() });
+  }
+  if (path === '/api/admin/audit/verify' && method === 'GET') {
+    requireUser(request, ['agent', 'admin']);
+    return sendJson(response, 200, verifyChain());
   }
 
   if (path === '/api/requests' && method === 'GET') {
