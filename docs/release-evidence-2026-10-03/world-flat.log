@@ -1,0 +1,20 @@
+mode: flat
+PASS  npm run build succeeds
+PASS  production /monde/ renders the A HUD (WorldHud)
+PASS  urgent alert raises the phone (role=alert takeover with full text)
+PASS  focus is inside the dialog when it is raised
+PASS  acknowledging an alert-raised phone puts it away
+PASS  acknowledged IDs stored per user (not the shared legacy key)
+PASS  F38 in production: the outage reaches the phone (reason, return time, alternative)
+PASS  F36 in production: lines, departures, nearest stop from the player position, disruption
+PASS  HUD shows the district of the nearest stop
+PASS  Escape closes the manual phone
+PASS  axe on the HUD in production: no violations
+PASS  app and physics chunks are served gzip with immutable caching
+PASS  no 4xx/5xx for world assets
+PASS  /monde/ CSP is the contract one and the page ran under it with no violations
+NOTE  4 presence POST(s) aborted client-side under software rendering (not a server error)
+PASS  no page errors / failed requests / console errors in production
+
+all production world checks passed
+screenshots: C:\Users\SHOOKA~1\AppData\Local\Temp/final-logs/shots

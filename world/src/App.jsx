@@ -11,7 +11,9 @@ import { AlertAnnouncer, PhoneFallback, useAnnouncements, useServices, useTransp
 import { WorldHud } from './ui/WorldHud.jsx';
 import { getLocale, t } from './ui/i18n.js';
 import { defaultAvatar } from './Avatar.jsx';
-import { nearestStop, playerPos } from './layout.js';
+import { SPAWN, nearestStop, playerPos } from './layout.js';
+import { Sun } from './Sun.jsx';
+import { PhoneHost, PhoneRig } from './PhoneRig.jsx';
 import { api } from './api.js';
 import { debug } from './debug.js';
 
@@ -19,6 +21,8 @@ const PlayableCity = lazy(() => import('./PlayableCity.jsx'));
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const PHONE_MS = reducedMotion ? 0 : 300; // raise / lower time; the PhoneRig animates over this
+const flatQuery = new URLSearchParams(location.search).has('flatphone');
+const narrow = matchMedia('(max-width: 720px)');
 
 // ?debug&fps=N: frames are driven by window.__tn.run(seconds, input) at exactly N Hz.
 function SimDriver() {
@@ -54,29 +58,40 @@ export function App() {
   const viewBeforePhone = useRef('tps'); // snapshot once per phone session
   const phoneRef = useRef(phone);
   phoneRef.current = phone;
-  const timers = useRef([]);
+  const timer = useRef(0); // the single pending phone transition; every new transition cancels the previous one
 
   const { announcements, unseen: pending, status, error, lastUpdated, acknowledge, retry } = useAnnouncements({ userId: user?.id, ready: user !== undefined });
   const phoneUp = phone.phase !== 'closed';
+  // Physical phone on desktop with a playable avatar; flat accessible dialog on narrow screens, for guests or with ?flatphone.
+  const [isNarrow, setNarrow] = useState(narrow.matches);
+  useEffect(() => { const on = (e) => setNarrow(e.matches); narrow.addEventListener('change', on); return () => narrow.removeEventListener('change', on); }, []);
+  const physical = Boolean(user) && !isNarrow && !flatQuery;
   const services = useServices(phoneUp);
   const transports = useTransports(true);
 
-  const later = (fn) => (PHONE_MS ? timers.current.push(setTimeout(fn, PHONE_MS)) : fn());
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const later = (fn) => {
+    clearTimeout(timer.current);
+    if (PHONE_MS) timer.current = setTimeout(fn, PHONE_MS);
+    else fn();
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   const openPhone = useCallback((source) => {
     const { phase } = phoneRef.current;
     if (phase === 'opening' || phase === 'open') return;
+    // Snapshot only when coming from fully closed: reopening mid-lowering keeps the original view to restore.
     if (phase === 'closed') setView((current) => { viewBeforePhone.current = current; return 'fps'; });
-    setPhone({ phase: 'opening', source });
+    setPhone((p) => ({ phase: 'opening', source: phase === 'closing' ? p.source : source }));
+    phoneRef.current = { ...phoneRef.current, phase: 'opening' };
     later(() => setPhone((p) => (p.phase === 'opening' ? { ...p, phase: 'open' } : p)));
   }, []);
 
   const closePhone = useCallback(() => {
     if (!['opening', 'open'].includes(phoneRef.current.phase)) return;
     setPhone((p) => ({ ...p, phase: 'closing' }));
+    phoneRef.current = { ...phoneRef.current, phase: 'closing' };
     later(() => {
-      setPhone((p) => (p.phase === 'closing' ? { ...p, phase: 'closed' } : p));
+      setPhone((p) => ({ ...p, phase: 'closed' }));
       setView(viewBeforePhone.current);
       setPage('home');
     });
@@ -124,6 +139,7 @@ export function App() {
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable], dialog')) return;
       if (event.code === 'KeyV') toggleView();
       if (event.code === 'KeyT') togglePhone();
+      if (event.code === 'Escape' && phoneRef.current.phase === 'open' && !pendingRef.current.length) closePhone(); // focus may have fallen to the page after a click
     };
     addEventListener('keydown', keys);
     return () => removeEventListener('keydown', keys);
@@ -135,28 +151,29 @@ export function App() {
     const timer = setInterval(() => {
       const next = nearestStop(playerPos);
       setStop((current) => (current === next ? current : next));
-      if (Math.hypot(playerPos.x, playerPos.z - 8) > 4) setHelp(false);
+      if (Math.hypot(playerPos.x - SPAWN[0], playerPos.z - SPAWN[2]) > 4) setHelp(false);
     }, 500);
     return () => clearInterval(timer);
   }, [user]);
 
   return (
     <>
-      <Canvas aria-hidden="true" dpr={[1, 1.5]} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
-        <fog attach="fog" args={['#5a2238', 70, 230]} />
-        <hemisphereLight args={['#ffb38a', '#3a1424', 0.6]} />
-        <directionalLight position={[60, 40, 50]} intensity={2.2} color="#ffd9b8" />
+      <Canvas aria-hidden="true" shadows dpr={[1, 1.5]} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
+        <fog attach="fog" args={['#d3b295', 90, 300]} />
+        <hemisphereLight args={['#b9d0e0', '#8a6c58', 1.6]} />
+        <Sun />
         {debug.simFps > 0 && <SimDriver />}
         <Sky reducedMotion={reducedMotion} />
         <Ground />
         {!debug.floorOnly && <Rocks />}
         {!debug.floorOnly && <Npcs reducedMotion={reducedMotion} />}
         {user ? (
-          <Suspense fallback={<City />}>
+          <Suspense fallback={<City reducedMotion={reducedMotion} />}>
             <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} inputEnabled={!editing && !phoneUp} />
           </Suspense>
-        ) : <City />}
+        ) : <City reducedMotion={reducedMotion} />}
         <LabelProjector />
+        {physical && phoneUp && <PhoneRig phase={phone.phase} reducedMotion={reducedMotion} outfit={avatar.outfit} />}
         {/* Glow materials use toneMapped={false} and intensity > 1, so only they cross the bloom threshold. */}
         {!debug.simFps && <EffectComposer multisampling={4}>
           <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
@@ -184,23 +201,27 @@ export function App() {
         </div>
       )}
       <AlertAnnouncer alerts={pending} locale={locale} active={editing && !phoneUp} />
-      <PhoneFallback
-        open={phoneUp}
-        page={page}
-        onPageChange={setPage}
-        announcements={announcements}
-        pendingAlerts={phone.phase === 'closing' ? [] : pending}
-        services={services}
-        transports={transports}
-        nearestStop={stop?.name}
-        status={status}
-        error={error}
-        lastUpdated={lastUpdated}
-        onRetry={retry}
-        onAcknowledge={acknowledgeAlerts}
-        onClose={closePhone}
-        locale={locale}
-      />
+      {(() => {
+        const screenProps = {
+          page,
+          onPageChange: setPage,
+          announcements,
+          pendingAlerts: phone.phase === 'closing' ? [] : pending,
+          services,
+          transports,
+          nearestStop: stop?.name,
+          status,
+          error,
+          lastUpdated,
+          onRetry: retry,
+          onAcknowledge: acknowledgeAlerts,
+          onClose: closePhone,
+          locale,
+        };
+        return physical
+          ? phoneUp && <PhoneHost screenProps={{ ...screenProps, dialogLabel: t(locale, 'phone.label') }} />
+          : <PhoneFallback open={phoneUp} {...screenProps} />;
+      })()}
       {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} locale={locale} />}
       {user && help && <p className="controls-help">{t(locale, 'help.controls')}</p>}
     </>

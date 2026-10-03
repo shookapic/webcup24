@@ -14,8 +14,9 @@ const skyShader = {
     varying vec3 vDir;
     void main() {
       float h = clamp(vDir.y, 0.0, 1.0);
-      vec3 color = mix(vec3(1.0, 0.45, 0.27), vec3(0.45, 0.12, 0.32), smoothstep(0.0, 0.15, h));
-      color = mix(color, vec3(0.04, 0.02, 0.08), smoothstep(0.1, 0.6, h));
+      // pale amber horizon, teal-blue dome, deep blue zenith (reserves saturated warm colours for alerts)
+      vec3 color = mix(vec3(0.83, 0.70, 0.58), vec3(0.34, 0.52, 0.62), smoothstep(0.0, 0.22, h));
+      color = mix(color, vec3(0.07, 0.12, 0.24), smoothstep(0.15, 0.85, h));
       // Colours are picked in sRGB; convert to linear so composer/output conversion lands on them.
       gl_FragColor = vec4(pow(color, vec3(2.2)), 1.0);
       #include <colorspace_fragment>

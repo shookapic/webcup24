@@ -1,16 +1,8 @@
 import { useFrame } from '@react-three/fiber';
 import { Vector3 } from 'three';
-import { CURVE } from './curve.js';
+import { districts } from './layout.js';
 
-// Own label overlay: drei <Html> drops its first instance under React 19.
-export const districts = [
-  { name: 'Mairie', position: [0, 28, -22] },
-  { name: 'Santé', position: [32, 11, -6] },
-  { name: 'Quartier sud', position: [0, 8, 38] },
-  { name: 'Marché', position: [-32, 7, -2] },
-  { name: 'Habitat', position: [-24, 15, -40] },
-];
-
+// Own label overlay: drei <Html> drops its first instance under React 19. Positions come from layout.districts.
 const elements = [];
 const point = new Vector3();
 
@@ -20,9 +12,7 @@ export function LabelProjector() {
     districts.forEach(({ position: [x, y, z] }, i) => {
       const el = elements[i];
       if (!el) return;
-      const dx = x - camera.position.x;
-      const dz = z - camera.position.z;
-      point.set(x, y - (dx * dx + dz * dz) * CURVE, z).project(camera);
+      point.set(x, y, z).project(camera); // the playable area is flat, labels need no bending
       el.hidden = point.z > 1;
       el.style.transform = `translate(-50%, -50%) translate(${(point.x + 1) * size.width / 2}px, ${(1 - point.y) * size.height / 2}px)`;
     });

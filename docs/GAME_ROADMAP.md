@@ -2,7 +2,11 @@
 
 Status: implementation handoff, 2026-10-03. This describes required future behavior, not completed features. Read `CODE_REVIEW.md` for evidence and `../CLAUDE.md` for exclusive ownership and integration contracts.
 
+**Coordination update — 2026-10-03:** [PM_STATUS.md](PM_STATUS.md) records A's `2fd14e4`, B's `8e97b3e`, remaining integration gates and concrete next instructions. The original handoff is committed in `1afe494`. The authorized live feed now confirms 36 visible requests through Wave 5; preserve F37 login protection, F38 service availability, F39 appointments and F40 reminders in addition to the scope below. Session A owns these four requests; B consumes any required additive service metadata. See [the official request snapshot](CONTEST_REQUESTS_2026-10-03.md). Future-wave completeness and production completion remain unverified. B0's manual variable-step physics is a provisional deviation from §3's fixed-step target requiring hitch/irregular-frame evidence; do not discard the measured fix merely to restore the original plan.
+
 ## 1. Product and feature preservation
+
+**Live checkpoint — 2026-10-03 15:30 Europe/Paris:** the authorized watcher now lists 42 requests through Wave 6. A's owned `FEATURE_MATRIX.md` has the official inventory. Preserve D13 plain wording, D20 inclusive use, F41 keyboard access, F42 accessible forms/errors, F43 colour distinction and F44 zoom/reflow; A is assigned to audit and close these gaps now, with B supporting any world input/DOM-host issue. Wave 5 is committed on `sessionA-work` and locally tested according to A's QA report, but is not on the inspected main tip `b0aaa09`. Baseline A/B phone/HUD and B0 input/camera integration are already on that main tip. B's authored plaza/rigged character work is in progress and uncommitted; physical phone/F36 world/release acceptance remain open. Session reports are evidence to review, not production acceptance.
 
 Create a compact, welcoming extraterrestrial colony: natural walking, recognizable districts, animated inhabitants, municipal services and a believable handheld phone. First minute: clear loading, colonist customization, arrival in a composed plaza, walking to a service, reading an alert, putting away the phone and continuing.
 
@@ -147,3 +151,9 @@ Reserve final event hour for production smoke, fixes and accurate declarations. 
 Wave 4 smoke: verify tram movement/stations and both transport lists; first-use tips/dismissal; delete a dedicated test citizen with password confirmation; staff deactivate/reactivate/reset/delete a different test citizen and verify session revocation and staff-account protection. Never use a real participant account for destructive test fixtures.
 
 Deliver `FEATURE_MATRIX.md`, `ASSETS.md`, `QA_A.md`, `QA_B.md` with evidence paths and explicit pass/fail/unverified results. Movement, civic flows, alert delivery, authentication and production asset-loading failures block a ready declaration.
+
+## Wave 7 follow-up — 2026-10-03 16:25
+
+The authorized watcher now lists 46 requests. Preserve F45 physical-service locations, F46 hospital/emergency locations, F47 retained action traceability/justification and F48 staff access to who changed what. Exact official text is in `CONTEST_REQUESTS_2026-10-03.md`; acceptance is pending, not implied by the presence of districts or existing message history.
+
+A owns real location information in API/portal/phone plus server-recorded administrative audit/history and the staff view. B supports location markers and the nearby service prompt from section 6 after A supplies a documented additive data contract. Derive actor identity/authorization server-side, preserve stored data and document retention/deletion choices. Do not treat caller-supplied actor labels as an audit trail. Keep these requests as a separate milestone after the already-authorized combined user test release; A's quota is temporarily exhausted until 16:50, and the delivery is queued.

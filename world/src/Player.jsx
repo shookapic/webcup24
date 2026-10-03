@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { useRapier } from '@react-three/rapier';
 import { Ecctrl } from 'ecctrl';
 import { EcctrlCameraControls } from 'ecctrl/camera';
-import { Avatar } from './Avatar.jsx';
+import { Colonist, FEET_BELOW_BODY } from './Colonist.jsx';
 import { Multiplayer } from './Multiplayer.jsx';
 import { debug, record } from './debug.js';
 import { useMovementInput } from './input.js';
@@ -28,9 +28,9 @@ function FrameStep({ after }) {
   });
   return null;
 }
-const distance = { tps: 7, fps: 0.01 };
+const distance = { tps: 9, fps: 0.01 };
 // Wheel zoom stays inside these; FPS is pinned so it can never end up half zoomed out.
-const zoomRange = { tps: [2.5, 14], fps: [0.01, 0.01] };
+const zoomRange = { tps: [3, 16], fps: [0.01, 0.01] };
 
 export function Player({ avatar, view, reducedMotion, inputEnabled }) {
   const ecctrl = useRef();
@@ -46,6 +46,11 @@ export function Player({ avatar, view, reducedMotion, inputEnabled }) {
     c.dollyTo(distance[view], !reducedMotion);
     c.colliderMeshes = cameraBlockers; // camera pulls in instead of passing through walls
   }, [view, reducedMotion]);
+
+  const gait = () => {
+    const e = ecctrl.current;
+    return e ? { speed: Math.hypot(e.currLinVel.x, e.currLinVel.z), air: !e.isOnGround } : null;
+  };
 
   const follow = ({ camera, clock }) => {
     if (!ecctrl.current?.body || !controls.current) return;
@@ -84,6 +89,7 @@ export function Player({ avatar, view, reducedMotion, inputEnabled }) {
       <Ecctrl
         ref={ecctrl}
         position={SPAWN}
+        rotation={[0, Math.PI, 0]}
         capsuleHalfHeight={0.4}
         capsuleRadius={0.35}
         maxWalkVel={4}
@@ -99,7 +105,7 @@ export function Player({ avatar, view, reducedMotion, inputEnabled }) {
         autoBalance={false}
       >
         <group ref={avatarGroup}>
-          <Avatar avatar={avatar} visible={view !== 'fps'} />
+          <Colonist avatar={avatar} visible={view !== 'fps'} reducedMotion={reducedMotion} getState={gait} position-y={-FEET_BELOW_BODY} />
         </group>
       </Ecctrl>
       <FrameStep after={follow} />

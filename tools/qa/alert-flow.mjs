@@ -24,12 +24,12 @@ async function session(withAvatar) {
 }
 const run = (page, s) => page.evaluate((s) => window.__tn.run(s), s);
 const ready = (page) => page.evaluate(async () => { const tn = window.__tn; for (let i = 0; i < 40 && !tn.ecctrl; i++) await tn.run(0.5); await tn.run(1); });
-const dialogOpen = (page) => page.evaluate(() => Boolean(document.querySelector('.phone-sheet')));
+const dialogOpen = (page) => page.evaluate(() => Boolean(document.querySelector('.phone-sheet, .phone-host')));
 const camDist = (page) => page.evaluate(() => window.__tn.controls.distance);
 
 // A: avatar saved, urgent alert unseen -> phone raises on its own, FPS, input locked
 let page = await session(true);
-await ready(page); await page.waitForSelector('.phone-sheet', { timeout: 20000 }); await settle(); await run(page, 1.5);
+await ready(page); await page.waitForSelector('.phone-sheet, .phone-host', { timeout: 20000 }); await settle(); await run(page, 1.5);
 check('alert raises phone', await dialogOpen(page));
 check('alert has acknowledge button and role=alert', await page.evaluate(() => Boolean(document.querySelector('.phone-ack') && document.querySelector('[role=alert] .phone-alert'))));
 check('alert view is first person', (await camDist(page)) < 0.05, { distance: await camDist(page) });
@@ -43,14 +43,14 @@ await page.keyboard.press('KeyT'); await settle();
 check('T cannot dismiss an unacknowledged alert', await dialogOpen(page));
 await page.click('.phone-ack'); await settle(); await run(page, 1.5);
 check('acknowledge closes the alert-raised phone', !(await dialogOpen(page)));
-check('previous (third person) view restored', (await camDist(page)) > 5, { distance: (await camDist(page)).toFixed(2) });
+check('previous (third person) view restored', (await camDist(page)) > 8, { distance: (await camDist(page)).toFixed(2) });
 await page.reload({ waitUntil: 'networkidle0' }); await page.waitForFunction(() => window.__tn && window.__tn.run); await ready(page); await settle();
 check('acknowledged alert does not return after reload', !(await dialogOpen(page)));
 // manual open stays open after acknowledgement handled elsewhere: T opens, Escape/T closes, view restored
 await page.keyboard.press('KeyT'); await settle(); await run(page, 1);
 check('manual T opens phone', await dialogOpen(page));
 await page.keyboard.press('Escape'); await settle(); await run(page, 1.5);
-check('Escape closes manual phone, view restored', !(await dialogOpen(page)) && (await camDist(page)) > 5);
+check('Escape closes manual phone, view restored', !(await dialogOpen(page)) && (await camDist(page)) > 8);
 await page.close();
 
 // B: no avatar yet -> editor opens; alert must wait for the editor to close
@@ -59,7 +59,7 @@ await ready(page); await settle();
 check('editor open, phone not raised', !(await dialogOpen(page)) && (await page.evaluate(() => document.querySelector('dialog.avatar-editor')?.open)));
 check('alert announced in HTML while editing', await page.evaluate(() => Boolean(document.querySelector('.sr-only[role=alert]')?.textContent.length)));
 await page.evaluate(() => document.querySelector('dialog.avatar-editor form').requestSubmit());
-await page.waitForSelector('.phone-sheet', { timeout: 20000 });
+await page.waitForSelector('.phone-sheet, .phone-host', { timeout: 20000 });
 check('phone raised after editor closes', await dialogOpen(page));
 await browser.close();
 console.log(results.every(Boolean) ? 'ALL PASS' : 'FAILURES');

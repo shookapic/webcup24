@@ -109,6 +109,25 @@ Wave 4 (H+5h, 1 740 XP) — in this order:
 10. **F34 (580)**: agents/admins administer citizen accounts: list + search, deactivate/reactivate, reset password (show a one-time password like `create-staff`), delete. Server-side role check on every route; staff accounts can't be modified from there; deactivated users can't log in and their sessions are revoked.
 11. **F35 (290)**: short contextual tips at the moment of first use (first message form, first report, first service search), dismissible, remembered per user. Builds on the D12 guide.
 
+Wave 5 (H+6h25, 2 400 XP) — triaged to A (portal-shaped), in this order:
+
+12. **F37 (900), login attack protection, visible but not annoying**: per-account and per-IP failed-login counters (not just per IP+email), growing delay then temporary lock; the login form says how many tries remain / when to retry; on next successful login the citizen sees "N failed attempts since your last login"; staff space lists accounts under attack. No CAPTCHA.
+13. **F39 + F40 (900), appointments + reminder**: agents publish slots (service, date-time, place); a citizen books one with a reason; the confirmation spells the slot out unambiguously (weekday, full date, time, Terra Nova time, place, what to bring) and can be cancelled. Reminder: "upcoming appointment" banner in the portal within 24 h, a browser `Notification` (reuse the opt-in), and an `.ics` download with a `VALARM` so the phone's calendar reminds them.
+14. **F38 (600), service status**: `status` (`ouvert` / `maintenance` / `incident`), `status_message`, `back_at` on services; admin sets it; the service card and the request form show "unavailable until …, meanwhile do …" before the citizen starts. Expose the fields in `GET /api/services` for B.
+
+Wave 6 (H+7h55, 3 720 XP) — accessibility and plain language, A (portal + A-owned world UI), in this order:
+
+15. **F42 (930) + D20 (930), assistive-technology audit**: every form field has a visible label and `aria-describedby` hints; errors are tied to their field (`aria-invalid`, message by id), focus moves to the first error, success/error statuses are announced; every dialog/phone page traps and returns focus; record a checklist with evidence in `docs/QA_A.md`. No parcours that only works with a mouse or only in the 3D world: the portal stays the complete accessible version.
+16. **F41 (620), keyboard only**: logical tab order, visible focus everywhere (portal, phone, HUD, avatar editor), skip links to each section and to "Mon espace", no keyboard traps, all actions reachable (feature/lift/deactivate buttons, language switch).
+17. **F44 (620), zoom**: page usable at 200 % browser zoom and 400 % reflow (320 px wide) without horizontal scroll or overlapping text; extend the A+ control if needed.
+18. **F43 (310), colour**: never colour alone — status pills, alert banner, transport lines, featured cards and form errors carry text/icons/patterns; check contrast in normal and high-contrast modes.
+19. **D13 (310), plain language**: replace jargon in the interface ("démarche", "signalement", "statut"…) with everyday words, plus a short "Lexique" (glossary) with `<abbr>`/definitions for the remaining terms, in fr and en.
+
+Wave 7 (H+8h, 2 880 XP) — A, in this order:
+
+20. **F47 (960) + F48 (640), audit log**: one `audit_log` table (`at`, `actor_id`, actor name/role snapshot, `action`, `target_type`, `target_id`, short `details`), written by every staff/admin mutation (message status, services, announcements/alerts, transports status, citizen admin, slots…) and account deletions. Staff space: "Journal des actions" newest first, filter by action/person/date, plain-language lines ("Agent Dupont a désactivé le compte de M. Martin — 03/10 16:40"). Append-only: no edit/delete route.
+21. **F45 (960) + F46 (320), find physical services**: each service gets an address, district, opening hours and nearest tram stop (`GET /api/services` fields, shared with B); service cards show "Où ? / Comment y aller ?" with the next tram from `GET /api/transports`; an always-visible "Urgences" block (112/15/18, centre de santé address and hours, nearest stop) on the home page and in the phone.
+
 ## Original Session B scope — retained for traceability
 
 The active spec supersedes the implementation approach below, particularly the overlay-only phone and global curvature. All functional features remain required.
@@ -125,6 +144,20 @@ The active spec supersedes the implementation approach below, particularly the o
 Steps 1–8 were previously reported implemented on `main`; the review identifies failures and quality gaps, so they are not acceptance-certified. Wave 4:
 
 9. **F36 (580), transports in the world**: a tram line with stations at the district stops and a moving tram; the phone gets a "Transports" view with the next departures (from `GET /api/transports`), the player's nearest stop first.
+
+Wave 5: all four requests go to A. Optional world tie-ins once A has shipped them:
+
+10. **F38 tie-in**: a "Fermé / En maintenance" sign on a district building when its service's `status` isn't `ouvert` (`GET /api/services`).
+11. **F39/F40 tie-in**: the phone lists the player's upcoming appointment (endpoint to be added to the contract by A).
+
+Wave 6 (accessibility) — A leads; B covers what lives in B files:
+
+12. **F41/D20 in the world**: full keyboard play (move, run, phone, avatar, help) with no mouse requirement, a visible key legend, no keyboard trap between canvas and DOM; respect `prefers-reduced-motion` (no camera shake, slower tram/NPC easing).
+13. **F43 in the world**: districts, tram lines and stop signs distinguished by label/shape, not colour alone.
+
+Wave 7:
+
+14. **F45/F46 in the world**: from the phone's service or "Urgences" entry, a wayfinding cue (path highlight or arrow) to that service's building; a clear Santé/hospital sign. Uses the service address/district fields A adds to `GET /api/services`.
 
 World rules: no CDN or external fonts/assets (CSP blocks them; drei `<Text>` must get a local font). Canvas `aria-hidden="true"`; the phone is real HTML with `aria-live` for alerts; respect `prefers-reduced-motion`; a visible "Version accessible" link to `/`. The portal stays the accessible version and the fallback.
 
