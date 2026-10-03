@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import { Sky } from './Sky.jsx';
 import { City, Ground, Rocks } from './City.jsx';
 import { LabelLayer, LabelProjector } from './Labels.jsx';
@@ -18,7 +17,14 @@ import { AvatarPreview } from './AvatarPreview.jsx';
 import { api } from './api.js';
 import { debug } from './debug.js';
 
-const PlayableCity = lazy(() => import('./PlayableCity.jsx'));
+import { settings } from './quality.js';
+
+const Effects = lazy(() => import('./Effects.jsx'));
+// Returning players: start the (large) physics chunk right away instead of after /api/me answers. The hint is set once a session
+// has been seen and cleared for guests, so guests pay for it at most once.
+const hint = (() => { try { return localStorage.getItem('tn.world') === '1'; } catch { return false; } })();
+const playableChunk = hint ? import('./PlayableCity.jsx') : null;
+const PlayableCity = lazy(() => playableChunk ?? import('./PlayableCity.jsx'));
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const PHONE_MS = reducedMotion ? 0 : 300; // raise / lower time; the PhoneRig animates over this
@@ -124,6 +130,7 @@ export function App() {
   useEffect(() => {
     api('/api/me').then(({ user: me }) => {
       setUser(me);
+      try { if (me) localStorage.setItem('tn.world', '1'); else localStorage.removeItem('tn.world'); } catch { /* storage unavailable */ }
       if (me?.avatar) setAvatar(me.avatar);
       else if (me) setEditing(true);
     }, () => setUser(null));
@@ -170,10 +177,10 @@ export function App() {
 
   return (
     <>
-      <Canvas aria-hidden="true" shadows dpr={[1, 1.5]} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
+      <Canvas aria-hidden="true" shadows={settings.shadows} dpr={settings.dpr} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
         <fog attach="fog" args={['#d3b295', 90, 300]} />
         <hemisphereLight args={['#b9d0e0', '#8a6c58', 1.6]} />
-        <Sun />
+        <Sun size={settings.shadowSize} shadows={settings.shadows} />
         {debug.simFps > 0 && <SimDriver />}
         {debug.enabled && <GlProbe />}
         <Sky reducedMotion={reducedMotion} />
@@ -188,10 +195,7 @@ export function App() {
         <LabelProjector />
         {physical && phoneUp && <PhoneRig phase={phone.phase} reducedMotion={reducedMotion} outfit={avatar.outfit} />}
         {/* Glow materials use toneMapped={false} and intensity > 1, so only they cross the bloom threshold. */}
-        {!debug.simFps && <EffectComposer multisampling={4}>
-          <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
-          <Vignette offset={0.3} darkness={0.55} />
-        </EffectComposer>}
+        {!debug.simFps && settings.effects && <Suspense fallback={null}><Effects /></Suspense>}
         {!user && <OrbitControls target={[0, 4, 0]} maxPolarAngle={1.45} minDistance={15} maxDistance={140} autoRotate={!reducedMotion} autoRotateSpeed={0.3} />}
       </Canvas>
       <LabelLayer />

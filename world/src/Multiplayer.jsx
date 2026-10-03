@@ -17,7 +17,13 @@ export function Multiplayer({ ecctrl }) {
 
   useEffect(() => {
     let timer;
+    let alive = true;
+    let running = false;
+    // Polling stops while the tab is hidden (no requests, no battery / data) and refreshes at once when it comes back.
     const tick = async () => {
+      clearTimeout(timer);
+      if (!alive || running || document.hidden) return;
+      running = true;
       try {
         const body = ecctrl.current;
         if (body) {
@@ -25,17 +31,26 @@ export function Multiplayer({ ecctrl }) {
           await api('/api/presence', 'POST', { x: body.currPos.x, z: body.currPos.z, ry: euler.y });
         }
         const { players: list } = await api('/api/presence');
+        if (!alive) return;
         targets.current = new Map(list.map((player) => [player.id, player]));
         lastOk.current = Date.now();
         setPlayers(list);
       } catch {
         // Offline or server restarting: keep the last positions, but drop peers once they are older than the server's 15 s window.
-        if (Date.now() - lastOk.current > 15_000) setPlayers((current) => (current.length ? [] : current));
+        if (alive && Date.now() - lastOk.current > 15_000) setPlayers((current) => (current.length ? [] : current));
+      } finally {
+        running = false;
+        if (alive && !document.hidden) timer = setTimeout(tick, POLL);
       }
-      timer = setTimeout(tick, POLL);
     };
+    const visibility = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', visibility);
     tick();
-    return () => clearTimeout(timer);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', visibility);
+    };
   }, [ecctrl]);
 
   // Glide towards the last known position so 2 s updates still look like walking.

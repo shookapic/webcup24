@@ -15,9 +15,11 @@ await page.evaluate(async () => {
   const { user } = await (await fetch('/api/me')).json();
   localStorage.setItem(`world-seen-alerts:${user.id}`, JSON.stringify(Array.from({ length: 200 }, (_, i) => i)));
 });
-await page.goto(base + '/monde/?debug', { waitUntil: 'networkidle0' });
+await page.goto(base + '/monde/?debug' + (process.env.QUALITY ? '&quality=' + process.env.QUALITY : ''), { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => window.__tn?.ecctrl && window.__tn?.gl, { timeout: 60000 });
 await new Promise((r) => setTimeout(r, 4000));
+const cdp = await page.createCDPSession();
+if (process.env.THROTTLE) await cdp.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) }); // CPU proxy for a weaker device, applied after load
 const hardware = await page.evaluate(() => { const gl = document.createElement('canvas').getContext('webgl2'); const e = gl.getExtension('WEBGL_debug_renderer_info'); return { gpu: e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : 'unknown', ua: navigator.userAgent, dpr: devicePixelRatio, cores: navigator.hardwareConcurrency }; });
 const stops = [['spawn', 0, 1, 0], ['mairie', 0, -8, 0], ['sante', 24, -3, -Math.PI / 2], ['marche', -26, -3, Math.PI / 2], ['habitat', -30, -26, Math.PI / 2], ['sud', 4, 40, 0]];
 const results = [];

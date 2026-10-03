@@ -4,7 +4,7 @@ import { playerPos } from './layout.js';
 
 // One warm key light with a single shadow map, framed around the player (1024 low / 2048 high via `size`).
 const OFFSET = [28, 40, 22];
-export function Sun({ size = 2048 }) {
+export function Sun({ size = 2048, shadows = true }) {
   const light = useRef();
   useFrame(() => {
     const l = light.current;
@@ -17,7 +17,7 @@ export function Sun({ size = 2048 }) {
     l.target.updateMatrixWorld();
   });
   return (
-    <directionalLight ref={light} color="#ffe0bd" intensity={2.6} castShadow shadow-mapSize={[size, size]} shadow-bias={-0.0004} shadow-normalBias={0.04}
+    <directionalLight ref={light} color="#ffe0bd" intensity={2.6} castShadow={shadows} shadow-mapSize={[size, size]} shadow-bias={-0.0004} shadow-normalBias={0.04}
       shadow-camera-left={-40} shadow-camera-right={40} shadow-camera-top={40} shadow-camera-bottom={-40} shadow-camera-near={1} shadow-camera-far={140} />
   );
 }

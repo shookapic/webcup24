@@ -145,6 +145,33 @@ Renderer contract (**FINAL, fixed by the PM; supersedes the earlier drafts in th
 
 Captures: `docs/qa-captures/avatar/` (colon, lunettes + sac front/back, bandeau + visiere). `Gallery.jsx ?lineup=c,i,n,...` shows models side by side. Bug found and fixed on the way: the recolour pass overwrote accessory materials with the character atlas (accessories now carry `userData.accessory`).
 
+## World weight and loading (F57-F60 proxy evidence) — STOPPED PARTIAL (2026-10-03 ~20:30, user said stop implementing)
+
+Status: **implemented and measured locally, not integrated, not pushed, not reviewed by the PM; the user ordered feature work to stop.** Everything below is committed on branch `world` as a preservation checkpoint.
+
+What changed (world only; portal and server untouched):
+1. **Duplicate WebAssembly removed (`vite.config.js`)**: ecctrl wants `@dimforge/rapier3d-compat ^0.19.2` but npm hoists 0.12.0 to the top level, so the physics chunk carried two Rapier wasm blobs (2043 KB + 1876 KB of base64). The config aliases every import to the copy `@react-three/rapier` uses. Physics chunk 4.38 MB -> 2.33 MB raw, 1.62 MB -> 0.86 MB gzip. Movement/input/collision checks identical (world-checks 15/15, floor movement 39.3 m, lateral <= 0.001 m, stop 0.28 s).
+2. **Models packed (`tools/pack-models.mjs`)**: 31 kit/nature GLBs -> `kit-pack.glb` (269 KB) + `nature-pack.glb` (120 KB); sources moved to `world/assets-src/`. Requests per cold world load 41 -> 14-15.
+3. **Quality tiers (`quality.js`, `Effects.jsx`)**: `low` is chosen automatically for data-saver, 2g/3g `effectiveType` or `prefers-reduced-data` (or `?quality=low`): no shadow pass, no post-processing (the 23 KB gzip effects chunk is never fetched), pixel ratio 1, 6 walkers instead of 12, no flowers/grass. All features, services and interactions remain.
+4. **Returning players** start the physics chunk before `/api/me` answers (localStorage hint, cleared for guests). **Presence polling** pauses while the tab is hidden and refreshes at once on resume (`tools/qa/visibility.mjs` PASS: 0 requests hidden, first refresh 2 ms after resume).
+5. Lit matte Nature Kit materials (the kit marks them unlit) so trees take sun and shadows.
+
+Measured with `tools/qa/load.mjs` (headless Edge, CDP throttling, cold = empty cache, warm = reload; `docs/qa-captures/load/*.json`):
+
+| Profile / state | before (ac6c95d) | after |
+|---|---|---|
+| slow 4G (1.6 Mbit/s, 150 ms RTT), logged-in, cold: scene visible / playable | 4.0 s / 11.6 s | 3.4 s / 7.4 s |
+| same, bytes transferred / requests | 2096 KB / 41 | 1324 KB / 15 |
+| same, warm: playable | 2.7 s | 1.2-2.2 s |
+| slow 3G (400 kbit/s, 400 ms RTT), cold: scene visible / playable | 13.1 s / 44.6 s | 11.4 s / 28.1 s |
+| same, bytes / requests | 2101 KB / 43 | 1307 KB / 15 |
+| guest (no physics), slow 4G cold: scene visible, bytes | n/a | 3.2 s, 489 KB / 12 requests |
+| guest, slow 3G cold | n/a | 10.9 s, 466 KB / 11 requests |
+
+Render cost with `tools/qa/perf.mjs` (headed Edge, real rAF, 1440 x 900, DPR 1, NVIDIA GeForce RTX 5070 Ti, `docs/qa-captures/perf-*.json`): high = 694-1007 draw calls and 190-208k triangles per whole frame (shadow + scene + post), low = 116-481 calls and 110-132k triangles. Frame time on this GPU is flat at 3.6 ms (uncapped, GPU not the limit). With the CPU throttled 6x as a weak-device proxy: high p50 10.8-17.9 ms (p95 up to 28.6 ms), low p50 3.7-10.7 ms (p95 up to 17.9 ms); one 37 s stall in the first low sample (asset parse under throttling) is not representative and is not reproduced elsewhere. Bundle composition: `tools/qa/bundle-sizes.mjs` (index chunk: three 571 KB, react-dom 203, fiber 163, three-stdlib 85, app 76, postprocessing 58 raw; physics chunk: Rapier 2.2 MB raw, mostly inlined wasm).
+
+Not done (proposals, not claims): Brotli (the Node server only gzips; precompressed `.br` would take the physics chunk from ~860 KB to ~590 KB, needs a server change by A), a manual quality toggle in the HUD (A), merging static props into fewer draw calls, shipping the wasm as a real file, A's portal-side items of F57-F60. No carbon figure is claimed; bytes, requests and CPU frame times above are the proxies.
+
 ## Wave 6 triage (15:25, H+7h) — A, with B support
 
 D13 plain wording (310), D20 inclusive platform (930), F41 keyboard-only (620), F42 assistive-tech forms/errors (930), F43 colour distinction (310), F44 zoom without breaking layout (620). All portal/UI shaped: **Session A**. B support only: world HUD/phone must stay keyboard-operable (movement keys are ignored inside dialogs, T/V/Escape documented), colour must not be the only signal (alert badge has text), world HUD must survive 200% zoom (A's CSS). The world is not a substitute for the portal route; "Version accessible" link stays visible.

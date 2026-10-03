@@ -1,0 +1,112 @@
+{
+  "profile": "slow3g",
+  "mode": "user",
+  "cold": {
+    "label": "cold slow3g user",
+    "domContentLoaded": 8457,
+    "sceneVisible": 13201,
+    "playable": 30439,
+    "requests": 42,
+    "transferredKB": 1371,
+    "cachedRequests": 1,
+    "byType": {
+      "Document": {
+        "n": 1,
+        "bytes": 1045
+      },
+      "Script": {
+        "n": 3,
+        "bytes": 1242179
+      },
+      "Stylesheet": {
+        "n": 1,
+        "bytes": 3542
+      },
+      "Fetch": {
+        "n": 37,
+        "bytes": 156686
+      }
+    },
+    "biggest": [
+      {
+        "url": "/monde/assets/PlayableCity-D0UDw-hB.js",
+        "KB": 837,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/index-9G1riIUy.js",
+        "KB": 375,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/chars/character-c.glb",
+        "KB": 15,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/chars/Textures/texture-c.png",
+        "KB": 13,
+        "encoding": "identity"
+      },
+      {
+        "url": "/monde/assets/models/nature/tree_thin.glb",
+        "KB": 7,
+        "encoding": "gzip"
+      }
+    ]
+  },
+  "warm": {
+    "label": "warm slow3g user",
+    "domContentLoaded": 508,
+    "sceneVisible": 3762,
+    "playable": 4551,
+    "requests": 41,
+    "transferredKB": 23,
+    "cachedRequests": 5,
+    "byType": {
+      "Document": {
+        "n": 1,
+        "bytes": 529
+      },
+      "Script": {
+        "n": 3,
+        "bytes": 0
+      },
+      "Stylesheet": {
+        "n": 1,
+        "bytes": 0
+      },
+      "Fetch": {
+        "n": 36,
+        "bytes": 23464
+      }
+    },
+    "biggest": [
+      {
+        "url": "/api/announcements",
+        "KB": 5,
+        "encoding": "identity"
+      },
+      {
+        "url": "/api/transports",
+        "KB": 1,
+        "encoding": "identity"
+      },
+      {
+        "url": "/monde/?debug",
+        "KB": 1,
+        "encoding": "identity"
+      },
+      {
+        "url": "/monde/assets/models/chars/character-c.glb",
+        "KB": 1,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/kit/platform_large.glb",
+        "KB": 1,
+        "encoding": "gzip"
+      }
+    ]
+  }
+}

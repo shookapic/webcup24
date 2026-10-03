@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Color, MeshStandardMaterial } from 'three';
 import { Scatter } from './nature.jsx';
 import { beds, trees } from './layout.js';
+import { settings } from './quality.js';
 
 // Trees and planting beds from the Kenney Nature Kit (CC0). Beds: stone border + soil + deterministic scatter of bushes,
 // flowers and grass; trees are the layout's collision trees. All instanced per model.
@@ -26,8 +27,8 @@ export function Plantings() {
       const bush = ['plant_bushLarge', 'plant_bushDetailed', 'plant_bush'];
       for (let k = 0; k < 3; k++) out[bush[k]].push([...at(0.55), 2.6 + random() * 1.2, random() * 6]);
       const flowers = ['flower_yellowA', 'flower_redA', 'flower_purpleA'];
-      for (let k = 0; k < 7; k++) out[flowers[k % 3]].push([...at(0.9), 2.6 + random() * 1.2, random() * 6]);
-      for (let k = 0; k < 3; k++) out.grass_large.push([...at(0.85), 3 + random() * 1.5, random() * 6]);
+      if (settings.detailPlants) for (let k = 0; k < 7; k++) out[flowers[k % 3]].push([...at(0.9), 2.6 + random() * 1.2, random() * 6]);
+      if (settings.detailPlants) for (let k = 0; k < 3; k++) out.grass_large.push([...at(0.85), 3 + random() * 1.5, random() * 6]);
     });
     return out;
   }, []);
@@ -44,7 +45,7 @@ export function Plantings() {
           <mesh material={soil} position-y={0.12} receiveShadow><cylinderGeometry args={[r, r, 0.16, 20]} /></mesh>
         </group>
       ))}
-      {Object.entries(lists).map(([name, items]) => <Scatter key={name} name={name} items={items} />)}
+      {Object.entries(lists).filter(([, items]) => items.length).map(([name, items]) => <Scatter key={name} name={name} items={items} />)}
       {Object.entries(treeLists).map(([name, items]) => <Scatter key={name} name={name} items={items} />)}
     </group>
   );

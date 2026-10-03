@@ -1,0 +1,82 @@
+{
+  "hardware": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "dpr": 1.0000000149011612,
+    "cores": 32
+  },
+  "results": [
+    {
+      "stop": "spawn",
+      "frames": 429,
+      "p50": 7.200000000000728,
+      "p95": 17.800000000000182,
+      "p99": 21.399999999999636,
+      "max": 37455.9,
+      "calls": 234,
+      "triangles": 123643,
+      "geometries": 257,
+      "textures": 26
+    },
+    {
+      "stop": "mairie",
+      "frames": 424,
+      "p50": 10.69999999999709,
+      "p95": 14.30000000000291,
+      "p99": 17.900000000001455,
+      "max": 21.400000000001455,
+      "calls": 254,
+      "triangles": 123703,
+      "geometries": 294,
+      "textures": 26
+    },
+    {
+      "stop": "sante",
+      "frames": 882,
+      "p50": 3.6999999999970896,
+      "p95": 10.69999999999709,
+      "p99": 14.30000000000291,
+      "max": 39.30000000000291,
+      "calls": 115,
+      "triangles": 110198,
+      "geometries": 337,
+      "textures": 26
+    },
+    {
+      "stop": "marche",
+      "frames": 580,
+      "p50": 7.19999999999709,
+      "p95": 14.30000000000291,
+      "p99": 17.900000000001455,
+      "max": 50,
+      "calls": 235,
+      "triangles": 113820,
+      "geometries": 342,
+      "textures": 31
+    },
+    {
+      "stop": "habitat",
+      "frames": 771,
+      "p50": 7.100000000005821,
+      "p95": 10.799999999988358,
+      "p99": 14.30000000000291,
+      "max": 21.5,
+      "calls": 133,
+      "triangles": 118446,
+      "geometries": 342,
+      "textures": 31
+    },
+    {
+      "stop": "sud",
+      "frames": 464,
+      "p50": 10.69999999999709,
+      "p95": 17.80000000000291,
+      "p99": 21.40000000000873,
+      "max": 42.89999999999418,
+      "calls": 499,
+      "triangles": 132137,
+      "geometries": 360,
+      "textures": 46
+    }
+  ]
+}

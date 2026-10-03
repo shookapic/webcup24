@@ -3,7 +3,9 @@ import { useGLTF } from '@react-three/drei';
 import { Color, MeshStandardMaterial } from 'three';
 
 // Kenney Space Kit (CC0), re-coloured to the colony palette by material name. See docs/ASSETS.md.
-export const kitUrl = (name) => `${import.meta.env.BASE_URL}assets/models/kit/${name}.glb`;
+// All kit models travel in ONE glb (tools/pack-models.mjs, sources in world/assets-src/kit): one request instead of ~19.
+export const kitPack = `${import.meta.env.BASE_URL}assets/models/kit-pack.glb`;
+useGLTF.preload(kitPack);
 
 // Shared materials: one per kit material name, never mutated per instance.
 const palette = {
@@ -30,12 +32,14 @@ export function kitMaterial(name, variant) {
 
 // A kit model with palette materials. Geometry is shared with the cached glTF; `scale` is uniform.
 export function Prop({ name, scale = 1, shadows = true, variant, ...props }) {
-  const { scene } = useGLTF(kitUrl(name));
+  const { scene } = useGLTF(kitPack);
   const object = useMemo(() => {
-    const clone = scene.clone(true);
+    const source = scene.getObjectByName(name);
+    if (!source) throw new Error(`Unknown kit model ${name}`);
+    const clone = source.clone(true);
     // The kit exports every model under a root node translated by [2, 0, 1.5] (measured on all glb files), so a model drawn
     // at x,z sits 2 x 1.5 units away from it. Zero that horizontal offset on the clone; geometry stays centred on its footprint.
-    clone.children.forEach((child) => child.position.set(0, child.position.y, 0));
+    clone.position.set(0, clone.position.y, 0);
     clone.traverse((child) => {
       if (!child.isMesh) return;
       child.material = kitMaterial(child.material?.name, variant);
@@ -43,6 +47,6 @@ export function Prop({ name, scale = 1, shadows = true, variant, ...props }) {
       child.receiveShadow = shadows;
     });
     return clone;
-  }, [scene, shadows, variant]);
+  }, [scene, name, shadows, variant]);
   return <primitive object={object} scale={scale} {...props} />;
 }

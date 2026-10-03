@@ -3,11 +3,12 @@ import { useFrame } from '@react-three/fiber';
 import { Colonist } from './Colonist.jsx';
 import { debug } from './debug.js';
 import { pathLinks, pathNodes, seats } from './layout.js';
+import { settings } from './quality.js';
 
 const skins = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
 const outfits = ['#4a8c87', '#e5e0d4', '#a9654a', '#688c73', '#e9ba69', '#293d49'];
 const accents = ['#293d49', '#a9654a', '#4a8c87', '#6b5a4a'];
-const COUNT = 12;
+const COUNT = settings.npcs;
 const TURN = 4; // rad/s: smooth corners, no snapping
 const ARRIVE = 1.2; // m from the target counts as reached
 const SEAT_RANGE = 14; // a walker only considers benches this close to its current node
