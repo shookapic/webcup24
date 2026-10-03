@@ -14,6 +14,7 @@
   <body>
     <a class="skip-link" href="#contenu">Aller au contenu</a>
     <div id="alert-banner" class="alert-banner" role="alert" data-content></div>
+    <div id="reminder-banner" class="reminder-banner" role="status" data-content hidden></div>
     <header class="site-header" id="haut">
       <a class="brand" href="#haut" aria-label="Terra Nova, accueil">
         <span class="brand-mark" aria-hidden="true"><span></span></span>
@@ -92,6 +93,7 @@
         </div>
 
         <div id="member-area" hidden>
+          <div id="security-notice" class="security-notice" role="alert" hidden><p id="security-notice-text" data-content></p><button id="security-notice-dismiss" type="button">J’ai compris</button></div>
           <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name" tabindex="-1" data-content></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
           <div id="citizen-area" hidden>
             <section id="guide" class="panel guide" aria-labelledby="guide-title" hidden>
@@ -109,6 +111,8 @@
                 <h3>Contacter ou signaler</h3><p>Posez une question ou signalez un problème dans la ville. Vous recevrez une confirmation et pourrez suivre son état ici.</p>
                 <div id="tip-message" class="tip-slot" role="status"></div>
                 <label>Type de demande <select name="kind" id="message-kind"><option value="contact">Question aux services municipaux</option><option value="incident">Signaler un problème</option></select></label>
+                <label>Service concerné (facultatif) <select name="service_id" id="message-service"><option value="">Aucun service en particulier</option></select></label>
+                <div id="service-notice" class="service-notice" role="status" data-content></div>
                 <label>Sujet <input name="subject" type="text" required minlength="4" maxlength="120"></label>
                 <div id="tip-report" class="tip-slot" role="status"></div>
                 <label id="location-field" hidden>Lieu du problème <input name="location" type="text" minlength="5" maxlength="180" placeholder="Rue, quartier ou repère précis"></label>
@@ -118,6 +122,21 @@
               </form>
               <div class="panel"><h3>Mes messages</h3><p>Suivez les réponses de la ville.</p><div id="citizen-messages" class="message-list" data-content></div></div>
             </div>
+            <section id="appointments-panel" class="panel appointments-panel" aria-labelledby="appointments-title">
+              <h3 id="appointments-title">Rendez-vous avec un agent</h3>
+              <p>Choisissez un créneau libre : vous voyez la date complète, l’heure de début et de fin, le lieu et ce qu’il faut préparer avant de confirmer. Les heures sont celles de Terra Nova (UTC+4).</p>
+              <form id="appointment-form">
+                <label>Créneau disponible <select name="slot" id="appointment-slot" required><option value="">Choisir un créneau…</option></select></label>
+                <div id="slot-preview" class="slot-preview" aria-live="polite" data-content></div>
+                <label>Motif du rendez-vous (facultatif) <input name="reason" type="text" minlength="5" maxlength="200" placeholder="Ex. Dossier de logement"></label>
+                <button class="button button-primary" type="submit">Réserver ce créneau</button>
+                <p id="appointment-status" class="form-status" role="status" aria-live="polite"></p>
+              </form>
+              <div id="appointment-confirmation" class="appointment-confirmation" role="status" tabindex="-1" data-content hidden></div>
+              <h4 id="my-appointments-title">Mes rendez-vous</h4>
+              <p class="reminder-help">Un rappel s’affiche en haut de cette page dès 24 h avant le rendez-vous, puis 1 h avant. Activez les alertes du navigateur (section Actualités) pour être prévenu même sans regarder la page, et ajoutez le rendez-vous à votre agenda : le fichier contient deux alarmes.</p>
+              <ul id="my-appointments" class="appointment-list" aria-labelledby="my-appointments-title" data-content></ul>
+            </section>
             <form id="profile-form" class="panel profile-form">
               <h3>Mon profil</h3><p>Ces informations aident la ville à vous adresser les annonces qui vous concernent.</p>
               <label>Nom affiché <input name="name" type="text" autocomplete="name" required minlength="2" maxlength="80"></label>
@@ -148,6 +167,39 @@
               <button class="button button-primary" type="submit">Mettre à jour l’info trafic</button>
               <p id="traffic-status" class="form-status" role="status" aria-live="polite"></p>
             </form>
+            <form id="availability-form" class="panel availability-form">
+              <h3>Disponibilité des services</h3><p>Signalez qu’un service est interrompu : les habitants le voient avant de commencer une démarche, avec le motif, la reprise prévue et quoi faire en attendant.</p>
+              <label>Service <select name="service" id="availability-service" required data-content></select></label>
+              <label>État <select name="availability"><option value="available">Disponible</option><option value="unavailable">Indisponible</option></select></label>
+              <div id="availability-details">
+                <label>Motif (visible par les habitants) <input name="reason" minlength="5" maxlength="200" placeholder="Ex. Maintenance du système de rendez-vous"></label>
+                <label>Motif en anglais (facultatif) <input name="reason_en" minlength="5" maxlength="200"></label>
+                <label>Reprise prévue, heure de Terra Nova (facultatif) <input name="until" type="datetime-local"></label>
+                <label>Que faire en attendant (facultatif) <input name="alternative" minlength="5" maxlength="200" placeholder="Ex. Écrivez aux services depuis votre espace"></label>
+                <label>Que faire en attendant, en anglais (facultatif) <input name="alternative_en" minlength="5" maxlength="200"></label>
+              </div>
+              <button class="button button-primary" type="submit">Enregistrer la disponibilité</button>
+              <p id="availability-status" class="form-status" role="status" aria-live="polite"></p>
+            </form>
+            <section id="slots-panel" class="panel slots-panel" aria-labelledby="slots-title">
+              <h3 id="slots-title">Créneaux de rendez-vous</h3><p>Publiez des créneaux consécutifs. Les habitants les réservent depuis leur espace ; un créneau pris disparaît de la liste.</p>
+              <form id="slots-form">
+                <label>Date <input name="date" type="date" required></label>
+                <label>Heure de début <input name="start" type="time" required></label>
+                <label>Nombre de créneaux (1 à 12) <input name="count" type="number" min="1" max="12" value="4" required></label>
+                <label>Durée d’un créneau, en minutes (10 à 60) <input name="duration" type="number" min="10" max="60" value="20" required></label>
+                <label>Lieu <input name="location" minlength="3" maxlength="120" placeholder="Mairie, accueil des rendez-vous"></label>
+                <label>Consignes pour l’habitant (facultatif) <textarea name="instructions" rows="3" minlength="10" maxlength="500" placeholder="Ex. Apportez une pièce d’identité et votre dossier."></textarea></label>
+                <button class="button button-primary" type="submit">Publier les créneaux</button>
+                <p id="slots-status" class="form-status" role="status" aria-live="polite"></p>
+              </form>
+              <ul id="staff-appointments" class="appointment-list" aria-labelledby="slots-title" data-content></ul>
+            </section>
+            <section id="security-panel" class="panel security-panel" aria-labelledby="security-title">
+              <h3 id="security-title">Sécurité des connexions</h3><p>Tentatives de connexion échouées ou bloquées sur les 15 dernières minutes. Après 5 erreurs depuis une même adresse, 20 sur un même compte ou 40 depuis une même adresse, la connexion est suspendue.</p>
+              <p id="security-summary" class="security-summary" role="status" data-content></p>
+              <ul id="security-targets" class="security-targets" data-content></ul>
+            </section>
             <section id="citizens-panel" class="panel citizens-panel" aria-labelledby="citizens-title">
               <h3 id="citizens-title">Comptes des habitants</h3><p>Désactivez, réactivez, réinitialisez le mot de passe ou supprimez le compte d’un habitant. Les comptes du personnel ne sont pas modifiables ici.</p>
               <label>Rechercher un habitant <input id="citizen-search" type="search" maxlength="80" placeholder="Nom ou adresse e-mail" autocomplete="off"></label>

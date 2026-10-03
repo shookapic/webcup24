@@ -58,8 +58,8 @@ button,a,input,select{-webkit-tap-highlight-color:transparent}
 .section-heading p{color:#9eb5c3;font-size:0.8125rem;line-height:1.6;max-width:290px;margin:0}
 .requests-section{padding-top:77px;padding-bottom:120px;background:#f1f6f5;color:#102539;max-width:none}
 .requests-section>.section-heading,.requests-section>.news-grid,.requests-section>.section-status{max-width:1160px;margin-left:auto;margin-right:auto}
-.requests-section .section-kicker{color:#168d86}
-.requests-section .section-heading p{color:#617787}
+.requests-section .section-kicker{color:#0f6b66}
+.requests-section .section-heading p{color:#485d6b}
 .search-field{height:50px;background:white;border:1px solid #d6e4e4;display:flex;align-items:center;border-radius:4px;color:#677d88}
 .search-field{flex:1;min-width:0;padding:0 17px;gap:10px}
 .search-field>span:not(.visually-hidden){font-size:1.75rem;line-height:1}
@@ -68,7 +68,7 @@ button,a,input,select{-webkit-tap-highlight-color:transparent}
 .requests-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
 .request-card{background:white;border:1px solid #dce8e8;border-radius:5px;padding:22px 24px;min-height:230px;display:flex;flex-direction:column;box-shadow:0 3px 18px #15394708}
 .request-top,.request-bottom{display:flex;align-items:center;justify-content:space-between;gap:15px}
-.request-code{font-size:0.6875rem;font-weight:800;letter-spacing:.12em;color:#168d86}
+.request-code{font-size:0.6875rem;font-weight:800;letter-spacing:.12em;color:#0f6b66}
 .request-difficulty{background:#eaf5f3;color:#24776f;padding:6px 9px;border-radius:3px;font-size:0.625rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
 .request-message{font-size:1.125rem;line-height:1.4;letter-spacing:-.025em;font-weight:650;margin:19px 0 10px;overflow-wrap:anywhere}
 .requester{font-size:0.75rem;color:#6b7f8c;margin:0 0 24px}
@@ -92,7 +92,7 @@ button,a,input,select{-webkit-tap-highlight-color:transparent}
 .breadcrumb{display:flex;align-items:center;gap:10px;color:#a9c2cd;font-size:.75rem;margin-bottom:24px}
 .breadcrumb a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 .breadcrumb a:hover{color:#70e7d4}
-.requests-section>.breadcrumb{max-width:1160px;margin-left:auto;margin-right:auto;color:#5e7582}
+.requests-section>.breadcrumb{max-width:1160px;margin-left:auto;margin-right:auto;color:#485d6b}
 .service-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .service-card{min-height:235px;padding:26px;background:#10243b;border:1px solid #ffffff20;border-top:2px solid #70e7d4;display:flex;flex-direction:column}
 .service-number{font-size:.6875rem;color:#70e7d4;letter-spacing:.13em;font-weight:800}
@@ -103,10 +103,10 @@ button,a,input,select{-webkit-tap-highlight-color:transparent}
 .section-status{font-size:.8125rem;color:#9fb6c3;line-height:1.6;margin-top:20px}
 .news-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
 .news-card{background:white;border:1px solid #dce8e8;padding:26px;min-height:180px;border-radius:5px}
-.news-date{font-size:.6875rem;color:#168d86;text-transform:uppercase;letter-spacing:.08em;font-weight:800}
+.news-date{font-size:.6875rem;color:#0f6b66;text-transform:uppercase;letter-spacing:.08em;font-weight:800}
 .news-card h3{font-size:1.25rem;line-height:1.35;margin:14px 0 10px}
 .news-card p{font-size:.875rem;line-height:1.7;color:#526b78;white-space:pre-wrap;margin:0}
-.requests-section .section-status{color:#617787}
+.requests-section .section-status{color:#485d6b}
 .account-section{max-width:1240px;margin:auto;padding:78px 40px 110px;border-top:1px solid #ffffff24}
 .auth-grid,.workspace-grid,.admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
 .panel{background:#10243b;border:1px solid #ffffff23;border-radius:5px;padding:28px;min-width:0}
@@ -254,3 +254,59 @@ html[data-contrast=high] .danger-button{background:#000;color:#ffeb00;border:2px
 html[data-contrast=high] .tip,html[data-contrast=high] .citizen-item,html[data-contrast=high] .citizen-secret{background:#000;border-color:#fff;color:#fff}
 html[data-contrast=high] .tip p,html[data-contrast=high] .citizen-meta,html[data-contrast=high] .citizen-confirm{color:#fff}
 html[data-contrast=high] .tip button,html[data-contrast=high] .citizen-actions button{color:#ffeb00;border-color:#ffeb00}
+.reminder-banner{position:sticky;top:0;z-index:15;margin:0;padding:12px 40px;background:#f1c75e;color:#1d1405;font-size:.9375rem;line-height:1.5;border-bottom:2px solid #7a5b08}
+.reminder-banner[hidden]{display:none}
+.reminder-item{margin:0}
+.reminder-item a{color:#1d1405;font-weight:750}
+.security-notice{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 18px;padding:14px 18px;background:#3a2420;border:2px solid #ff9a7a;border-radius:4px;color:#fff}
+.security-notice[hidden]{display:none}
+.security-notice p{margin:0;flex:1 1 20rem;line-height:1.55}
+.security-notice button,.button-link{min-height:44px;display:inline-flex;align-items:center;padding:9px 14px;background:transparent;color:#70e7d4;border:1px solid #70e7d477;border-radius:3px;font-size:.8125rem;font-weight:700;text-decoration:none;cursor:pointer}
+.security-notice button:hover,.button-link:hover{background:#70e7d41a}
+.security-summary{margin:0 0 12px;font-size:.875rem;line-height:1.55;color:#d8e8e9}
+.security-targets{margin:0;padding-left:1.2em;font-size:.8125rem;color:#a8c1ca;display:grid;gap:4px}
+.security-alert{border-color:#ff9a7a}
+.security-alert .security-summary{color:#ffd2c4;font-weight:650}
+.service-unavailable{border-color:#f1c75e}
+.availability-badge{align-self:start;padding:3px 10px;background:#f1c75e;color:#1d1405;border-radius:999px;font-size:.75rem;font-weight:800;letter-spacing:.04em}
+.availability-notice{margin:10px 0;padding:10px 12px;background:#2a2108;border:1px solid #f1c75e;border-radius:4px;color:#fff;font-size:.8125rem;line-height:1.5}
+.availability-notice p{margin:4px 0 0}
+.availability-hint{margin:8px 0 0;font-size:.8125rem;color:#a8c1ca}
+.service-notice:empty{display:none}
+.service-notice{margin:0 0 12px}
+.message-service{margin:0 0 6px;font-size:.8125rem;color:#a8c1ca}
+.status-steps{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0 4px;padding:0;list-style:none;font-size:.75rem;color:#a8c1ca}
+.status-steps li{padding:2px 0;border-bottom:3px solid #ffffff2b}
+.status-steps .step-done{color:#8be7d1;border-bottom-color:#8be7d1}
+.status-steps .step-current{color:#fff;font-weight:750;border-bottom-color:#70e7d4}
+.appointments-panel,.slots-panel,.availability-form{margin-top:18px}
+.appointments-panel h4,.slot-preview h4,.appointment-confirmation h4{margin:18px 0 8px;font-size:1.0625rem}
+.slot-preview{margin:0 0 14px}
+.slot-preview:empty,.slot-empty:empty{display:none}
+.appointment-details{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:8px 0;font-size:.875rem;line-height:1.5}
+.appointment-details dt{color:#a8c1ca;font-weight:650}
+.appointment-details dd{margin:0;overflow-wrap:anywhere}
+.appointment-confirmation{margin:16px 0;padding:16px;border:2px solid #70e7d4;border-radius:4px;background:#0b2e3a}
+.appointment-confirmation[hidden]{display:none}
+.appointment-confirmation p{margin:10px 0;font-size:.875rem;line-height:1.55}
+.reminder-help{font-size:.8125rem;color:#a8c1ca;line-height:1.6;margin:0 0 14px}
+.appointment-list{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:12px}
+.appointment-card{border:1px solid #ffffff27;padding:15px;background:#091d31}
+.appointment-card.status-cancelled,.appointment-card.status-past{opacity:.85;border-style:dashed}
+.appointment-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.appointment-state{padding:3px 10px;border-radius:999px;background:#70e7d4;color:#07152c;font-size:.6875rem;font-weight:800;letter-spacing:.04em}
+.status-cancelled .appointment-state{background:#ffb8a1;color:#3a0d00}
+.status-past .appointment-state,.status-open .appointment-state{background:#a8c1ca;color:#07152c}
+.appointment-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.appointment-actions button{min-height:44px;background:transparent;color:#70e7d4;border:1px solid #70e7d477;border-radius:3px;padding:9px 13px;font-size:.75rem;font-weight:700;cursor:pointer}
+.appointment-actions .citizen-danger{color:#ffb8a1;border-color:#ffb8a177}
+.slots-panel form{max-width:560px}
+html[data-contrast=high] .reminder-banner{background:#000;color:#ffeb00;border-bottom-color:#ffeb00}
+html[data-contrast=high] .reminder-item a{color:#ffeb00}
+html[data-contrast=high] .security-notice,html[data-contrast=high] .availability-notice,html[data-contrast=high] .appointment-confirmation,html[data-contrast=high] .appointment-card{background:#000;border-color:#fff;color:#fff}
+html[data-contrast=high] .appointment-details dt,html[data-contrast=high] .availability-hint,html[data-contrast=high] .reminder-help,html[data-contrast=high] .security-summary,html[data-contrast=high] .security-targets,html[data-contrast=high] .message-service,html[data-contrast=high] .status-steps{color:#fff}
+html[data-contrast=high] .button-link,html[data-contrast=high] .security-notice button,html[data-contrast=high] .appointment-actions button{color:#ffeb00;border-color:#ffeb00}
+html[data-contrast=high] .availability-badge,html[data-contrast=high] .appointment-state{background:#ffeb00;color:#000}
+@media(max-width:620px){.reminder-banner{padding:12px 16px}.appointment-details{grid-template-columns:1fr}.appointment-details dt{margin-top:6px}}
+html{scroll-padding-top:5rem}
+.availability-form{max-width:560px}

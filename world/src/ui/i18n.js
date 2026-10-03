@@ -54,6 +54,10 @@ const strings = {
     'services.portal': 'Tous les services sur le portail',
     'services.request': 'Faire une demande sur le portail',
     'services.newTab': '(s’ouvre dans un nouvel onglet)',
+    'services.unavailable': 'Service indisponible',
+    'services.back': 'Retour prévu : {date} (heure de Terra Nova)',
+    'services.backUnknown': 'Date de reprise non communiquée.',
+    'services.meanwhile': 'En attendant :',
     'transports.title': 'Transports',
     'transports.nearest': 'Arrêt le plus proche',
     'transports.normal': 'Trafic normal',
@@ -131,6 +135,10 @@ const strings = {
     'services.portal': 'All services on the portal',
     'services.request': 'Make a request on the portal',
     'services.newTab': '(opens in a new tab)',
+    'services.unavailable': 'Service unavailable',
+    'services.back': 'Expected back: {date} (Terra Nova time)',
+    'services.backUnknown': 'Return date not announced.',
+    'services.meanwhile': 'Meanwhile:',
     'transports.title': 'Transport',
     'transports.nearest': 'Nearest stop',
     'transports.normal': 'Normal service',
@@ -186,6 +194,12 @@ const intl = (locale) => (normalizeLocale(locale) === 'en' ? 'en-GB' : 'fr-FR');
 export function formatDate(value, locale) {
   const date = new Date(typeof value === 'string' ? `${value.replace(' ', 'T')}Z` : value);
   return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(intl(locale), { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+// Terra Nova times arrive as 'YYYY-MM-DDTHH:MM' already in city time: shown as written, never shifted.
+export function formatCityTime(value, locale) {
+  const date = new Date(`${value}:00Z`);
+  return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(intl(locale), { dateStyle: 'full', timeStyle: 'short', timeZone: 'UTC' }).format(date);
 }
 
 export function formatTime(value, locale) {

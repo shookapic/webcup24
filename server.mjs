@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, sep } from 'node:path';
 import { db } from './store.mjs';
 import { clearSession, createSession, currentUser, hashPassword, publicUser, verifyPassword } from './security.mjs';
+import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from './throttle.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const apiUrl = 'https://24h.webcup.fr/wp-json/webcup/v1/requests';
@@ -54,18 +55,68 @@ function cityMinutes(date = new Date()) {
   return Number(hours) * 60 + Number(minutes);
 }
 
+// 'YYYY-MM-DDTHH:MM' in city time. Local strings sort and compare correctly as text.
+const cityOffset = '+04:00';
+function cityNow(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: cityTimeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+const addMinutes = (local, minutes) => new Date(Date.parse(`${local}:00Z`) + minutes * 60_000).toISOString().slice(0, 16);
+const minutesBetween = (from, to) => Math.round((Date.parse(`${to}:00Z`) - Date.parse(`${from}:00Z`)) / 60_000);
+function localDateTime(value, label) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}:00Z`)) || addMinutes(value, 0) !== value) fail(400, `${label} est invalide.`);
+  return value;
+}
+const icsDate = (local) => new Date(`${local}:00${cityOffset}`).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+const icsText = (value) => String(value).replace(/[\\;,]/g, '\\$&').replace(/\r?\n/g, '\\n');
+
+// F38: a stored outage ends by itself once its announced return time has passed.
+function serviceView(row) {
+  const over = row.available_again && row.available_again <= cityNow();
+  return { ...row, availability: row.availability === 'unavailable' && !over ? 'unavailable' : 'available' };
+}
+
+// F39
+const defaultInstructions = 'Présentez-vous 5 minutes avant l’heure avec une pièce d’identité et les documents liés à votre demande. En cas d’empêchement, annulez depuis votre espace pour libérer le créneau.';
+function appointmentView(row, now = cityNow()) {
+  return {
+    id: row.id, starts_at: row.starts_at, ends_at: addMinutes(row.starts_at, row.duration_min), duration_min: row.duration_min,
+    location: row.location, instructions: row.instructions, agent: row.agent_name, status: row.status, reason: row.reason ?? null,
+    minutes_until: minutesBetween(now, row.starts_at),
+    ...(row.citizen_name ? { citizen: { name: row.citizen_name, email: row.citizen_email } } : {}),
+  };
+}
+const appointmentSelect = 'SELECT a.*, ag.name AS agent_name, c.name AS citizen_name, c.email AS citizen_email FROM appointments a JOIN users ag ON ag.id = a.agent_id LEFT JOIN users c ON c.id = a.citizen_id';
+
 // The next three passages from `now`, rolling over to tomorrow's first trams after the last one.
 function nextPassages(passages, now) {
   return [...passages.filter((minute) => minute >= now), ...passages.map((minute) => minute + 1440)].slice(0, 3)
     .map((minute) => `${String(Math.floor(minute / 60) % 24).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`);
 }
-const loginAttempts = new Map();
+const deletions = new Limiter(5);
 let cachedFeed;
 let pendingFeed;
 
-function fail(status, message) {
-  throw Object.assign(new Error(message), { status });
+// `extra` fields are sent in the JSON body (e.g. retryAfter, attemptsLeft); retryAfter also becomes the header.
+function fail(status, message, extra) {
+  throw Object.assign(new Error(message), { status, extra });
 }
+
+// Behind a proxy every client can look like 127.0.0.1. With TRUST_PROXY set, the last X-Forwarded-For hop
+// (added by our own proxy, so not spoofable by the client) is the address.
+let warnedLoopback = false;
+function clientIp(request) {
+  const forwarded = process.env.TRUST_PROXY && String(request.headers['x-forwarded-for'] || '').split(',').pop().trim();
+  const address = forwarded || request.socket.remoteAddress || 'unknown';
+  if (!forwarded && !warnedLoopback && /^(::1|127.|::ffff:127.)/.test(address) && process.env.NODE_ENV === 'production') {
+    warnedLoopback = true;
+    console.warn('All clients look like loopback: set TRUST_PROXY=1 so sign-in limits apply per visitor.');
+  }
+  return address;
+}
+
+let dummyHash;
 
 function sendJson(response, status, body) {
   response.writeHead(status, {
@@ -225,6 +276,8 @@ function color(value) {
 function eraseUser(id) {
   db.exec('BEGIN');
   try {
+    db.prepare("UPDATE appointments SET citizen_id = NULL, reason = NULL, booked_at = NULL, status = 'open' WHERE citizen_id = ? AND status = 'booked'").run(id);
+    db.prepare('DELETE FROM appointments WHERE citizen_id = ?').run(id);
     db.prepare('DELETE FROM messages WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
     db.exec('COMMIT');
@@ -273,16 +326,16 @@ async function route(request, response) {
     const user = requireUser(request, ['citizen']);
     const body = await readJson(request);
     const secret = password(body.password, 1);
-    const key = `delete:${user.id}`;
-    const attempt = loginAttempts.get(key);
-    if (attempt?.count >= 5 && attempt.until > Date.now()) fail(429, 'Trop de tentatives. Réessayez dans 15 minutes.');
+    const key = String(user.id);
+    const wait = deletions.waitMs(key);
+    if (wait) fail(429, 'Trop de tentatives. Réessayez plus tard.', { retryAfter: Math.ceil(wait / 1000) });
     const { password_hash: hash } = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
     if (!(await verifyPassword(secret, hash))) {
-      loginAttempts.set(key, { count: (attempt?.until > Date.now() ? attempt.count : 0) + 1, until: Date.now() + 15 * 60_000 });
+      deletions.add(key);
       fail(403, 'Mot de passe incorrect.');
     }
     eraseUser(user.id);
-    loginAttempts.delete(key);
+    deletions.reset(key);
     clearSession(request, response);
     return sendJson(response, 200, { ok: true });
   }
@@ -335,20 +388,43 @@ async function route(request, response) {
     const body = await readJson(request);
     const address = email(body.email);
     const secret = password(body.password, 1);
-    const key = `${request.socket.remoteAddress}:${address}`;
-    const attempt = loginAttempts.get(key);
-    if (attempt?.count >= 5 && attempt.until > Date.now()) fail(429, 'Trop de tentatives. Réessayez dans 15 minutes.');
+    const ip = clientIp(request);
+    // Blocked before the password is even looked at: a right guess during a lockout does not get in.
+    const wait = loginWait(ip, address);
+    if (wait) {
+      record('blocked', address);
+      const retryAfter = Math.ceil(wait / 1000);
+      fail(429, `Trop de tentatives. Réessayez dans ${Math.ceil(retryAfter / 60)} min.`, { retryAfter });
+    }
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(address);
-    if (!user || !(await verifyPassword(secret, user.password_hash))) {
-      loginAttempts.set(key, { count: (attempt?.until > Date.now() ? attempt.count : 0) + 1, until: Date.now() + 15 * 60_000 });
-      fail(401, 'Identifiants incorrects.');
+    // Unknown addresses cost the same hashing time, so response time does not reveal which accounts exist.
+    dummyHash ??= await hashPassword(randomBytes(12).toString('hex'));
+    const valid = await verifyPassword(secret, user ? user.password_hash : dummyHash);
+    if (!user || !valid) {
+      const attemptsLeft = loginFailed(ip, address);
+      fail(401, 'Identifiants incorrects.', { attemptsLeft });
     }
     // Said only after the password is right, so it does not reveal which addresses have accounts.
     if (!user.active) fail(403, 'Ce compte est désactivé. Contactez les services municipaux.');
-    loginAttempts.delete(key);
+    const earlierFailures = loginSucceeded(ip, address);
     clearSession(request, response);
     createSession(response, user.id);
-    return sendJson(response, 200, { user: publicUser(user) });
+    // The account owner is told about failed attempts made while they were away.
+    return sendJson(response, 200, { user: publicUser(user), ...(earlierFailures >= 3 ? { notice: { failedAttempts: earlierFailures } } : {}) });
+  }
+
+  if (path === '/api/admin/security' && method === 'GET') {
+    requireUser(request, ['agent', 'admin']);
+    const { windowMinutes, failedLogins, blockedAttempts, failures } = summary();
+    // Only accounts that exist are named, and masked: random addresses typed by an attacker are just counted.
+    const targeted = [];
+    let unknown = 0;
+    for (const [account, count] of failures) {
+      if (count < 3) continue;
+      if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(account)) targeted.push({ account: account.replace(/^(.).*(@.*)$/, '$1***$2'), failures: count });
+      else unknown += 1;
+    }
+    return sendJson(response, 200, { windowMinutes, failedLogins, blockedAttempts, targeted: targeted.sort((a, b) => b.failures - a.failures).slice(0, 20), unknownAddresses: unknown });
   }
 
   if (path === '/api/admin/citizens' && method === 'GET') {
@@ -397,7 +473,7 @@ async function route(request, response) {
   }
 
   if (path === '/api/services' && method === 'GET') {
-    return sendJson(response, 200, { services: db.prepare('SELECT * FROM services ORDER BY featured DESC, id').all() });
+    return sendJson(response, 200, { services: db.prepare('SELECT * FROM services ORDER BY featured DESC, id').all().map(serviceView) });
   }
   if (path === '/api/services' && method === 'POST') {
     requireUser(request, ['admin']);
@@ -420,6 +496,27 @@ async function route(request, response) {
     const body = await readJson(request);
     if (typeof body.featured !== 'boolean') fail(400, 'La mise en avant est invalide.');
     const result = db.prepare('UPDATE services SET featured = ? WHERE id = ?').run(body.featured ? 1 : 0, Number(serviceMatch[1]));
+    if (!result.changes) fail(404, 'Service introuvable.');
+    return sendJson(response, 200, { ok: true });
+  }
+
+  const availabilityMatch = /^\/api\/services\/(\d+)\/availability$/.exec(path);
+  if (availabilityMatch && method === 'PATCH') {
+    requireUser(request, ['agent', 'admin']);
+    const body = await readJson(request);
+    if (!['available', 'unavailable'].includes(body.availability)) fail(400, 'Statut invalide.');
+    let fields = [null, null, null, null, null];
+    if (body.availability === 'unavailable') {
+      const now = cityNow();
+      const until = body.until ? localDateTime(body.until, 'La date de retour') : null;
+      if (until && (until <= now || until > addMinutes(now, 366 * 1440))) fail(400, 'La date de retour doit être dans le futur, et dans moins d’un an.');
+      fields = [
+        text(body.reason, 5, 200, 'Le motif'), body.reason_en ? text(body.reason_en, 5, 200, 'Le motif') : null, until,
+        body.alternative ? text(body.alternative, 5, 200, 'L’alternative') : null, body.alternative_en ? text(body.alternative_en, 5, 200, 'L’alternative') : null,
+      ];
+    }
+    const result = db.prepare('UPDATE services SET availability = ?, unavailable_reason = ?, unavailable_reason_en = ?, available_again = ?, alternative = ?, alternative_en = ? WHERE id = ?')
+      .run(body.availability, ...fields, Number(availabilityMatch[1]));
     if (!result.changes) fail(404, 'Service introuvable.');
     return sendJson(response, 200, { ok: true });
   }
@@ -475,12 +572,107 @@ async function route(request, response) {
     return sendJson(response, 200, { ok: true });
   }
 
+  // F39 appointments + F40 reminders (calendar file). Slots are published by staff, booked by citizens.
+  if (path === '/api/appointments' && method === 'POST') {
+    const staff = requireUser(request, ['agent', 'admin']);
+    const body = await readJson(request);
+    if (typeof body.date !== 'string' || typeof body.start !== 'string') fail(400, 'La date et l’heure de début sont obligatoires.');
+    const first = localDateTime(`${body.date}T${body.start}`, 'La date ou l’heure');
+    const count = Number(body.count ?? 1);
+    const duration = Number(body.duration ?? 20);
+    if (!Number.isInteger(count) || count < 1 || count > 12) fail(400, 'Le nombre de créneaux doit être compris entre 1 et 12.');
+    if (!Number.isInteger(duration) || duration < 10 || duration > 60) fail(400, 'La durée doit être comprise entre 10 et 60 minutes.');
+    const now = cityNow();
+    if (first <= now) fail(400, 'Le premier créneau doit être dans le futur.');
+    if (first > addMinutes(now, 90 * 1440)) fail(400, 'Les créneaux ne peuvent pas être publiés plus de 90 jours à l’avance.');
+    if (addMinutes(first, count * duration).slice(0, 10) !== first.slice(0, 10)) fail(400, 'Les créneaux doivent se terminer le même jour.');
+    const location = body.location ? text(body.location, 3, 120, 'Le lieu') : 'Mairie, accueil des rendez-vous';
+    const instructions = body.instructions ? text(body.instructions, 10, 500, 'Les consignes') : defaultInstructions;
+    const insert = db.prepare('INSERT OR IGNORE INTO appointments (agent_id, starts_at, duration_min, location, instructions) VALUES (?, ?, ?, ?, ?)');
+    let created = 0;
+    db.exec('BEGIN');
+    try {
+      for (let i = 0; i < count; i += 1) created += Number(insert.run(staff.id, addMinutes(first, i * duration), duration, location, instructions).changes);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+    if (!created) fail(409, 'Ces créneaux existent déjà.');
+    return sendJson(response, 201, { created });
+  }
+  if (path === '/api/appointments/staff' && method === 'GET') {
+    requireUser(request, ['agent', 'admin']);
+    const now = cityNow();
+    const rows = db.prepare(`${appointmentSelect} WHERE a.starts_at > ? ORDER BY a.starts_at LIMIT 300`).all(addMinutes(now, -1440));
+    return sendJson(response, 200, { appointments: rows.map((row) => appointmentView(row, now)), now });
+  }
+  if (path === '/api/appointments/slots' && method === 'GET') {
+    requireUser(request, ['citizen']);
+    const now = cityNow();
+    const rows = db.prepare(`${appointmentSelect} WHERE a.status = 'open' AND a.starts_at > ? ORDER BY a.starts_at LIMIT 100`).all(now);
+    return sendJson(response, 200, { slots: rows.map((row) => appointmentView(row, now)), timezone: cityTimeZone, utcOffset: cityOffset, now });
+  }
+  if (path === '/api/appointments/mine' && method === 'GET') {
+    const user = requireUser(request, ['citizen']);
+    const now = cityNow();
+    const rows = db.prepare(`${appointmentSelect} WHERE a.citizen_id = ? AND a.starts_at > ? ORDER BY a.starts_at`).all(user.id, addMinutes(now, -30 * 1440));
+    return sendJson(response, 200, { appointments: rows.map((row) => appointmentView(row, now)), timezone: cityTimeZone, utcOffset: cityOffset, now });
+  }
+  const appointmentMatch = /^\/api\/appointments\/(\d+)(\/book|\/ics)?$/.exec(path);
+  if (appointmentMatch) {
+    const user = requireUser(request, ['citizen', 'agent', 'admin']);
+    const id = Number(appointmentMatch[1]);
+    const now = cityNow();
+    const row = db.prepare(`${appointmentSelect} WHERE a.id = ?`).get(id);
+    if (appointmentMatch[2] === '/book' && method === 'POST') {
+      if (user.role !== 'citizen') fail(403, 'Accès réservé.');
+      const body = await readJson(request);
+      const reason = body.reason ? text(body.reason, 5, 200, 'Le motif') : null;
+      const taken = 'Ce créneau n’est plus disponible. Choisissez-en un autre.';
+      if (!row || row.status !== 'open' || row.starts_at <= now) fail(409, taken);
+      const mine = db.prepare("SELECT starts_at, duration_min FROM appointments WHERE citizen_id = ? AND status = 'booked' AND starts_at > ?").all(user.id, now);
+      if (mine.length >= 2) fail(409, 'Vous avez déjà deux rendez-vous à venir. Annulez-en un pour en réserver un autre.');
+      const end = addMinutes(row.starts_at, row.duration_min);
+      if (mine.some((other) => other.starts_at < end && addMinutes(other.starts_at, other.duration_min) > row.starts_at)) fail(409, 'Vous avez déjà un rendez-vous à ce moment-là.');
+      // Single statement: of two people clicking the same slot, exactly one changes a row.
+      const result = db.prepare("UPDATE appointments SET citizen_id = ?, reason = ?, status = 'booked', booked_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open' AND starts_at > ?").run(user.id, reason, id, now);
+      if (!result.changes) fail(409, taken);
+      return sendJson(response, 201, { appointment: appointmentView(db.prepare(`${appointmentSelect} WHERE a.id = ?`).get(id), now) });
+    }
+    if (appointmentMatch[2] === '/ics' && method === 'GET') {
+      if (!row || row.citizen_id !== user.id || row.status !== 'booked') fail(404, 'Rendez-vous introuvable.');
+      const alarm = (trigger, label) => ['BEGIN:VALARM', `TRIGGER:${trigger}`, 'ACTION:DISPLAY', `DESCRIPTION:${icsText(label)}`, 'END:VALARM'];
+      const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Terra Nova//Rendez-vous//FR', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT', `UID:appointment-${row.id}@terra-nova`,
+        `DTSTAMP:${icsDate(now)}`, `DTSTART:${icsDate(row.starts_at)}`, `DTEND:${icsDate(addMinutes(row.starts_at, row.duration_min))}`,
+        'SUMMARY:Rendez-vous avec un agent de Terra Nova', `LOCATION:${icsText(row.location)}`, `DESCRIPTION:${icsText(row.instructions)}`,
+        ...alarm('-P1D', 'Rendez-vous demain à la mairie de Terra Nova'), ...alarm('-PT1H', 'Rendez-vous dans une heure'), 'END:VEVENT', 'END:VCALENDAR'];
+      response.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': `attachment; filename="rendez-vous-${row.id}.ics"`, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+      return response.end(lines.join('\r\n') + '\r\n');
+    }
+    if (!appointmentMatch[2] && method === 'DELETE') {
+      if (!row) fail(404, 'Rendez-vous introuvable.');
+      if (user.role === 'citizen') {
+        if (row.citizen_id !== user.id || row.status !== 'booked') fail(404, 'Rendez-vous introuvable.');
+        if (row.starts_at <= now) fail(409, 'Ce rendez-vous est déjà passé.');
+        // The slot goes back on offer for someone else.
+        db.prepare("UPDATE appointments SET citizen_id = NULL, reason = NULL, booked_at = NULL, status = 'open' WHERE id = ?").run(id);
+      } else if (row.status === 'booked' && row.starts_at > now) {
+        // The citizen keeps seeing it, marked cancelled by the city, instead of the slot silently vanishing.
+        db.prepare("UPDATE appointments SET status = 'cancelled' WHERE id = ?").run(id);
+      } else {
+        db.prepare('DELETE FROM appointments WHERE id = ?').run(id);
+      }
+      return sendJson(response, 200, { ok: true });
+    }
+  }
+
   if (path === '/api/messages' && method === 'GET') {
     const user = requireUser(request);
     const all = ['agent', 'admin'].includes(user.role);
     const messages = all
-      ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email FROM messages JOIN users ON users.id = messages.user_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
-      : db.prepare('SELECT id, subject, body, kind, location, status, created_at, updated_at FROM messages WHERE user_id = ? ORDER BY created_at DESC, id DESC').all(user.id);
+      ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
+      : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
     return sendJson(response, 200, { messages });
   }
   if (path === '/api/messages' && method === 'POST') {
@@ -491,7 +683,12 @@ async function route(request, response) {
     const kind = body.kind || 'contact';
     if (!['contact', 'incident'].includes(kind)) fail(400, 'Type de demande invalide.');
     const location = kind === 'incident' ? text(body.location, 5, 180, 'Le lieu') : null;
-    const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location) VALUES (?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location);
+    let serviceId = null;
+    if (body.service_id !== undefined && body.service_id !== null && body.service_id !== '') {
+      serviceId = Number(body.service_id);
+      if (!Number.isInteger(serviceId) || !db.prepare('SELECT 1 FROM services WHERE id = ?').get(serviceId)) fail(400, 'Service inconnu.');
+    }
+    const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location, service_id) VALUES (?, ?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location, serviceId);
     return sendJson(response, 201, { id: Number(result.lastInsertRowid), status: 'new', confirmation: 'Votre message a bien été transmis.' });
   }
   const messageMatch = /^\/api\/messages\/(\d+)$/.exec(path);
@@ -519,7 +716,8 @@ const server = createServer(async (request, response) => {
     await route(request, response);
   } catch (error) {
     if (!error.status || error.status >= 500) console.error('Request failed:', error);
-    sendJson(response, error.status || 500, { error: error.status ? error.message : 'Erreur interne.' });
+    if (error.extra?.retryAfter) response.setHeader('Retry-After', String(error.extra.retryAfter));
+    sendJson(response, error.status || 500, { error: error.status ? error.message : 'Erreur interne.', ...(error.status ? error.extra : {}) });
   }
 });
 if (typeof port === 'number') server.listen(port, host, () => console.log(`Terra Nova: http://${host}:${port}`));
