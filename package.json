@@ -7,8 +7,17 @@
     "node": ">=22.15"
   },
   "scripts": {
-    "build": "echo \"No build step\"",
+    "build": "vite build",
+    "dev:world": "vite",
     "start": "node --env-file-if-exists=.env server.mjs",
     "create-staff": "node --env-file-if-exists=.env create-staff.mjs"
+  },
+  "devDependencies": {
+    "@react-three/fiber": "^9.8.1",
+    "@vitejs/plugin-react": "^6.1.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "three": "^0.186.1",
+    "vite": "^8.3.2"
   }
 }
