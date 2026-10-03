@@ -19,7 +19,7 @@
         <span class="brand-mark" aria-hidden="true"><span></span></span>
         <span class="brand-name">TERRA <strong>NOVA</strong><small>LE PORTAIL DE LA CITÉ</small></span>
       </a>
-      <nav aria-label="Navigation principale"><a href="#services">Services</a><a href="#actualites">Actualités</a><a href="#espace">Mon espace</a></nav>
+      <nav aria-label="Navigation principale"><a href="#services">Services</a><a href="#transports">Transports</a><a href="#actualites">Actualités</a><a href="#espace">Mon espace</a></nav>
       <div class="header-tools">
         <button id="lang-toggle" class="lang-toggle" type="button" lang="en">English</button>
         <div class="accessibility-tools" role="group" aria-label="Options d’affichage">
@@ -51,9 +51,17 @@
         <p id="services-status" class="section-status" role="status"></p>
       </section>
 
+      <section class="overview transports-section" id="transports" aria-labelledby="transports-title">
+        <nav class="breadcrumb" aria-label="Fil d’Ariane des transports"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Transports</span></nav>
+        <div class="section-heading"><div><span class="section-kicker">02 / SE DÉPLACER</span><h2 id="transports-title">Transports municipaux</h2></div><p>Prochains passages des trams et info trafic, mis à jour chaque minute.</p></div>
+        <p id="transports-hint" class="transports-hint" hidden><a href="#espace">Indiquez votre quartier dans votre profil</a> pour voir votre arrêt en premier.</p>
+        <div id="transports-list" class="transport-grid" data-content></div>
+        <p id="transports-status" class="section-status" role="status"></p>
+      </section>
+
       <section class="requests-section" id="actualites" aria-labelledby="news-title">
         <nav class="breadcrumb" aria-label="Fil d’Ariane des actualités"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Actualités</span></nav>
-        <div class="section-heading"><div><span class="section-kicker">02 / INFORMATIONS</span><h2 id="news-title">Actualités municipales</h2></div><p>Les annonces et informations pratiques publiées par la ville.</p></div>
+        <div class="section-heading"><div><span class="section-kicker">03 / INFORMATIONS</span><h2 id="news-title">Actualités municipales</h2></div><p>Les annonces et informations pratiques publiées par la ville.</p></div>
         <p class="notify-row"><button id="notify-button" class="notify-button" type="button" hidden>Me prévenir des alertes</button></p>
         <div id="news-list" class="news-grid" data-content></div>
         <p id="news-status" class="section-status" role="status"></p>
@@ -61,7 +69,7 @@
 
       <section class="account-section" id="espace" aria-labelledby="account-title">
         <nav class="breadcrumb" aria-label="Fil d’Ariane de l’espace personnel"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Mon espace</span></nav>
-        <div class="section-heading"><div><span class="section-kicker">03 / VOTRE ESPACE</span><h2 id="account-title">Un espace pour chacun</h2></div><p>Retrouvez vos échanges et les outils adaptés à votre rôle.</p></div>
+        <div class="section-heading"><div><span class="section-kicker">04 / VOTRE ESPACE</span><h2 id="account-title">Un espace pour chacun</h2></div><p>Retrouvez vos échanges et les outils adaptés à votre rôle.</p></div>
         <div id="guest-area" class="auth-grid">
           <form id="login-form" class="panel">
             <h3>Se connecter</h3><p>Retrouvez votre espace personnel.</p>
@@ -122,6 +130,14 @@
               <div class="panel"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p><div id="staff-messages" class="message-list" data-content></div></div>
               <div class="panel"><div class="panel-title-row"><h3>Flux officiel Terra Nova</h3><button id="refresh-button" type="button">Actualiser ↻</button></div><p id="feed-status" role="status" aria-live="polite">Connexion au flux…</p><div class="mini-stats"><span id="visible-count">— demandes</span><span id="current-wave">Vague —</span><span id="next-wave">Prochaine vague —</span></div></div>
             </div>
+            <form id="traffic-form" class="panel traffic-form">
+              <h3>Info trafic</h3><p>Signalez une perturbation : elle s’affiche aussitôt dans le portail et dans le monde 3D.</p>
+              <label>Ligne <select name="code" data-content></select></label>
+              <label>État <select name="status"><option value="normal">Trafic normal</option><option value="perturbé">Perturbé</option></select></label>
+              <label>Message aux voyageurs <input name="message" minlength="5" maxlength="200" placeholder="Ex. Travaux : arrêt Marché déplacé rue du Port"></label>
+              <button class="button button-primary" type="submit">Mettre à jour l’info trafic</button>
+              <p id="traffic-status" class="form-status" role="status" aria-live="polite"></p>
+            </form>
             <div class="feed-panel"><div class="section-heading"><div><span class="section-kicker">BESOINS PUBLIÉS</span><h3>Demandes du concours</h3></div><p>Seules les demandes déjà diffusées figurent ici.</p></div><label class="search-field"><span class="visually-hidden">Rechercher dans les demandes officielles</span><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Rechercher un besoin ou un code…"></label><div id="requests-list" class="requests-grid" data-content></div><p id="requests-empty" class="section-status"></p></div>
           </div>
 

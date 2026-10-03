@@ -204,3 +204,24 @@ html[data-contrast=high] .guide-steps span{color:#fff}
 .lang-toggle:hover{background:#70e7d4;color:#07152c}
 html[data-contrast=high] .lang-toggle{color:#ffeb00;border-color:#ffeb00}
 @media(max-width:480px){.lang-toggle{padding:7px 5px;font-size:.6875rem}}
+.transport-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.transport-card{padding:26px;background:#10243b;border:1px solid #ffffff20;border-radius:5px;min-width:0}
+.transport-head{display:flex;align-items:center;gap:14px}
+.transport-head h3{font-size:1.25rem;letter-spacing:-.03em;margin:0;overflow-wrap:anywhere}
+.transport-code{color:#fff;font-weight:800;border-radius:4px;padding:6px 10px;font-size:.9375rem}
+.transport-normal,.transport-disrupted{font-size:.8125rem;line-height:1.5;margin:14px 0}
+.transport-normal{color:#8be7d1}
+.transport-disrupted{background:#ffda87;color:#102539;padding:10px 12px;border-radius:4px}
+.transport-stops{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.transport-stop{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;padding:10px 12px;border:1px solid #ffffff1c;border-radius:4px;font-size:.875rem}
+.transport-mine{border:2px solid #70e7d4;background:#70e7d414}
+.transport-badge{background:#70e7d4;color:#07152c;font-size:.6875rem;font-weight:800;padding:3px 7px;border-radius:3px;text-transform:uppercase;letter-spacing:.06em}
+.transport-next{color:#c4d7de;font-size:.8125rem;flex-basis:100%;font-variant-numeric:tabular-nums}
+.transports-hint{font-size:.8125rem;color:#c4d7de;margin:0 0 18px}
+.transports-hint a{color:#70e7d4}
+.traffic-form{margin-top:18px;max-width:560px}
+@media(max-width:850px){.transport-grid{grid-template-columns:1fr}}
+html[data-contrast=high] .transport-card,html[data-contrast=high] .transport-stop{background:#000;color:#fff;border-color:#fff}
+html[data-contrast=high] .transport-mine{border-color:#ffeb00}
+html[data-contrast=high] .transport-badge,html[data-contrast=high] .transport-disrupted{background:#ffeb00;color:#000}
+html[data-contrast=high] .transport-next,html[data-contrast=high] .transport-normal,html[data-contrast=high] .transports-hint{color:#fff}

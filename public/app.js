@@ -5,6 +5,7 @@ let feed = null;
 let knownCodes = null;
 let loadingFeed = false;
 let services = [];
+let transports = [];
 let messageCount = 0;
 let alertsKey = null;
 let knownAlerts = null;
@@ -191,6 +192,76 @@ $('#notify-button').addEventListener('click', async () => {
 });
 renderNotifyButton();
 
+async function loadTransports() {
+  try {
+    ({ lines: transports } = await api('/api/transports'));
+    $('#transports-status').textContent = '';
+    renderTransports();
+  } catch (error) {
+    $('#transports-status').textContent = error.message;
+  }
+}
+
+// Lines and stops in the user's district come first, so their next trams need no browsing.
+function renderTransports() {
+  const mine = (stop) => Boolean(user?.district) && stop.district === user.district;
+  $('#transports-hint').hidden = user?.role !== 'citizen' || Boolean(user.district);
+  const list = $('#transports-list');
+  list.replaceChildren();
+  for (const line of [...transports].sort((a, b) => b.stops.some(mine) - a.stops.some(mine))) {
+    const card = element('article', 'transport-card');
+    const head = element('div', 'transport-head');
+    const code = element('span', 'transport-code', line.code);
+    code.style.background = line.color;
+    head.append(code, element('h3', '', line.name));
+    card.append(head);
+    if (line.status === 'perturbé') {
+      const notice = element('p', 'transport-disrupted');
+      const message = element('span', '', ` ${line.message || ''}`);
+      message.lang = 'fr';
+      notice.append(element('strong', '', t('Perturbé :')), message);
+      card.append(notice);
+    } else {
+      card.append(element('p', 'transport-normal', t('Trafic normal')));
+    }
+    const stops = element('ul', 'transport-stops');
+    for (const stop of [...line.stops].sort((a, b) => mine(b) - mine(a))) {
+      const item = element('li', mine(stop) ? 'transport-stop transport-mine' : 'transport-stop');
+      item.append(element('strong', '', stop.name));
+      if (mine(stop)) item.append(element('span', 'transport-badge', t('Votre quartier')));
+      item.append(element('span', 'transport-next', t('Prochains passages : {times}', { times: stop.next.join(' · ') })));
+      stops.append(item);
+    }
+    card.append(stops);
+    list.append(card);
+  }
+  const select = $('#traffic-form').elements.code;
+  if (!select.options.length) {
+    for (const line of transports) select.append(Object.assign(element('option', '', `${line.code} · ${line.name}`), { value: line.code }));
+    fillTrafficForm();
+  }
+}
+
+function fillTrafficForm() {
+  const form = $('#traffic-form');
+  const line = transports.find((item) => item.code === form.elements.code.value);
+  if (!line) return;
+  form.elements.status.value = line.status;
+  form.elements.message.value = line.message || '';
+}
+$('#traffic-form').elements.code.addEventListener('change', fillTrafficForm);
+$('#traffic-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    await api(`/api/transports/${form.elements.code.value}`, 'PATCH', { status: form.elements.status.value, message: formValue(form, 'message') });
+    setFormStatus('#traffic-status', t('Info trafic mise à jour.'));
+    await loadTransports();
+  } catch (error) {
+    setFormStatus('#traffic-status', error.message, true);
+  }
+});
+
 function renderIdentity() {
   $('#guest-area').hidden = Boolean(user);
   $('#member-area').hidden = !user;
@@ -198,6 +269,7 @@ function renderIdentity() {
   $('#staff-area').hidden = !['agent', 'admin'].includes(user?.role);
   $('#admin-area').hidden = user?.role !== 'admin';
   renderGuide();
+  renderTransports();
   if (!user) return;
   $('#member-name').textContent = user.name;
   $('#member-role').textContent = t(({ citizen: 'Espace citoyen', agent: 'Espace agent', admin: 'Administration' })[user.role]);
@@ -508,6 +580,7 @@ $('#lang-toggle').addEventListener('click', () => {
   applyLanguage();
   renderIdentity();
   renderServices();
+  renderTransports();
   renderNotifyButton();
   renderRequests();
   alertsKey = null;
@@ -520,5 +593,6 @@ applyLanguage();
 $('#contrast-toggle').addEventListener('click', () => { preference('highContrast', String(preference('highContrast') !== 'true')); applyContrast(); });
 applyContrast();
 
-Promise.allSettled([loadServices(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]);
+setInterval(loadTransports, 60_000);
+Promise.allSettled([loadServices(), loadTransports(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]);
 setInterval(() => { loadNews(); if (user) loadMessages(); if (['agent', 'admin'].includes(user?.role)) loadFeed(); }, 30_000);
