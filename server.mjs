@@ -7,7 +7,8 @@ import { clearSession, createSession, currentUser, hashPassword, verifyPassword 
 
 const root = dirname(fileURLToPath(import.meta.url));
 const apiUrl = 'https://24h.webcup.fr/wp-json/webcup/v1/requests';
-const port = Number(process.env.PORT || 3000);
+// Passenger may hand over a socket path instead of a numeric port.
+const port = /^\d+$/.test(process.env.PORT || '') ? Number(process.env.PORT) : process.env.PORT || 3000;
 const host = process.env.HOST || '127.0.0.1';
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -235,11 +236,13 @@ async function route(request, response) {
   fail(404, 'Route introuvable.');
 }
 
-createServer(async (request, response) => {
+const server = createServer(async (request, response) => {
   try {
     await route(request, response);
   } catch (error) {
     if (!error.status || error.status >= 500) console.error('Request failed:', error);
     sendJson(response, error.status || 500, { error: error.status ? error.message : 'Erreur interne.' });
   }
-}).listen(port, host, () => console.log(`Terra Nova: http://${host}:${port}`));
+});
+if (typeof port === 'number') server.listen(port, host, () => console.log(`Terra Nova: http://${host}:${port}`));
+else server.listen(port, () => console.log(`Terra Nova: ${port}`));
