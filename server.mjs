@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
+import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, sep } from 'node:path';
 import { db } from './store.mjs';
@@ -159,35 +161,86 @@ async function serveFile(path, response) {
   response.end(body);
 }
 
-async function serveWorld(path, response) {
+// Vite names built files name-<8+ char hash>.ext; those never change. Anything else (models, textures
+// copied from world/public) can be replaced in place, so it is revalidated with an ETag instead.
+const compressible = new Set(['.html', '.js', '.css', '.json', '.svg', '.wasm', '.gltf', '.glb', '.bin']);
+const gzipped = new Map();
+const fingerprinted =/^\/assets\/(?:.+\/)?[^/]+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/;
+
+async function serveWorld(request, path, response) {
+  if (path === '/monde') {
+    response.writeHead(301, { Location: '/monde/' });
+    return response.end();
+  }
   let relative;
   try { relative = decodeURIComponent(path.slice('/monde'.length)); } catch { fail(400, 'Adresse invalide.'); }
   if (relative.includes('\0')) fail(400, 'Adresse invalide.');
   let file = join(worldRoot, relative);
   if (file !== worldRoot && !file.startsWith(worldRoot + sep)) fail(404, 'Page introuvable.');
-  let body;
+  let info;
   try {
-    body = await readFile(file);
+    info = await stat(file);
+    if (info.isDirectory()) throw Object.assign(new Error('directory'), { code: 'EISDIR' });
   } catch (error) {
     if (!['ENOENT', 'EISDIR', 'ENOTDIR'].includes(error.code)) throw error;
+    // Navigation (no file extension) falls back to the app; a missing model, texture or script is a real 404.
+    if (extname(relative)) fail(404, 'Fichier introuvable.');
     file = join(worldRoot, 'index.html');
-    try { body = await readFile(file); } catch { fail(404, 'Le monde n’est pas encore disponible.'); }
+    try { info = await stat(file); } catch { fail(404, 'Le monde n’est pas encore disponible.'); }
   }
-  response.writeHead(200, {
+  const isIndex = file === join(worldRoot, 'index.html');
+  const etag = `W/"${info.size.toString(16)}-${Math.floor(info.mtimeMs).toString(16)}"`;
+  const headers = {
     'Content-Type': worldTypes[extname(file).toLowerCase()] || 'application/octet-stream',
-    // Vite fingerprints everything under assets/, so those files never change.
-    'Cache-Control': relative.startsWith('/assets/') && file !== join(worldRoot, 'index.html') ? 'public, max-age=31536000, immutable' : 'no-cache',
+    'Cache-Control': !isIndex && fingerprinted.test(relative) ? 'public, max-age=31536000, immutable' : 'no-cache',
+    ETag: etag,
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
     'X-Frame-Options': 'DENY',
     'Content-Security-Policy': worldCsp,
-  });
+  };
+  if (request.headers['if-none-match'] === etag) {
+    response.writeHead(304, headers);
+    return response.end();
+  }
+  headers.Vary = 'Accept-Encoding';
+  let body = await readFile(file);
+  if (compressible.has(extname(file).toLowerCase()) && body.length > 1024 && /\bgzip\b/.test(request.headers['accept-encoding'] || '')) {
+    // The playable chunk is ~4 MB of JS; compressed once per file version, then served from memory.
+    const cached = gzipped.get(file);
+    if (cached?.etag !== etag) gzipped.set(file, { etag, body: gzipSync(body, { level: 9 }) });
+    body = gzipped.get(file).body;
+    headers['Content-Encoding'] = 'gzip';
+  }
+  response.writeHead(200, headers);
   response.end(body);
 }
 
 function color(value) {
   if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) fail(400, 'Couleur invalide (format #rrggbb).');
   return value.toLowerCase();
+}
+
+// Messages go with the account; sessions cascade from users.
+function eraseUser(id) {
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM messages WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  presence.delete(id);
+}
+
+// F34: staff manage citizens only; staff accounts are never reachable from these routes.
+function citizenTarget(id) {
+  const target = db.prepare('SELECT id, role FROM users WHERE id = ?').get(id);
+  if (!target) fail(404, 'Compte introuvable.');
+  if (target.role !== 'citizen') fail(403, 'Les comptes du personnel ne peuvent pas être modifiés ici.');
+  return target;
 }
 
 function coordinate(value) {
@@ -228,18 +281,8 @@ async function route(request, response) {
       loginAttempts.set(key, { count: (attempt?.until > Date.now() ? attempt.count : 0) + 1, until: Date.now() + 15 * 60_000 });
       fail(403, 'Mot de passe incorrect.');
     }
-    // Messages go with the account; sessions cascade from users.
-    db.exec('BEGIN');
-    try {
-      db.prepare('DELETE FROM messages WHERE user_id = ?').run(user.id);
-      db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
-      db.exec('COMMIT');
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
+    eraseUser(user.id);
     loginAttempts.delete(key);
-    presence.delete(user.id);
     clearSession(request, response);
     return sendJson(response, 200, { ok: true });
   }
@@ -300,10 +343,52 @@ async function route(request, response) {
       loginAttempts.set(key, { count: (attempt?.until > Date.now() ? attempt.count : 0) + 1, until: Date.now() + 15 * 60_000 });
       fail(401, 'Identifiants incorrects.');
     }
+    // Said only after the password is right, so it does not reveal which addresses have accounts.
+    if (!user.active) fail(403, 'Ce compte est désactivé. Contactez les services municipaux.');
     loginAttempts.delete(key);
     clearSession(request, response);
     createSession(response, user.id);
     return sendJson(response, 200, { user: publicUser(user) });
+  }
+
+  if (path === '/api/admin/citizens' && method === 'GET') {
+    requireUser(request, ['agent', 'admin']);
+    const query = (new URL(request.url, 'http://localhost').searchParams.get('q') || '').trim().slice(0, 80);
+    const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
+    const citizens = db.prepare(`SELECT id, email, name, district, active, created_at FROM users
+      WHERE role = 'citizen' AND (name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\') ORDER BY name COLLATE NOCASE, id LIMIT 200`).all(pattern, pattern);
+    return sendJson(response, 200, { citizens });
+  }
+  const citizenMatch = /^\/api\/admin\/citizens\/(\d+)(\/password)?$/.exec(path);
+  if (citizenMatch) {
+    const actor = requireUser(request, ['agent', 'admin']);
+    const id = Number(citizenMatch[1]);
+    if (citizenMatch[2] && method === 'POST') {
+      citizenTarget(id);
+      // One-time password, shown once to the agent; every session of the citizen ends.
+      const temporary = randomBytes(18).toString('base64url');
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(temporary), id);
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+      presence.delete(id);
+      console.log(`Staff ${actor.id} reset the password of citizen ${id}`);
+      return sendJson(response, 200, { password: temporary });
+    }
+    if (!citizenMatch[2] && method === 'PATCH') {
+      citizenTarget(id);
+      const body = await readJson(request);
+      if (typeof body.active !== 'boolean') fail(400, 'Statut invalide.');
+      db.prepare('UPDATE users SET active = ? WHERE id = ?').run(body.active ? 1 : 0, id);
+      if (!body.active) {
+        db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+        presence.delete(id);
+      }
+      return sendJson(response, 200, { ok: true });
+    }
+    if (!citizenMatch[2] && method === 'DELETE') {
+      citizenTarget(id);
+      eraseUser(id);
+      return sendJson(response, 200, { ok: true });
+    }
   }
 
   if (path === '/api/auth/logout' && method === 'POST') {
@@ -424,7 +509,7 @@ async function route(request, response) {
     return sendJson(response, 200, await loadFeed());
   }
 
-  if (method === 'GET' && (path === '/monde' || path.startsWith('/monde/'))) return serveWorld(path, response);
+  if (method === 'GET' && (path === '/monde' || path.startsWith('/monde/'))) return serveWorld(request, path, response);
   if (method === 'GET' && !path.startsWith('/api/')) return serveFile(path, response);
   fail(404, 'Route introuvable.');
 }

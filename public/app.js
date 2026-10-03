@@ -269,6 +269,7 @@ function renderIdentity() {
   $('#staff-area').hidden = !['agent', 'admin'].includes(user?.role);
   $('#admin-area').hidden = user?.role !== 'admin';
   renderGuide();
+  renderTips();
   renderTransports();
   if (!user) return;
   $('#member-name').textContent = user.name;
@@ -300,6 +301,10 @@ function clearIdentity() {
   $('#citizen-messages').replaceChildren();
   $('#staff-messages').replaceChildren();
   $('#requests-list').replaceChildren();
+  citizens = [];
+  pendingDelete = null;
+  $('#citizens-list').replaceChildren();
+  $('#citizens-secret').hidden = true;
   renderIdentity();
   loadNews();
   renderServices();
@@ -425,6 +430,139 @@ async function loadFeed() {
   }
 }
 
+// F35: short tips at the moment of first use, dismissible and remembered per user (guests: per browser).
+const tipTexts = {
+  search: 'Astuce : tapez quelques lettres, la liste se filtre au fil de la frappe. Les accents sont ignorés.',
+  message: 'Astuce : décrivez votre demande avec précision. La ville vous répond ici et vous suivez son état dans « Mes messages ».',
+  report: 'Astuce : indiquez un lieu précis (rue, repère) pour que les équipes retrouvent le problème rapidement.',
+};
+const shownTips = new Set();
+let tipOwner = null;
+const tipKey = (name) => `tipDone:${user?.id ?? 'guest'}:${name}`;
+
+function renderTips() {
+  const owner = user?.id ?? 'guest';
+  if (owner !== tipOwner) { shownTips.clear(); tipOwner = owner; }
+  for (const name of Object.keys(tipTexts)) {
+    const slot = $(`#tip-${name}`);
+    if (!shownTips.has(name) || preference(tipKey(name)) === 'true') { slot.replaceChildren(); continue; }
+    const box = element('div', 'tip');
+    const dismiss = element('button', '', t('Compris'));
+    dismiss.type = 'button';
+    dismiss.addEventListener('click', () => dismissTip(name, true));
+    box.append(element('p', '', t(tipTexts[name])), dismiss);
+    slot.replaceChildren(box);
+  }
+}
+
+function showTip(name) {
+  if (preference(tipKey(name)) === 'true' || shownTips.has(name)) return;
+  shownTips.add(name);
+  renderTips();
+}
+
+function dismissTip(name, refocus) {
+  const field = {
+    search: $('#service-search'), message: $('#message-form [name=subject]'), report: $('#message-kind'),
+  }[name];
+  preference(tipKey(name), 'true');
+  shownTips.delete(name);
+  renderTips();
+  if (refocus) field.focus();
+}
+$('#service-search').addEventListener('focus', () => showTip('search'));
+$('#message-form').addEventListener('focusin', () => showTip('message'));
+$('#message-kind').addEventListener('change', () => { if ($('#message-kind').value === 'incident') showTip('report'); });
+
+// F34: staff administer citizen accounts (the server enforces the role and protects staff accounts).
+let citizens = [];
+let pendingDelete = null;
+let citizenTimer;
+
+function setCitizensStatus(message, error = false) {
+  setFormStatus('#citizens-status', message, error);
+}
+
+function showTemporaryPassword(citizen, password) {
+  const box = $('#citizens-secret');
+  box.replaceChildren(
+    element('p', '', t('Mot de passe temporaire de {name} :', { name: citizen.name })),
+    element('code', 'citizen-password', password),
+    element('p', '', t('Affiché une seule fois : notez-le et transmettez-le de façon sécurisée. Les sessions ouvertes de cet habitant sont fermées.')),
+  );
+  box.hidden = false;
+  box.focus();
+}
+
+function focusCitizen(id) {
+  ($(`[data-citizen="${id}"] button`) || $('#citizen-search')).focus();
+}
+
+function renderCitizens() {
+  const list = $('#citizens-list');
+  list.replaceChildren();
+  for (const citizen of citizens) {
+    const item = element('li', citizen.active ? 'citizen-item' : 'citizen-item citizen-inactive');
+    item.dataset.citizen = citizen.id;
+    const head = element('div', 'citizen-head');
+    head.append(element('strong', '', citizen.name), element('span', `citizen-state state-${citizen.active ? 'on' : 'off'}`, t(citizen.active ? 'Actif' : 'Désactivé')));
+    item.append(head, element('p', 'citizen-meta', [citizen.email, citizen.district].filter(Boolean).join(' · ')));
+    const actions = element('div', 'citizen-actions');
+    const action = (label, handler, danger) => {
+      const button = element('button', danger ? 'citizen-danger' : '', t(label, { name: citizen.name }));
+      button.type = 'button';
+      button.addEventListener('click', handler);
+      return button;
+    };
+    if (pendingDelete === citizen.id) {
+      item.append(element('p', 'citizen-confirm', t('Supprimer définitivement le compte de {name} ? Ses messages et signalements seront aussi effacés.', { name: citizen.name })));
+      actions.append(
+        action('Confirmer la suppression de {name}', () => citizenAction(citizen, 'delete'), true),
+        action('Annuler', () => { pendingDelete = null; renderCitizens(); focusCitizen(citizen.id); }),
+      );
+    } else {
+      actions.append(
+        action(citizen.active ? 'Désactiver {name}' : 'Réactiver {name}', () => citizenAction(citizen, 'toggle')),
+        action('Réinitialiser le mot de passe de {name}', () => citizenAction(citizen, 'reset')),
+        action('Supprimer {name}', () => { pendingDelete = citizen.id; $('#citizens-secret').hidden = true; renderCitizens(); focusCitizen(citizen.id); }, true),
+      );
+    }
+    item.append(actions);
+    list.append(item);
+  }
+}
+
+async function loadCitizens() {
+  if (!['agent', 'admin'].includes(user?.role)) return;
+  try {
+    ({ citizens } = await api(`/api/admin/citizens?q=${encodeURIComponent($('#citizen-search').value.trim())}`));
+    setCitizensStatus(citizens.length ? t(citizens.length > 1 ? '{n} habitants.' : '{n} habitant.', { n: citizens.length }) : t('Aucun habitant ne correspond.'));
+    renderCitizens();
+  } catch (error) {
+    if (error.status === 401) return clearIdentity();
+    setCitizensStatus(error.message, true);
+  }
+}
+
+async function citizenAction(citizen, kind) {
+  $('#citizens-secret').hidden = true;
+  try {
+    if (kind === 'toggle') await api(`/api/admin/citizens/${citizen.id}`, 'PATCH', { active: !citizen.active });
+    else if (kind === 'reset') showTemporaryPassword(citizen, (await api(`/api/admin/citizens/${citizen.id}/password`, 'POST')).password);
+    else await api(`/api/admin/citizens/${citizen.id}`, 'DELETE');
+    pendingDelete = null;
+    await loadCitizens();
+    if (kind === 'toggle') setCitizensStatus(t(citizen.active ? 'Compte de {name} désactivé.' : 'Compte de {name} réactivé.', { name: citizen.name }));
+    if (kind === 'delete') setCitizensStatus(t('Compte de {name} supprimé.', { name: citizen.name }));
+    if (kind === 'toggle') focusCitizen(citizen.id);
+    if (kind === 'delete') $('#citizen-search').focus();
+  } catch (error) {
+    if (error.status === 401) return clearIdentity();
+    setCitizensStatus(error.message, true);
+  }
+}
+$('#citizen-search').addEventListener('input', () => { clearTimeout(citizenTimer); citizenTimer = setTimeout(loadCitizens, 250); });
+
 async function afterAuthentication(nextUser) {
   user = nextUser;
   if (user) setFormStatus('#account-status', '');
@@ -432,6 +570,7 @@ async function afterAuthentication(nextUser) {
   if (user?.role === 'admin') { loadNews(); renderServices(); }
   await loadMessages();
   await loadFeed();
+  loadCitizens();
 }
 
 $('#register-form').addEventListener('submit', async (event) => {
@@ -478,6 +617,8 @@ $('#message-form').addEventListener('submit', async (event) => {
     const data = await api('/api/messages', 'POST', { kind: formValue(form, 'kind'), subject: formValue(form, 'subject'), location: formValue(form, 'location'), body: formValue(form, 'body') });
     form.reset();
     updateLocationField();
+    dismissTip('message');
+    dismissTip('report');
     setFormStatus('#message-status', t('{confirmation} Référence n°{id}.', { confirmation: t(data.confirmation), id: data.id }));
     await loadMessages();
   } catch (error) {
@@ -599,6 +740,8 @@ $('#lang-toggle').addEventListener('click', () => {
   renderTransports();
   renderNotifyButton();
   renderRequests();
+  renderCitizens();
+  renderTips();
   alertsKey = null;
   loadNews();
   loadMessages();

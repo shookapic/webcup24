@@ -62,6 +62,8 @@ if (!messageColumns.has('location')) db.exec('ALTER TABLE messages ADD COLUMN lo
 const userColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
 if (!userColumns.has('avatar')) db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');
 if (!userColumns.has('district')) db.exec('ALTER TABLE users ADD COLUMN district TEXT');
+// Deactivated accounts (F34) keep their data but cannot sign in.
+if (!userColumns.has('active')) db.exec('ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))');
 if (db.prepare('SELECT COUNT(*) AS count FROM services').get().count === 0) {
   const insert = db.prepare('INSERT INTO services (title, description, details) VALUES (?, ?, ?)');
   insert.run('Relations citoyennes', 'Une question ou une difficulté ?', 'Depuis votre espace personnel, envoyez un message aux services municipaux et suivez son traitement.');

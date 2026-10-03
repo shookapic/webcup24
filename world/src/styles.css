@@ -1,7 +1,10 @@
 html, body, #root { margin: 0; height: 100%; background: #0b0614; color: #fff; font-family: system-ui, sans-serif; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .district-label { padding: 0.2rem 0.6rem; border-radius: 999px; background: rgb(11 6 20 / 0.7); border: 1px solid #ff4fa3; font-size: 14px; font-weight: 600; white-space: nowrap; pointer-events: none; }
 .labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
 .labels .district-label { position: absolute; top: 0; left: 0; }
+
+/* Legacy HUD and help line: kept until App.jsx switches to <WorldHud>. */
 .hud { position: fixed; top: 1rem; left: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .hud a, .hud button, .welcome a { padding: 0.5rem 0.75rem; background: #fff; color: #0b0614; border: 0; border-radius: 0.5rem; font: 600 1rem system-ui, sans-serif; text-decoration: underline; cursor: pointer; }
 .hud button { text-decoration: none; }
@@ -11,30 +14,102 @@ html, body, #root { margin: 0; height: 100%; background: #0b0614; color: #fff; f
 .welcome p { margin: 0 0 1rem; }
 .welcome a { display: inline-block; }
 .controls-help { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); margin: 0; padding: 0.4rem 0.8rem; max-width: calc(100% - 2rem); background: rgb(11 6 20 / 0.7); border-radius: 0.5rem; font-size: 0.875rem; text-align: center; }
-.avatar-editor { position: fixed; inset: auto 1rem 1rem auto; margin: 0; width: min(20rem, calc(100% - 2rem)); padding: 1.25rem; background: rgb(11 6 20 / 0.92); color: #fff; border: 1px solid #ff4fa3; border-radius: 1rem; }
+
+/* ---- World HUD (ui/WorldHud.jsx): district top left, controls top right, >= 44px targets ---- */
+.world-hud { position: fixed; z-index: 5; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: max(0.75rem, env(safe-area-inset-top, 0px)) max(0.75rem, env(safe-area-inset-right, 0px)) 0 max(0.75rem, env(safe-area-inset-left, 0px)); pointer-events: none; font-family: system-ui, sans-serif; }
+.hud-district { display: grid; margin: 0; padding: 0.4rem 0.85rem; min-height: 2.75rem; align-content: center; background: rgb(24 36 44 / 0.88); color: #f2eee3; border: 1px solid rgb(242 238 227 / 0.35); border-radius: 0.75rem; overflow-wrap: anywhere; }
+.hud-district-label { font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; color: #c6d3d8; }
+.hud-district strong { font-size: 1rem; }
+.hud-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; pointer-events: auto; }
+.hud-controls :is(button, a) { position: relative; display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.75rem; min-width: 2.75rem; padding: 0.4rem 0.85rem; background: rgb(24 36 44 / 0.88); color: #f2eee3; border: 1px solid rgb(242 238 227 / 0.35); border-radius: 0.75rem; font: 600 0.9375rem/1.2 system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+.hud-controls :is(button, a):hover { background: rgb(40 58 70 / 0.95); }
+.hud-controls :is(button, a):focus-visible, .phone-screen :focus-visible, .phone-sheet:focus-visible { outline: 3px solid #ffd58a; outline-offset: 2px; }
+.hud-controls button[aria-expanded=true] { border-color: #ffd58a; }
+.hud-icon { width: 1.25rem; height: 1.25rem; flex: none; }
+.hud-controls kbd { padding: 0.05rem 0.4rem; border: 1px solid rgb(242 238 227 / 0.5); border-radius: 0.3rem; font: 700 0.75rem system-ui, sans-serif; color: #c6d3d8; }
+.hud-badge { position: absolute; top: -0.45rem; right: -0.35rem; min-width: 1.4rem; padding: 0.05rem 0.35rem; background: #e9ba69; color: #1d1208; border-radius: 999px; font-size: 0.8125rem; font-weight: 800; text-align: center; }
+@media (hover: none) { .hud-controls kbd { display: none; } }
+@media (max-width: 30rem) { .world-hud { flex-direction: column; } .hud-controls { justify-content: flex-start; } }
+
+/* ---- Avatar editor ---- */
+.avatar-editor { position: fixed; inset: auto 1rem 1rem auto; margin: 0; width: min(20rem, calc(100% - 2rem)); max-height: calc(100% - 2rem); overflow-y: auto; padding: 1.25rem; background: rgb(11 6 20 / 0.94); color: #fff; border: 1px solid #ff4fa3; border-radius: 1rem; }
 .avatar-editor::backdrop { background: transparent; }
 .avatar-editor h2 { margin: 0 0 1rem; font-size: 1.25rem; }
+.avatar-preview { margin-bottom: 1rem; border-radius: 0.75rem; overflow: hidden; background: rgb(255 255 255 / 0.06); }
 .avatar-editor label { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; font-weight: 600; }
-.avatar-editor input[type=color] { width: 3rem; height: 2.25rem; padding: 0; border: 2px solid #fff; border-radius: 0.5rem; background: none; cursor: pointer; }
+.avatar-editor input[type=color] { width: 3rem; height: 2.75rem; padding: 0; border: 2px solid #fff; border-radius: 0.5rem; background: none; cursor: pointer; }
+.avatar-editor input:disabled { cursor: default; opacity: 0.6; }
+.avatar-hint { margin: 0 0 0.75rem; font-size: 0.8125rem; color: #d9d2e6; }
+.avatar-status { margin: 0 0 0.75rem; font-size: 0.9375rem; }
+.avatar-status:empty { display: none; }
+.avatar-error { padding: 0.5rem 0.65rem; background: #3a1d1a; border: 1px solid #ff9a7a; border-radius: 0.5rem; color: #ffd2c4; }
 .avatar-editor .actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
-.avatar-editor button { padding: 0.5rem 0.9rem; border: 0; border-radius: 0.5rem; font: 600 1rem system-ui, sans-serif; cursor: pointer; }
-.avatar-editor button[type=submit] { background: #ff4fa3; color: #0b0614; }
-.avatar-editor :focus-visible { outline: 3px solid #ff4fa3; outline-offset: 2px; }
-.avatar-editor [role=status]:empty { display: none; }
-.phone { position: fixed; z-index: 10; left: 50%; bottom: 0; transform: translateX(-50%); width: min(22rem, calc(100% - 2rem)); height: min(34rem, calc(100% - 5rem)); padding: 0.6rem; background: #14101c; border: 2px solid #3b2f4d; border-bottom: 0; border-radius: 2.2rem 2.2rem 0 0; box-shadow: 0 0 40px rgb(255 79 163 / 0.35); animation: phone-up 0.45s ease-out; }
-@keyframes phone-up { from { transform: translate(-50%, 100%); } }
-@media (prefers-reduced-motion: reduce) { .phone { animation: none; } }
-.phone-screen { display: flex; flex-direction: column; height: 100%; overflow-y: auto; padding: 0.9rem 1rem 1.5rem; background: linear-gradient(160deg, #241232, #0b0614 60%); border-radius: 1.7rem 1.7rem 0 0; }
-.phone-header { display: flex; justify-content: space-between; margin-bottom: 0.75rem; font-size: 0.8rem; opacity: 0.85; }
-.phone h2 { margin: 0.5rem 0; font-size: 1.05rem; }
-.phone-alert { margin-bottom: 0.75rem; padding: 0.75rem; background: rgb(255 79 163 / 0.12); border: 1px solid #ff4fa3; border-radius: 0.9rem; }
-.phone-alert h3 { margin: 0.25rem 0 0.5rem; font-size: 1rem; }
-.phone-alert p { margin: 0 0 0.4rem; font-size: 0.9rem; line-height: 1.4; }
-.phone-badge { display: inline-block; padding: 0.1rem 0.5rem; background: #ff4fa3; color: #0b0614; border-radius: 999px; font-weight: 700; font-size: 0.75rem !important; }
-.phone-news { margin: 0; padding: 0; list-style: none; }
-.phone-news li { display: grid; padding: 0.5rem 0; border-bottom: 1px solid rgb(255 255 255 / 0.12); font-size: 0.9rem; }
-.phone-news time { font-size: 0.75rem; opacity: 0.75; }
-.phone-actions { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-top: auto; padding-top: 0.75rem; }
-.phone-actions a { color: #5ee7ff; font-weight: 600; }
-.phone-actions button { padding: 0.55rem 1rem; background: #ff4fa3; color: #0b0614; border: 0; border-radius: 999px; font: 700 1rem system-ui, sans-serif; cursor: pointer; }
-.phone :focus-visible { outline: 3px solid #5ee7ff; outline-offset: 2px; }
+.avatar-editor button { min-height: 2.75rem; padding: 0.5rem 0.9rem; border: 0; border-radius: 0.5rem; background: #e5e0f0; color: #0b0614; font: 600 1rem system-ui, sans-serif; cursor: pointer; }
+.avatar-editor button[type=submit] { background: #ff4fa3; }
+.avatar-editor button:disabled { opacity: 0.6; cursor: default; }
+.avatar-editor :focus-visible { outline: 3px solid #ffd58a; outline-offset: 2px; }
+
+/* ---- Phone (Phone.jsx). PhoneScreen is positioned by its host: the flat dialog below or B's 3D screen bridge. ---- */
+.phone-screen { --ph-bg: #1b2a34; --ph-surface: #243642; --ph-line: #4d6575; --ph-text: #f2eee3; --ph-muted: #c0ced4; --ph-teal: #7cc7c0; --ph-amber: #e9ba69; --ph-alert: #ff9a7a; --ph-alert-bg: #3a2420;
+  display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; background: var(--ph-bg); color: var(--ph-text); font: 1rem/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; overflow-wrap: anywhere; }
+.phone-screen *, .phone-screen *::before, .phone-screen *::after { box-sizing: border-box; }
+.phone-bar { display: flex; align-items: center; gap: 0.75rem; flex: none; padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--ph-line); font-size: 0.875rem; }
+.phone-brand { font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ph-teal); }
+.phone-clock { margin-right: auto; color: var(--ph-muted); }
+.phone-close { min-height: 2.75rem; padding: 0.35rem 0.8rem; background: transparent; color: var(--ph-text); border: 1px solid var(--ph-line); border-radius: 999px; font: 600 0.9375rem system-ui, sans-serif; cursor: pointer; }
+.phone-close kbd { margin-left: 0.25rem; color: var(--ph-muted); font: 700 0.75rem system-ui, sans-serif; }
+.phone-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0.9rem 0.9rem 1.25rem; }
+.phone-title { margin: 0 0 0.75rem; font-size: 1.25rem; line-height: 1.25; outline: none; }
+.phone-card { margin: 0 0 0.75rem; padding: 0.8rem 0.9rem; background: var(--ph-surface); border: 1px solid var(--ph-line); border-radius: 0.9rem; }
+.phone-card h3 { margin: 0 0 0.35rem; font-size: 1.0625rem; line-height: 1.3; }
+.phone-card p { margin: 0 0 0.45rem; }
+.phone-card p:last-child { margin-bottom: 0; }
+.phone-alert { background: var(--ph-alert-bg); border-color: var(--ph-alert); }
+.phone-badge { display: inline-block; padding: 0.1rem 0.6rem; background: var(--ph-alert); color: #2a0f08; border-radius: 999px; font-size: 0.8125rem; font-weight: 800; }
+.phone-date, .phone-meta { color: var(--ph-muted); font-size: 0.8125rem; }
+.phone-tag { display: inline-block; padding: 0 0.45rem; margin-left: 0.15rem; border: 1px solid var(--ph-muted); border-radius: 0.35rem; color: var(--ph-muted); font-size: 0.75rem; font-weight: 700; vertical-align: middle; }
+.phone-tag-nearest { margin-left: 0.5rem; background: var(--ph-teal); border-color: var(--ph-teal); color: #10181d; }
+.phone-tag-featured { margin: 0 0 0.35rem; border-color: var(--ph-amber); color: var(--ph-amber); }
+.phone-featured { border-color: var(--ph-amber); }
+.phone-ack, .phone-action, .phone-note button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0.5rem 1.1rem; background: var(--ph-amber); color: #1d1208; border: 0; border-radius: 999px; font: 700 1rem system-ui, sans-serif; cursor: pointer; }
+.phone-ack { width: 100%; margin-top: 0.25rem; }
+.phone-action { margin-top: 0.4rem; }
+.phone-note { margin: 0 0 0.75rem; padding: 0.7rem 0.9rem; border: 1px solid var(--ph-line); border-radius: 0.9rem; background: var(--ph-surface); }
+.phone-note p { margin: 0 0 0.5rem; }
+.phone-note p:last-child { margin: 0; }
+.phone-note-error { border-color: var(--ph-alert); }
+.phone-note-stale { border-color: var(--ph-amber); }
+.phone-empty { color: var(--ph-muted); }
+.phone-list { margin: 0 0 0.75rem; padding: 0; list-style: none; }
+.phone-row { display: grid; gap: 0.1rem; width: 100%; min-height: 2.75rem; padding: 0.55rem 0.1rem; text-align: left; background: transparent; color: inherit; border: 0; border-bottom: 1px solid var(--ph-line); font: inherit; cursor: pointer; }
+.phone-row strong { color: var(--ph-teal); }
+.phone-excerpt { color: var(--ph-muted); font-size: 0.875rem; }
+.phone-back { min-height: 2.75rem; margin-bottom: 0.5rem; padding: 0.3rem 0.8rem; background: transparent; color: var(--ph-teal); border: 1px solid var(--ph-line); border-radius: 999px; font: 600 0.9375rem system-ui, sans-serif; cursor: pointer; }
+.phone-search { display: block; margin-bottom: 0.6rem; font-size: 0.875rem; font-weight: 600; }
+.phone-search input { display: block; width: 100%; min-height: 2.75rem; margin-top: 0.25rem; padding: 0.5rem 0.7rem; background: #101c24; color: var(--ph-text); border: 1px solid var(--ph-line); border-radius: 0.7rem; font: 1rem system-ui, sans-serif; }
+.phone-count { min-height: 1.2em; margin: 0 0 0.5rem; color: var(--ph-muted); font-size: 0.875rem; }
+.phone-card details { margin-top: 0.3rem; }
+.phone-card summary { min-height: 2.75rem; display: flex; align-items: center; color: var(--ph-teal); font-weight: 700; cursor: pointer; }
+.phone-line { display: inline-block; min-width: 2.2rem; padding: 0.05rem 0.5rem; border-radius: 0.5rem; font-weight: 800; text-align: center; }
+.phone-line-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem; }
+.phone-line-head h3 { margin: 0; }
+.phone-line-status { margin: 0 0 0.5rem; }
+.phone-disrupted { color: var(--ph-alert); }
+.phone-normal { color: var(--ph-teal); }
+.phone-stops { margin: 0; padding: 0; list-style: none; }
+.phone-stop { display: grid; gap: 0.1rem; padding: 0.5rem 0; border-top: 1px solid var(--ph-line); }
+.phone-stop-nearest strong { color: var(--ph-teal); }
+.phone-next { color: var(--ph-muted); font-size: 0.9375rem; }
+.phone-links { display: grid; gap: 0.25rem; margin: 0.5rem 0 0; }
+.phone-links a { display: flex; align-items: center; min-height: 2.75rem; color: var(--ph-teal); font-weight: 650; }
+.phone-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); flex: none; border-top: 1px solid var(--ph-line); background: #14212a; }
+.phone-nav button { position: relative; min-height: 2.75rem; padding: 0.4rem 0.15rem; background: transparent; color: var(--ph-muted); border: 0; border-top: 3px solid transparent; font: 600 0.75rem/1.2 system-ui, sans-serif; cursor: pointer; }
+.phone-nav button[aria-current=page] { color: var(--ph-text); border-top-color: var(--ph-amber); }
+.phone-count-badge { margin-left: 0.25rem; padding: 0 0.35rem; background: var(--ph-alert); color: #2a0f08; border-radius: 999px; font-weight: 800; }
+
+/* ---- Flat dialog host (PhoneFallback): desktop fallback, narrow screens, keyboard/screen-reader route ---- */
+.phone-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: max(1rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-right, 0px)) max(1rem, env(safe-area-inset-bottom, 0px)) max(1rem, env(safe-area-inset-left, 0px)); background: rgb(8 14 18 / 0.55); }
+.phone-sheet { width: min(24rem, 100%); height: min(46rem, 100%); overflow: hidden; border: 3px solid #0d141a; border-radius: 1.75rem; box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 0.5); }
+@media (prefers-reduced-motion: no-preference) { .phone-sheet { animation: phone-rise 0.25s ease-out; } }
+@keyframes phone-rise { from { transform: translateY(1.5rem); opacity: 0; } }
+@media (max-width: 30rem) { .phone-backdrop { padding: 0; } .phone-sheet { width: 100%; height: 100%; border: 0; border-radius: 0; } }

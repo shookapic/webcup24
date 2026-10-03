@@ -47,6 +47,7 @@
         <nav class="breadcrumb" aria-label="Fil d’Ariane des services"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Services</span></nav>
         <div class="section-heading"><div><span class="section-kicker">01 / VIE QUOTIDIENNE</span><h2 id="services-title">Les services de la cité</h2></div><p>Choisissez le service qui répond à votre besoin et retrouvez les informations utiles.</p></div>
         <label class="search-field service-search"><span class="visually-hidden">Rechercher un service</span><span aria-hidden="true">⌕</span><input id="service-search" type="search" placeholder="Rechercher un service : santé, signalement…" aria-describedby="services-status"></label>
+        <div id="tip-search" class="tip-slot" role="status"></div>
         <div id="services-list" class="service-grid" data-content></div>
         <p id="services-status" class="section-status" role="status"></p>
       </section>
@@ -106,8 +107,10 @@
             <div class="workspace-grid">
               <form id="message-form" class="panel">
                 <h3>Contacter ou signaler</h3><p>Posez une question ou signalez un problème dans la ville. Vous recevrez une confirmation et pourrez suivre son état ici.</p>
+                <div id="tip-message" class="tip-slot" role="status"></div>
                 <label>Type de demande <select name="kind" id="message-kind"><option value="contact">Question aux services municipaux</option><option value="incident">Signaler un problème</option></select></label>
                 <label>Sujet <input name="subject" type="text" required minlength="4" maxlength="120"></label>
+                <div id="tip-report" class="tip-slot" role="status"></div>
                 <label id="location-field" hidden>Lieu du problème <input name="location" type="text" minlength="5" maxlength="180" placeholder="Rue, quartier ou repère précis"></label>
                 <label>Votre message <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label>
                 <button class="button button-primary" type="submit">Envoyer mon message</button>
@@ -145,6 +148,13 @@
               <button class="button button-primary" type="submit">Mettre à jour l’info trafic</button>
               <p id="traffic-status" class="form-status" role="status" aria-live="polite"></p>
             </form>
+            <section id="citizens-panel" class="panel citizens-panel" aria-labelledby="citizens-title">
+              <h3 id="citizens-title">Comptes des habitants</h3><p>Désactivez, réactivez, réinitialisez le mot de passe ou supprimez le compte d’un habitant. Les comptes du personnel ne sont pas modifiables ici.</p>
+              <label>Rechercher un habitant <input id="citizen-search" type="search" maxlength="80" placeholder="Nom ou adresse e-mail" autocomplete="off"></label>
+              <p id="citizens-status" class="form-status" role="status" aria-live="polite"></p>
+              <div id="citizens-secret" class="citizen-secret" role="status" tabindex="-1" hidden></div>
+              <ul id="citizens-list" class="citizen-list" data-content></ul>
+            </section>
             <div class="feed-panel"><div class="section-heading"><div><span class="section-kicker">BESOINS PUBLIÉS</span><h3>Demandes du concours</h3></div><p>Seules les demandes déjà diffusées figurent ici.</p></div><label class="search-field"><span class="visually-hidden">Rechercher dans les demandes officielles</span><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Rechercher un besoin ou un code…"></label><div id="requests-list" class="requests-grid" data-content></div><p id="requests-empty" class="section-status"></p></div>
           </div>
 

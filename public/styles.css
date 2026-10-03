@@ -231,3 +231,26 @@ html[data-contrast=high] .transport-next,html[data-contrast=high] .transport-nor
 .account-status{margin:0 0 18px;font-size:.9375rem}
 .account-status:empty{display:none}
 html[data-contrast=high] .danger-button{background:#000;color:#ffeb00;border:2px solid #ffeb00}
+.tip-slot:empty{display:none}
+.tip{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0 0 16px;padding:12px 14px;background:#0b2e3a;border:1px solid #70e7d4;border-radius:4px}
+.tip p{margin:0;font-size:.8125rem;line-height:1.5;color:#e4f5f4;flex:1 1 14rem}
+.tip button,.citizen-actions button{min-height:44px;background:transparent;color:#70e7d4;border:1px solid #70e7d477;border-radius:3px;padding:9px 13px;font-size:.75rem;font-weight:700;cursor:pointer}
+.tip button:hover,.citizen-actions button:hover{background:#70e7d41a}
+.citizens-panel{margin-top:18px}
+.citizen-list{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:12px}
+.citizen-item{border:1px solid #ffffff27;padding:15px;background:#091d31;overflow-wrap:anywhere}
+.citizen-inactive{border-style:dashed;opacity:.9}
+.citizen-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.citizen-meta{margin:6px 0 12px;font-size:.8125rem;color:#a8c1ca}
+.citizen-state{font-size:.6875rem;font-weight:800;letter-spacing:.06em;padding:3px 9px;border-radius:999px}
+.state-on{background:#70e7d4;color:#07152c}
+.state-off{background:#ffb8a1;color:#3a0d00}
+.citizen-actions{display:flex;flex-wrap:wrap;gap:8px}
+.citizen-actions .citizen-danger{color:#ffb8a1;border-color:#ffb8a177}
+.citizen-confirm{margin:0 0 12px;font-size:.8125rem;color:#ffd8cb;line-height:1.5}
+.citizen-secret{margin:12px 0;padding:14px;border:2px solid #f1c75e;border-radius:4px;background:#2a2108;color:#fff}
+.citizen-secret p{margin:0 0 8px;font-size:.8125rem;line-height:1.5}
+.citizen-password{display:block;margin:8px 0;padding:10px;background:#000;color:#f1c75e;font-size:1rem;overflow-wrap:anywhere;user-select:all}
+html[data-contrast=high] .tip,html[data-contrast=high] .citizen-item,html[data-contrast=high] .citizen-secret{background:#000;border-color:#fff;color:#fff}
+html[data-contrast=high] .tip p,html[data-contrast=high] .citizen-meta,html[data-contrast=high] .citizen-confirm{color:#fff}
+html[data-contrast=high] .tip button,html[data-contrast=high] .citizen-actions button{color:#ffeb00;border-color:#ffeb00}

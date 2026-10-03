@@ -4,11 +4,14 @@ Portail citoyen pour le 24H By Webcup 2026, construit à partir des demandes act
 
 ## Démarrer
 
-Node.js 22.15 ou plus récent est requis. Le projet n’a aucune dépendance npm. Le module `node:sqlite` affiche un avertissement expérimental avec certaines versions de Node.
+Node.js 22.15 ou plus récent est requis (Hodifly utilise Node 24). Le serveur (`server.mjs`, `store.mjs`, `security.mjs`) n’a aucune dépendance d’exécution : seulement `node:http` et `node:sqlite`, qui affiche un avertissement expérimental avec certaines versions de Node. Le monde 3D (`world/`) est une application Vite + React + React Three Fiber ; ses paquets sont des `devDependencies` utilisées uniquement à la compilation (`npm run build` → `dist/monde/`, servi sous `/monde/`).
 
-1. Copier `.env.example` vers `.env` et placer la clé API de l’équipe dans `TERRA_NOVA_API_KEY`. Ne jamais publier ce fichier.
-2. Lancer `npm start`.
-3. Ouvrir `http://127.0.0.1:3000`.
+1. `npm ci` pour installer les outils de compilation du monde.
+2. Copier `.env.example` vers `.env` et placer la clé API de l’équipe dans `TERRA_NOVA_API_KEY`. Ne jamais publier ce fichier.
+3. `npm run build` (le portail dans `public/` n’a pas d’étape de compilation ; seul le monde en a une), puis `npm start`.
+4. Ouvrir `http://127.0.0.1:3000`. Pour développer le monde avec rechargement : `npm run dev:world` (proxy `/api` vers le port 3000).
+
+Vérifications locales de la session A : `node tools/smoke-a.mjs` (API, rôles, comptes, service de `/monde/`, sur une base temporaire). `tools/qa-a/portal.mjs` et `tools/qa-a/world-ui.mjs` testent le portail et les composants du téléphone dans jsdom (`npm i --no-save jsdom` d’abord).
 
 Les citoyens peuvent créer leur propre compte. Pour créer un agent ou un administrateur, exécuter :
 
@@ -30,7 +33,11 @@ La commande affiche un mot de passe aléatoire une seule fois. Conservez-le dans
 - Recherche instantanée dans les services (sans tenir compte des accents) et services mis à la une par l’administrateur.
 - Guide de première connexion (profil, service, démarche) et profil citoyen avec quartier.
 - Interface, services et actualités en français ou en anglais (bouton « English »). Un contenu sans version anglaise reste affiché en français.
-- Monde 3D servi sous `/monde/`, avec avatar et présence des autres joueurs (`/api/me/avatar`, `/api/presence`).
+- Monde 3D servi sous `/monde/`, avec avatar et présence des autres joueurs (`/api/me/avatar`, `/api/presence`). Un fichier manquant (modèle, texture, script) renvoie un vrai 404 ; seule une navigation sans extension retombe sur l’application. Les fichiers au nom haché sont mis en cache un an, les autres sont revalidés (ETag) ; les fichiers texte volumineux sont servis en gzip.
+- Transports (F36) : `GET /api/transports` (deux lignes, trois prochains passages par arrêt, perturbations). Le portail met l’arrêt du quartier du profil en premier ; les agents mettent à jour l’info trafic.
+- Suppression de son propre compte avec confirmation par mot de passe (F33) : le compte, les messages et les signalements sont effacés, les sessions fermées.
+- Administration des comptes citoyens (F34, agents et administrateurs) : recherche, désactivation/réactivation (les sessions sont fermées et la connexion refusée), mot de passe temporaire affiché une seule fois, suppression avec confirmation. Les comptes du personnel ne sont jamais modifiables depuis cet écran.
+- Astuces contextuelles au premier usage (F35) : recherche de services, premier message, premier signalement ; masquables et mémorisées par utilisateur.
 
 La clé API reste sur le serveur. Le flux du concours est accessible aux agents et administrateurs authentifiés uniquement. Le serveur ne déduit ni le nombre ni le calendrier des vagues : il affiche les demandes réellement reçues et utilise `request_code` comme référence stable.
 
