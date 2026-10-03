@@ -446,3 +446,6 @@ html[data-contrast=high] .notice-banner{background:#000;color:#ffeb00;border-bot
 html[data-contrast=high] .notice-banner a{color:#ffeb00}
 html[data-contrast=high] .notice-unread,html[data-contrast=high] .dashboard-todo li{background:#000;color:#fff;border-color:#ffeb00}
 @media(max-width:620px){.notice-banner{padding:12px 16px}}
+.notice-actions{display:flex;flex-wrap:wrap;gap:8px}
+.notice-item textarea{width:100%;box-sizing:border-box}
+.data-link{display:block;margin-top:6px}

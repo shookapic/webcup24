@@ -365,6 +365,54 @@ try {
   check('F50 recent actions come from the journal (last five, newest first)', board3.recent.length === 5 && board3.recent.every((r, i) => i === 0 || r.at <= board3.recent[i - 1].at));
   dbc.close();
 
+  // F51: concerns about data use, and the personal export
+  const post = (client, body) => client.call('/api/concerns', 'POST', body);
+  check('F51 concerns: visitors and staff cannot file or list them as residents', (await visitor.call('/api/concerns', 'POST', { topic: 'usage', body: 'Une inquiétude sans compte.' })).status === 401 && (await agent.call('/api/concerns')).status === 403 && (await citizen.call('/api/admin/concerns')).status === 403 && (await visitor.call('/api/admin/concerns')).status === 401);
+  check('F51 concerns are validated (unknown topic, too short, not text)', (await post(citizen, { topic: 'nope', body: 'Une inquiétude assez longue.' })).status === 400 && (await post(citizen, { topic: 'usage', body: 'court' })).status === 400 && (await post(citizen, { topic: 'usage', body: 12345678901 })).status === 400);
+  const filed = await post(citizen, { topic: 'sharing', body: 'Mes messages sont-ils transmis à d’autres services ?' });
+  check('F51 a filed concern returns a reference, a date and what happens next', filed.status === 201 && filed.data.reference === `C-${filed.data.id}` && filed.data.status === 'received' && Boolean(filed.data.created_at) && filed.data.confirmation.includes('Nouvelles de mes demandes'), JSON.stringify(filed.data));
+  const history = (await citizen.call('/api/concerns')).data.concerns;
+  check('F51 the resident\'s history shows it with status and no answer yet; another resident sees none', history.length === 1 && history[0].status === 'received' && history[0].response === null && (await neighbour.call('/api/concerns')).data.concerns.length === 0);
+  const staffList = await agent.call('/api/admin/concerns');
+  check('F51 staff see the concern with the author masked (first name, initial, masked e-mail), not the full name or e-mail', staffList.data.concerns[0].author.includes('***@') && !JSON.stringify(staffList.data).match(/citizen@smoke\.test|Citoyen Test/) && staffList.data.concerns[0].body.includes('d’autres services'), JSON.stringify(staffList.data));
+  check('F51 the dashboard counts concerns still to read', (await agent.call('/api/admin/dashboard')).data.concerns.received === 1);
+  const ownNotices = async () => (await mine(citizen)).notices.filter((n) => n.code.startsWith('concern.'));
+  check('F51 staff cannot answer without text, nor with an unknown status', (await agent.call(`/api/admin/concerns/${filed.data.id}`, 'PATCH', { status: 'answered' })).status === 400 && (await agent.call(`/api/admin/concerns/${filed.data.id}`, 'PATCH', { status: 'closed' })).status === 400 && (await ownNotices()).length === 0);
+  check('F51 marking it read notifies the author once (repeat is silent)', (await agent.call(`/api/admin/concerns/${filed.data.id}`, 'PATCH', { status: 'read' })).status === 200 && (await agent.call(`/api/admin/concerns/${filed.data.id}`, 'PATCH', { status: 'read' })).status === 200 && (await ownNotices()).length === 1 && (await ownNotices())[0].code === 'concern.read' && (await ownNotices())[0].label === `C-${filed.data.id}`);
+  check('F51 answering notifies only the author, with the answer text; the history shows status and answer', (await agent.call(`/api/admin/concerns/${filed.data.id}`, 'PATCH', { status: 'answered', response: 'Non : vos messages ne sont lus que par les agents de la ville.' })).status === 200 && (await ownNotices())[0].code === 'concern.answered' && (await ownNotices())[0].note.includes('agents de la ville') && (await citizen.call('/api/concerns')).data.concerns[0].status === 'answered' && !(await mine(neighbour)).notices.some((n) => n.code.startsWith('concern.')));
+  check('F51 an answered concern cannot be answered again', (await agent.call(`/api/admin/concerns/${filed.data.id}`, 'PATCH', { status: 'answered', response: 'Une seconde réponse.' })).status === 409);
+  const afterJournal = (await agent.call('/api/admin/audit?limit=200&category=concern')).data;
+  check('F51 staff handling is in the journal (read, answer) by reference only: the concern text and the answer are not copied there', afterJournal.entries.length === 2 && afterJournal.entries.every((e) => e.target_label === `C-${filed.data.id}` && e.actor_name === 'Agent Smoke') && !JSON.stringify(afterJournal.entries).match(/d’autres services|agents de la ville/));
+  const exported = await citizen.call('/api/me/export');
+  const exportText = JSON.stringify(exported.data);
+  check('F51 export: the resident\'s own data as a downloadable file (account, messages, appointments, concerns, notices)', exported.status === 200 && /attachment/.test(exported.headers.get('content-disposition') || '') && exported.data.account.email === 'citizen@smoke.test' && exported.data.messages.length >= 1 && Array.isArray(exported.data.appointments) && exported.data.concerns.length === 1 && exported.data.notices.length >= 3, exportText.slice(0, 300));
+  check('F51 export: no password hash, no session value, nobody else\'s data', !/password|scrypt|token|session/i.test(exportText.replace(/"(?:subject|body|note|label)":"[^"]*"/g, '')) && !/neighbour@|doomed@|agent@smoke|admin@smoke/.test(exportText));
+  check('F51 export is for the signed-in resident only', (await visitor.call('/api/me/export')).status === 401 && (await agent.call('/api/me/export')).status === 403);
+  for (const n of [1, 2, 3, 4, 5]) await post(neighbour, { topic: 'access', body: `Demande numéro ${n} sur mes données.` });
+  check('F51 at most 5 concerns a day per resident (6th refused with 429), others unaffected', (await post(neighbour, { topic: 'access', body: 'Une sixième demande refusée.' })).status === 429 && (await post(citizen, { topic: 'other', body: 'Une autre question pour la ville.' })).status === 201);
+  const neighbourId = (await neighbour.call('/api/me')).data.user.id;
+  await neighbour.call('/api/me', 'DELETE', { password: 'neighbour-password-123' });
+  const gone = new DatabaseSync(env.DATA_PATH);
+  check('F51 deleting the account erases the resident\'s concerns and notices, and they vanish from the staff list', gone.prepare('SELECT COUNT(*) AS n FROM concerns WHERE user_id = ?').get(neighbourId).n === 0 && gone.prepare('SELECT COUNT(*) AS n FROM notices WHERE user_id = ?').get(neighbourId).n === 0 && !(await agent.call('/api/admin/concerns')).data.concerns.some((c) => c.body.startsWith('Demande numéro')));
+  gone.close();
+
+  // F51: the "Vos données" page makes claims; each one is checked against the running server and the database
+  const relogin = new Client();
+  const loginResponse = await relogin.call('/api/auth/login', 'POST', { email: 'citizen@smoke.test', password: 'a-long-password-1' });
+  check('F51 claim: the session cookie lasts 7 days, is HttpOnly and SameSite=Strict', /Max-Age=604800/.test(loginResponse.headers.get('set-cookie')) && /HttpOnly/.test(loginResponse.headers.get('set-cookie')) && /SameSite=Strict/.test(loginResponse.headers.get('set-cookie')));
+  const claims = new DatabaseSync(env.DATA_PATH);
+  const tables = claims.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name);
+  const expectedTables = ['announcements', 'appointments', 'audit_log', 'concerns', 'messages', 'notices', 'places', 'services', 'sessions', 'transport_status', 'users'];
+  check('F51 claim: the database holds exactly the tables the "Vos données" page describes (a new table means that page must be updated)', JSON.stringify(tables) === JSON.stringify(expectedTables), JSON.stringify(tables));
+  const cookieValue = relogin.cookie.split('=')[1];
+  check('F51 claim: passwords and session values are stored scrambled, not readable', claims.prepare('SELECT COUNT(*) AS n FROM sessions WHERE token_hash = ?').get(cookieValue).n === 0 && claims.prepare('SELECT COUNT(*) AS n FROM sessions').get().n >= 1 && !claims.prepare("SELECT password_hash FROM users WHERE email = 'citizen@smoke.test'").get().password_hash.includes('a-long-password-1'));
+  claims.close();
+  await citizen.call('/api/presence', 'POST', { x: 3, z: 4, ry: 0 });
+  const seenAt = (await agent.call('/api/presence')).data.players.length;
+  await new Promise((resolve) => setTimeout(resolve, 16_000));
+  check('F51 claim: a player\'s position is visible to others while they are there and forgotten after 15 seconds', seenAt >= 1 && (await agent.call('/api/presence')).data.players.length === 0, String(seenAt));
+  check('F51 claim: audit history has no expiry and cannot be edited or erased (no delete route, triggers refuse)', (await agent.call('/api/admin/audit/' + 1, 'DELETE')).status === 404 && (() => { const raw = new DatabaseSync(env.DATA_PATH); try { raw.prepare('DELETE FROM audit_log WHERE id = 1').run(); return false; } catch { return true; } finally { raw.close(); } })());
+
   const trail = new DatabaseSync(env.DATA_PATH);
   const refused = [() => trail.prepare("UPDATE audit_log SET summary = 'modifié' WHERE id = 1").run(), () => trail.prepare('DELETE FROM audit_log WHERE id = 1').run()].map((run) => { try { run(); return false; } catch (error) { return /append-only/.test(error.message); } });
   check('F47 the journal is append-only at the database level: UPDATE and DELETE are refused', refused.every(Boolean), refused.join());

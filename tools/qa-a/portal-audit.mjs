@@ -65,6 +65,11 @@ try {
   check('D07 home page: skip link, one h1, main navigation to every section, primary action to the services', $(guest, 'a.skip-link[href="#contenu"]') && $$(guest, 'h1').length === 1 && ['#services', '#lieux', '#transports', '#actualites', '#espace', '#mots'].every((h) => $(guest, `nav[aria-label="Navigation principale"] a[href="${h}"]`)) && $(guest, '.hero a[href="#services"]'));
   check('D05/D06 services and publications are shown to a visitor before any account', $$(guest, '#services-list .service-card').length >= 6 && $$(guest, '#news-list .news-card').length >= 3);
   check('D08/D09 a visitor sees neither the member area nor the staff tools', $(guest, '#member-area').hidden && $(guest, '#staff-area').hidden && $(guest, '#admin-area').hidden && !$(guest, '#guest-area').hidden);
+  const data = $(guest, '#donnees');
+  check('F51 the data section exists for visitors, is reachable from the register form and the footer, and has a breadcrumb', Boolean(data) && $(guest, '#register-form a[href="#donnees"]') && $(guest, '.site-footer a[href="#donnees"]') && data.querySelector('nav.breadcrumb a[href="#haut"]'));
+  const dataText = data.textContent;
+  check('F51 the page covers what is stored, what is not, who sees what, deletion with what remains, sharing and the visitor\'s options, in plain words', ['Ce que le portail enregistre', 'Ce qui n’est pas enregistré', 'Qui voit quoi', 'Si vous supprimez votre compte', 'Partage avec d’autres', 'Ce que vous pouvez faire'].every((h) => [...data.querySelectorAll('dt')].some((dt) => dt.textContent === h)));
+  check('F51 the page states the retention honestly (no period set, not anonymous, not editable, staff only) and does not invent one', /Aucune durée de conservation n’est fixée pour l’instant/.test(dataText) && /Ce n’est pas anonyme/.test(dataText) && /ni modifié ni effacé/.test(dataText) && !/\d+ (jours|mois|ans)[^.]*conserv/i.test(dataText.replace('7 jours', '')));
   guest.window.close();
 
   // ============ D01 / D03: a resident registers, signs out, signs in again
@@ -197,6 +202,40 @@ try {
   await zoe.window.loadNotices();
   check('F49 no duplicate on the next poll, banner shows the single unread notice, live region singular', zoe.window.__notes.length === 2 && $(zoe, '#notice-banner').textContent.includes('Vous avez 1 nouvelle sur vos demandes.'));
   check('F31 urgent items are marked as active alerts in the news list too', $$(zoe, '.news-urgent').some((c) => c.textContent.includes('Alerte en cours') && c.textContent.includes('Public concerné : Quartier ouest')));
+  // ============ F51: export, concerns, staff handling, notices, in the real pages
+  check('F51 the resident has a "Mes données" panel with a download link to their own export, and the deletion text names what happens (erased, released, reduced journal lines)', $(zoe, '#privacy-panel') && $(zoe, '#export-link').getAttribute('href') === '/api/me/export' && $(zoe, '#delete-form').textContent.includes('journal du personnel garde quelques lignes') && $(zoe, '#delete-form').textContent.includes('rendez-vous réservés sont libérés'));
+  fill(zoe, '#concern-form', { topic: 'storage', body: 'Pendant combien de temps gardez-vous mes messages ?' });
+  submit(zoe, '#concern-form');
+  await wait(1500);
+  const concernLine = () => $$(zoe, '#concerns-list .notice-item')[0];
+  check('F51 filing a concern confirms with a reference and what happens next, empties the form and lists it with its step "Reçue"', /Votre préoccupation a bien été reçue\./.test($(zoe, '#concern-status').textContent) && /Référence C-\d+\./.test($(zoe, '#concern-status').textContent) && $(zoe, '#concern-form [name=body]').value === '' && concernLine().textContent.includes('Combien de temps elles sont gardées') && concernLine().querySelector('li[aria-current="step"]').textContent.includes('Reçue'), $(zoe, '#concern-status').textContent);
+  await admin.window.loadStaffConcerns();
+  await wait(600);
+  const staffConcern = () => $$(admin, '#staff-concerns .notice-item')[0];
+  check('F51 staff see it under "Inquiétudes sur les données" with the count and the author in reduced form only', $(admin, '#concerns-count').textContent === '1 à lire' && /Zoé|Zoe/.test(staffConcern().textContent) && staffConcern().textContent.includes('z***@audit.test') && !staffConcern().textContent.includes('zoe@audit.test') && !staffConcern().textContent.includes('Zoé Habitante'), staffConcern().textContent);
+  await admin.window.loadDashboard();
+  await wait(600);
+  check('F50 the dashboard tells staff that one concern waits', $$(admin, '#dashboard-todo li').some((li) => li.textContent === '1 inquiétude sur les données attend une lecture.') && tile(admin, 'Inquiétudes à lire') === '1');
+  click(admin, [...staffConcern().querySelectorAll('button')].find((b) => b.textContent === 'Marquer comme lue'));
+  await wait(1400);
+  check('F51 marking it read says so to staff and moves focus to the item', $(admin, '#concerns-status').textContent.includes('Marquée comme lue') && $(admin, '#concerns-count').textContent === '0 à lire');
+  await zoe.window.loadNotices();
+  await zoe.window.loadConcerns();
+  await wait(700);
+  check('F51 the resident is told it was read (banner + notice, plain sentence) and the step moves to "Lue"', $(zoe, '#notice-banner').textContent.includes('Vous avez 2 nouvelles sur vos demandes.') && $(zoe, '#notices-list').textContent.includes('Votre inquiétude C-1 a été lue par un agent.') && concernLine().querySelector('li[aria-current="step"]').textContent.includes('Lue'), $(zoe, '#notices-list').textContent);
+  const textarea = staffConcern().querySelector('textarea');
+  textarea.value = 'ok';
+  click(admin, [...staffConcern().querySelectorAll('button')].find((b) => b.textContent === 'Envoyer la réponse'));
+  await wait(900);
+  check('F51 an answer that is too short is refused with a visible, field-linked error and nothing is sent', $(admin, '#concerns-status').dataset.error === 'true' && $(admin, '#concerns-status').textContent.startsWith('⚠') && staffConcern().querySelector('textarea'));
+  staffConcern().querySelector('textarea').value = 'Vos messages sont gardés tant que votre compte existe, puis effacés avec lui.';
+  click(admin, [...staffConcern().querySelectorAll('button')].find((b) => b.textContent === 'Envoyer la réponse'));
+  await wait(1400);
+  await zoe.window.loadNotices();
+  await zoe.window.loadConcerns();
+  await wait(700);
+  check('F51 the resident sees the answer in the notice and in the history, with the step "Répondue"', $(zoe, '#notices-list').textContent.includes('Votre inquiétude C-1 a reçu une réponse.') && $(zoe, '#notices-list').textContent.includes('Message de la mairie : Vos messages sont gardés') && concernLine().textContent.includes('Réponse de la mairie : Vos messages sont gardés') && concernLine().querySelector('li[aria-current="step"]').textContent.includes('Répondue'));
+  check('F51 the browser notification fires once per concern notice after consent (stand-in): read, then answered', zoe.window.__notes.filter((n) => n.body.includes('Votre inquiétude C-1')).length === 2);
   admin.window.close();
 
   // ============ F33: a resident deletes their own account (UI), with the password

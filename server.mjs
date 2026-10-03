@@ -280,12 +280,14 @@ function eraseUser(id) {
     db.prepare('DELETE FROM appointments WHERE citizen_id = ?').run(id);
     db.prepare('DELETE FROM messages WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM notices WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM concerns WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
   });
   presence.delete(id);
 }
 
 // F47: sensitive staff actions need a stated reason, kept in the audit trail.
+const concernTopics = ['usage', 'sharing', 'storage', 'access', 'other'];
 const reasonOf = (body, required) => (required || body.reason ? text(body.reason, 5, 200, 'Le motif') : null);
 
 // F34: staff manage citizens only; staff accounts are never reachable from these routes.
@@ -470,6 +472,7 @@ async function route(request, response) {
         booked_week: one("SELECT COUNT(*) AS n FROM appointments WHERE status = 'booked' AND starts_at > ? AND starts_at < ?", now, week).n,
         open_week: one("SELECT COUNT(*) AS n FROM appointments WHERE status = 'open' AND starts_at > ? AND starts_at < ?", now, week).n,
       },
+      concerns: { received: one("SELECT COUNT(*) AS n FROM concerns WHERE status = 'received'").n },
       services: { total: one('SELECT COUNT(*) AS n FROM services').n, unavailable },
       alerts: { active: one('SELECT COUNT(*) AS n FROM announcements WHERE urgent = 1').n },
       transports: { disrupted: db.prepare("SELECT code FROM transport_status WHERE status != 'normal' ORDER BY code").all().map((row) => row.code) },
@@ -805,6 +808,62 @@ async function route(request, response) {
     const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location, service_id) VALUES (?, ?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location, serviceId);
     return sendJson(response, 201, { id: Number(result.lastInsertRowid), status: 'new', confirmation: 'Votre message a bien été transmis.' });
   }
+  // F51: what the portal holds about the caller, as a file. Only their own civic data: no password hash, no session value, nobody else's data.
+  if (path === '/api/me/export' && method === 'GET') {
+    const user = requireUser(request, ['citizen']);
+    const own = (sql) => db.prepare(sql).all(user.id);
+    const account = db.prepare('SELECT id, name, email, district, avatar, created_at FROM users WHERE id = ?').get(user.id);
+    try { account.avatar = account.avatar ? JSON.parse(account.avatar) : null; } catch { account.avatar = null; }
+    const file = {
+      generated_at: cityNow(),
+      account,
+      messages: own('SELECT id, subject, body, kind, location, status, service_id, created_at, updated_at FROM messages WHERE user_id = ? ORDER BY id'),
+      appointments: own('SELECT id, starts_at, duration_min, location, reason, status, booked_at FROM appointments WHERE citizen_id = ? ORDER BY starts_at'),
+      concerns: own('SELECT id, topic, body, status, response, created_at, responded_at FROM concerns WHERE user_id = ? ORDER BY id'),
+      notices: own('SELECT id, code, ref_id, label, note, at, seen_at FROM notices WHERE user_id = ? ORDER BY id'),
+    };
+    response.setHeader('Content-Disposition', 'attachment; filename="mes-donnees-terra-nova.json"');
+    return sendJson(response, 200, file);
+  }
+  // F51: concerns about data use (resident side)
+  if (path === '/api/concerns' && method === 'GET') {
+    const user = requireUser(request, ['citizen']);
+    return sendJson(response, 200, { concerns: db.prepare('SELECT id, topic, body, status, response, created_at, responded_at FROM concerns WHERE user_id = ? ORDER BY id DESC').all(user.id) });
+  }
+  if (path === '/api/concerns' && method === 'POST') {
+    const user = requireUser(request, ['citizen']);
+    const body = await readJson(request);
+    if (!concernTopics.includes(body.topic)) fail(400, 'Choisissez le sujet de votre inquiétude.');
+    const content = text(body.body, 10, 1000, 'Votre message');
+    if (db.prepare("SELECT COUNT(*) AS n FROM concerns WHERE user_id = ? AND created_at > datetime('now', '-1 day')").get(user.id).n >= 5) fail(429, 'Vous avez déjà envoyé 5 préoccupations aujourd’hui. Réessayez demain.');
+    const created = db.prepare('INSERT INTO concerns (user_id, topic, body) VALUES (?, ?, ?)').run(user.id, body.topic, content);
+    const row = db.prepare('SELECT id, topic, status, created_at FROM concerns WHERE id = ?').get(Number(created.lastInsertRowid));
+    return sendJson(response, 201, { ...row, reference: `C-${row.id}`, confirmation: 'Votre préoccupation a bien été reçue. Un agent la lira ; vous serez prévenu dans « Nouvelles de mes demandes » dès qu’elle sera lue ou qu’une réponse sera donnée.' });
+  }
+  // staff side: the author is shown masked (first name, initial, masked e-mail); an answer reaches the author as a notice
+  if (path === '/api/admin/concerns' && method === 'GET') {
+    requireUser(request, ['agent', 'admin']);
+    const rows = db.prepare('SELECT concerns.*, users.name AS author_name, users.email AS author_email FROM concerns JOIN users ON users.id = concerns.user_id ORDER BY CASE concerns.status WHEN \'received\' THEN 0 WHEN \'read\' THEN 1 ELSE 2 END, concerns.id DESC').all();
+    return sendJson(response, 200, { concerns: rows.map(({ author_name, author_email, user_id, ...row }) => ({ ...row, author: citizenLabel({ id: user_id, name: author_name, email: author_email }) })) });
+  }
+  const concernMatch = /^\/api\/admin\/concerns\/(\d+)$/.exec(path);
+  if (concernMatch && method === 'PATCH') {
+    const staff = requireUser(request, ['agent', 'admin']);
+    const body = await readJson(request);
+    if (!['read', 'answered'].includes(body.status)) fail(400, 'Statut invalide.');
+    const item = db.prepare('SELECT id, user_id, status FROM concerns WHERE id = ?').get(Number(concernMatch[1]));
+    if (!item) fail(404, 'Préoccupation introuvable.');
+    if (item.status === 'answered') fail(409, 'Cette préoccupation a déjà reçu une réponse.');
+    const answer = body.status === 'answered' ? text(body.response, 5, 1000, 'La réponse') : null;
+    if (body.status === item.status) return sendJson(response, 200, { ok: true });
+    tx(() => {
+      db.prepare("UPDATE concerns SET status = ?, response = ?, responded_at = CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END WHERE id = ?").run(body.status, answer, answer, item.id);
+      db.prepare('INSERT INTO notices (user_id, code, ref_id, label, note) VALUES (?, ?, ?, ?, ?)').run(item.user_id, `concern.${body.status}`, item.id, `C-${item.id}`, answer);
+      audit(staff, { category: 'concern', action: `concern.${body.status}`, target: { type: 'concern', id: item.id, label: `C-${item.id}` }, summary: body.status === 'read' ? `a lu la préoccupation C-${item.id}` : `a répondu à la préoccupation C-${item.id}`, details: { avant: item.status, apres: body.status } });
+    });
+    return sendJson(response, 200, { ok: true });
+  }
+
   // F49: the resident's own notices (newest first, unread flagged). Polling only; nothing is sent by e-mail or SMS.
   if (path === '/api/me/notices' && method === 'GET') {
     const user = requireUser(request, ['citizen']);

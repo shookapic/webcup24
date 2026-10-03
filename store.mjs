@@ -208,6 +208,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS notices_user ON notices(user_id, seen_at);
 `);
 
+// F51: a resident's concerns about the use of their data. Erased with the account.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS concerns (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    topic TEXT NOT NULL CHECK (topic IN ('usage', 'sharing', 'storage', 'access', 'other')),
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'received' CHECK (status IN ('received', 'read', 'answered')),
+    response TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    responded_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS concerns_user ON concerns(user_id);
+`);
+
 // F47 / F48: append-only audit trail with a hash chain (see audit.mjs). The triggers refuse any UPDATE or DELETE.
 db.exec(`
   CREATE TABLE IF NOT EXISTS audit_log (

@@ -346,6 +346,8 @@ function renderIdentity() {
   renderTips();
   renderNotices(true);
   renderDashboard();
+  renderStaffConcerns();
+  loadConcerns();
   renderPlaces();
   renderEmergency();
   renderTransports();
@@ -386,9 +388,10 @@ function clearIdentity() {
   auditTarget = null;
   renderAudit();
   notices = [];
+  staffConcerns = [];
   noticeKey = null;
   dashboard = null;
-  for (const id of ['#notices-list', '#notice-banner', '#dashboard-todo', '#dashboard-tiles', '#dashboard-recent']) $(id).replaceChildren();
+  for (const id of ['#notices-list', '#concerns-list', '#staff-concerns', '#notice-banner', '#dashboard-todo', '#dashboard-tiles', '#dashboard-recent']) $(id).replaceChildren();
   $('#notice-banner').hidden = true;
   $('#dashboard-time').textContent = '';
   $('#citizens-list').replaceChildren();
@@ -486,6 +489,8 @@ const noticeLines = {
   'message.in_progress': ['Votre demande « {label} » est en cours de traitement.', 'Vous n’avez rien à faire pour le moment.'],
   'message.resolved': ['Votre demande « {label} » est résolue.', 'Si le problème persiste, envoyez-nous un nouveau message.'],
   'message.new': ['Votre demande « {label} » est de nouveau à traiter.', 'Vous n’avez rien à faire : un agent la reprendra.'],
+  'concern.read': ['Votre inquiétude {label} a été lue par un agent.', 'Vous n’avez rien à faire : une réponse peut suivre.'],
+  'concern.answered': ['Votre inquiétude {label} a reçu une réponse.', 'Lisez la réponse ci-dessous ou dans « Mes inquiétudes envoyées ».'],
 };
 const noticeText = (item) => (noticeLines[item.code] ? t(noticeLines[item.code][0], { label: item.label }) : item.label);
 
@@ -565,6 +570,7 @@ function renderDashboard() {
   const plural = (n, one, many, params = {}) => t(n === 1 ? one : many, { n, ...params });
   if (d.messages.new) todo.push(plural(d.messages.new, '1 message attend une réponse.', '{n} messages attendent une réponse.') + (d.messages.waiting_hours ? ` ${t('Le plus ancien attend depuis {h} h.', { h: d.messages.waiting_hours })}` : ''));
   if (d.messages.incidents_open) todo.push(plural(d.messages.incidents_open, '1 signalement de problème n’est pas résolu.', '{n} signalements de problèmes ne sont pas résolus.'));
+  if (d.concerns.received) todo.push(plural(d.concerns.received, '1 inquiétude sur les données attend une lecture.', '{n} inquiétudes sur les données attendent une lecture.'));
   if (d.appointments.booked_today) todo.push(plural(d.appointments.booked_today, '1 rendez-vous à venir aujourd’hui.', '{n} rendez-vous à venir aujourd’hui.'));
   if (d.services.unavailable.length) todo.push(t('Services indisponibles : {names}.', { names: d.services.unavailable.join(', ') }));
   if (d.alerts.active) todo.push(plural(d.alerts.active, '1 alerte urgente est affichée.', '{n} alertes urgentes sont affichées.'));
@@ -573,7 +579,7 @@ function renderDashboard() {
   $('#dashboard-todo').replaceChildren(...(todo.length ? todo : [t('Rien d’urgent : aucune demande n’attend et rien n’est perturbé.')]).map((line) => element('li', '', line)));
   const tiles = [
     ['Messages à traiter', d.messages.new], ['Messages en cours', d.messages.in_progress], ['Messages résolus', d.messages.resolved],
-    ['Messages reçus aujourd’hui', d.messages.received_today], ['Messages reçus sur 7 jours', d.messages.received_week],
+    ['Inquiétudes à lire', d.concerns.received], ['Messages reçus aujourd’hui', d.messages.received_today], ['Messages reçus sur 7 jours', d.messages.received_week],
     ['Rendez-vous réservés aujourd’hui', d.appointments.booked_today], ['Rendez-vous réservés sur 7 jours', d.appointments.booked_week], ['Horaires libres sur 7 jours', d.appointments.open_week],
     ['Habitants inscrits', d.residents.total], ['Nouveaux habitants sur 7 jours', d.residents.new_week],
     ...(d.residents.deactivated === undefined ? [] : [['Comptes désactivés', d.residents.deactivated]]),
@@ -586,6 +592,109 @@ function renderDashboard() {
     return tile;
   }));
   $('#dashboard-recent').replaceChildren(...(d.recent.length ? d.recent : [null]).map((row) => element('li', row ? '' : 'list-empty', row ? `${row.at.replace('T', ' ').slice(0, 16)} · ${row.actor_name} ${row.summary}` : t('Aucune action enregistrée.'))));
+}
+
+// ---- F51: concerns about data use (resident writes, staff reads and answers) and the personal export
+const concernTopics = { usage: 'À quoi servent mes données', sharing: 'Qui peut voir mes données', storage: 'Combien de temps elles sont gardées', access: 'Voir, corriger ou effacer mes données', other: 'Autre sujet' };
+const concernStatuses = { received: 'Reçue', read: 'Lue', answered: 'Répondue' };
+
+function concernSteps(status) {
+  const order = ['received', 'read', 'answered'];
+  const current = order.indexOf(status);
+  const steps = element('ol', 'status-steps');
+  steps.setAttribute('aria-label', t('Avancement de la demande'));
+  order.forEach((key, index) => {
+    const done = index < current || (index === current && current === 2);
+    const step = element('li', done ? 'step-done' : index === current ? 'step-current' : '', `${done ? '✓ ' : ''}${t(concernStatuses[key])}`);
+    if (index === current) step.setAttribute('aria-current', 'step');
+    steps.append(step);
+  });
+  return steps;
+}
+
+async function loadConcerns() {
+  if (user?.role !== 'citizen') return;
+  try {
+    const { concerns } = await api('/api/concerns');
+    $('#concerns-list').replaceChildren(...(concerns.length ? concerns : [null]).map((item) => {
+      if (!item) return element('li', 'list-empty', t('Vous n’avez encore envoyé aucune inquiétude.'));
+      const line = element('li', 'notice-item');
+      line.append(element('strong', '', `C-${item.id} · ${t(concernTopics[item.topic])}`), element('span', 'notice-action', item.body), concernSteps(item.status));
+      if (item.response) line.append(element('span', 'notice-note', t('Réponse de la mairie : {note}', { note: item.response })));
+      line.append(element('span', 'notice-time', t('Envoyée le {created}', { created: item.created_at })));
+      return line;
+    }));
+  } catch (error) {
+    if (error.status === 401) clearIdentity();
+  }
+}
+
+$('#concern-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    const data = await api('/api/concerns', 'POST', { topic: formValue(form, 'topic'), body: formValue(form, 'body') });
+    form.reset();
+    setFormStatus('#concern-status', t('{confirmation} Référence {reference}.', { confirmation: t(data.confirmation), reference: data.reference }));
+    await loadConcerns();
+  } catch (error) {
+    reportError('#concern-status', error);
+  }
+});
+
+let staffConcerns = [];
+async function loadStaffConcerns() {
+  if (!['agent', 'admin'].includes(user?.role)) return;
+  try {
+    ({ concerns: staffConcerns } = await api('/api/admin/concerns'));
+    renderStaffConcerns();
+  } catch (error) {
+    if (error.status === 401) clearIdentity();
+  }
+}
+
+function renderStaffConcerns() {
+  $('#concerns-count').textContent = t('{n} à lire', { n: staffConcerns.filter((item) => item.status === 'received').length });
+  $('#staff-concerns').replaceChildren(...(staffConcerns.length ? staffConcerns : [null]).map((item) => {
+    if (!item) return element('li', 'list-empty', t('Aucune inquiétude reçue pour le moment.'));
+    const line = element('li', 'notice-item');
+    line.dataset.concern = item.id;
+    line.append(element('strong', '', `C-${item.id} · ${t(concernTopics[item.topic])} · ${t(concernStatuses[item.status])}`), element('span', 'notice-time', `${item.author} · ${item.created_at}`), element('span', 'notice-action', item.body));
+    if (item.status === 'answered') {
+      line.append(element('span', 'notice-note', t('Réponse envoyée : {note}', { note: item.response })));
+      return line;
+    }
+    const answer = element('label', 'status-field', t('Réponse à l’habitant '));
+    const input = element('textarea');
+    input.rows = 3;
+    input.maxLength = 1000;
+    input.setAttribute('aria-label', t('Réponse à l’inquiétude C-{id}', { id: item.id }));
+    answer.append(input);
+    const actions = element('span', 'notice-actions');
+    const send = async (status, response) => {
+      try {
+        await api(`/api/admin/concerns/${item.id}`, 'PATCH', status === 'read' ? { status } : { status, response });
+        setFormStatus('#concerns-status', t(status === 'read' ? 'Marquée comme lue : l’habitant est prévenu.' : 'Réponse envoyée : l’habitant est prévenu.'));
+        await loadStaffConcerns();
+        loadDashboard();
+        $(`[data-concern="${item.id}"] button`)?.focus();
+      } catch (error) {
+        reportError('#concerns-status', error);
+      }
+    };
+    if (item.status === 'received') {
+      const read = element('button', '', t('Marquer comme lue'));
+      read.type = 'button';
+      read.addEventListener('click', () => send('read'));
+      actions.append(read);
+    }
+    const reply = element('button', '', t('Envoyer la réponse'));
+    reply.type = 'button';
+    reply.addEventListener('click', () => send('answered', input.value));
+    actions.append(reply);
+    line.append(answer, actions);
+    return line;
+  }));
 }
 
 async function loadMessages() {
@@ -1380,7 +1489,7 @@ let audit = { entries: [], next: null, facets: null };
 let auditTarget = null;
 let auditTimer;
 const auditRoles = { admin: 'Administrateur', agent: 'Agent', citizen: 'Habitant' };
-const auditCategories = { service: 'Services', announcement: 'Actualités et alertes', transport: 'Transports', message: 'Messages des habitants', account: 'Comptes des habitants', appointment: 'Rendez-vous', place: 'Lieux', security: 'Sécurité' };
+const auditCategories = { service: 'Services', announcement: 'Actualités et alertes', transport: 'Transports', message: 'Messages des habitants', account: 'Comptes des habitants', appointment: 'Rendez-vous', place: 'Lieux', security: 'Sécurité', concern: 'Inquiétudes sur les données' };
 const auditTime = (iso) => new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Indian/Reunion' }).format(new Date(iso));
 
 // Any change made by staff refreshes the journal a moment later, so "what I just did" is there.
@@ -1561,6 +1670,8 @@ async function afterAuthentication(nextUser) {
   renderServices();
   await loadMessages();
   loadNotices();
+  loadConcerns();
+  loadStaffConcerns();
   await loadFeed();
   loadCitizens();
   loadAppointments();
@@ -1784,4 +1895,4 @@ applyContrast();
 
 setInterval(() => { loadTransports(); loadServices(); loadAppointments(); loadPlaces(); }, 60_000);
 Promise.allSettled([loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]);
-setInterval(() => { if (!document.activeElement?.closest?.('.reason-form')) loadNews(); if (user) { loadMessages(); loadNotices(); } if (['agent', 'admin'].includes(user?.role)) { loadFeed(); loadStaffSlots(); loadSecurity(); } }, 30_000);
+setInterval(() => { if (!document.activeElement?.closest?.('.reason-form')) loadNews(); if (user) { loadMessages(); loadNotices(); loadConcerns(); loadStaffConcerns(); } if (['agent', 'admin'].includes(user?.role)) { loadFeed(); loadStaffSlots(); loadSecurity(); } }, 30_000);

@@ -291,9 +291,10 @@ try {
   check('D13: no technical or administrative jargon in citizen-facing text', jargon.length === 0, jargon.join(' | '));
   const glossary = await page.evaluate(() => { const g = document.querySelector('#mots, .glossary'); return g ? { terms: g.querySelectorAll('dt').length, reachable: Boolean(document.querySelector('a[href="#mots"]')) } : null; });
   check('D13: a "words explained" list exists, with at least 8 terms, and is linked from the page', glossary && glossary.terms >= 8 && glossary.reachable, JSON.stringify(glossary));
-  const sentences = interfaceText.split(/[.!?]\s+/).map((s) => s.trim().split(/\s+/).length).filter((n) => n > 3);
+  // a line break is a block boundary (heading, label, button), so it ends a sentence just like punctuation does
+  const sentences = interfaceText.split(/[.!?]\s+|\n+/).map((s) => s.trim().split(/\s+/).length).filter((n) => n > 3);
   const long = sentences.filter((n) => n > 32).length;
-  const longOnes = interfaceText.split(/[.!?]\s+/).filter((x) => x.trim().split(/\s+/).length > 32).map((x) => x.trim().slice(0, 70));
+  const longOnes = interfaceText.split(/[.!?]\s+|\n+/).filter((x) => x.trim().split(/\s+/).length > 32).map((x) => x.trim().slice(0, 70));
   check('D13: instruction sentences stay short (heuristic: at most 5 % longer than 32 words)', long / Math.max(1, sentences.length) <= 0.05, `${long}/${sentences.length} long: ${longOnes.join(' || ')}`);
   await page.close();
 

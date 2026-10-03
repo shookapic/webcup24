@@ -106,6 +106,7 @@
             <label>Adresse e-mail <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
             <label>Mot de passe <input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" aria-describedby="password-help"></label>
             <small id="password-help">12 caractères minimum.</small>
+            <small class="data-link"><a href="#donnees">Comment vos données sont utilisées</a></small>
             <button class="button button-primary" type="submit">Créer mon compte</button>
             <p id="register-status" class="form-status" role="status" aria-live="polite"></p>
           </form>
@@ -115,7 +116,7 @@
           <div id="security-notice" class="security-notice" role="alert" hidden><p id="security-notice-text" data-content></p><button id="security-notice-dismiss" type="button">J’ai compris</button></div>
           <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name" tabindex="-1" data-content></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
           <div id="citizen-area" hidden>
-            <nav class="jump-nav" aria-label="Dans mon espace"><a href="#message-form">Écrire à la ville</a><a href="#appointments-panel">Rendez-vous</a><a href="#profile-form">Mon profil</a><a href="#delete-form">Supprimer mon compte</a></nav>
+            <nav class="jump-nav" aria-label="Dans mon espace"><a href="#message-form">Écrire à la ville</a><a href="#appointments-panel">Rendez-vous</a><a href="#profile-form">Mon profil</a><a href="#delete-form">Supprimer mon compte</a><a href="#privacy-panel">Mes données</a></nav>
             <section id="notices-panel" class="panel" aria-labelledby="notices-title" tabindex="-1">
               <div class="panel-title-row"><h3 id="notices-title">Nouvelles de mes demandes</h3><button id="notices-read" type="button" hidden>Tout marquer comme lu</button></div>
               <p class="reminder-help">Vous êtes prévenu ici quand l’état d’une de vos demandes change. Ces nouvelles s’affichent quand vous êtes connecté, sur le portail et dans le monde 3D : aucun e-mail ni SMS n’est envoyé.</p>
@@ -170,8 +171,22 @@
               <button class="button button-primary" type="submit">Enregistrer mon profil</button>
               <p id="profile-status" class="form-status" role="status" aria-live="polite"></p>
             </form>
+            <section id="privacy-panel" class="panel" aria-labelledby="privacy-title" tabindex="-1">
+              <h3 id="privacy-title">Mes données et mes inquiétudes</h3>
+              <p>Vous pouvez récupérer tout ce que le portail garde sur vous, ou nous dire ce qui vous inquiète. Pour comprendre à quoi servent vos données, lisez la section « Vos données » en bas de page.</p>
+              <p><a id="export-link" class="button-link" href="/api/me/export" download="mes-donnees-terra-nova.json">Télécharger mes données dans un fichier</a></p>
+              <form id="concern-form" tabindex="-1">
+                <h4>Faire part d’une inquiétude</h4>
+                <label>Sujet <select name="topic" required><option value="usage">À quoi servent mes données</option><option value="sharing">Qui peut voir mes données</option><option value="storage">Combien de temps elles sont gardées</option><option value="access">Voir, corriger ou effacer mes données</option><option value="other">Autre sujet</option></select></label>
+                <label>Votre message <textarea name="body" required minlength="10" maxlength="1000" rows="4"></textarea></label>
+                <button class="button button-primary" type="submit">Envoyer mon inquiétude</button>
+                <p id="concern-status" class="form-status" role="status" aria-live="polite"></p>
+              </form>
+              <h4>Mes inquiétudes envoyées</h4>
+              <ul id="concerns-list" class="notice-list" data-content></ul>
+            </section>
             <form id="delete-form" class="panel delete-form" tabindex="-1">
-              <h3>Supprimer mon compte</h3><p>Votre compte, vos messages et vos signalements seront définitivement supprimés. Cette action est irréversible.</p>
+              <h3>Supprimer mon compte</h3><p>Votre compte, vos messages, vos signalements, vos préoccupations et vos nouvelles seront définitivement supprimés, et vos rendez-vous réservés sont libérés. Seul le journal du personnel garde quelques lignes à votre sujet, sous forme réduite (voir la section « Vos données »). Cette action est irréversible.</p>
               <label>Confirmez avec votre mot de passe <input name="password" type="password" autocomplete="current-password" required></label>
               <button class="button danger-button" type="submit">Supprimer définitivement mon compte</button>
               <p id="delete-status" class="form-status" role="status" aria-live="polite"></p>
@@ -179,7 +194,7 @@
           </div>
 
           <div id="staff-area" hidden>
-            <nav class="jump-nav" aria-label="Dans l’espace agent"><a href="#dashboard-panel">Tableau de bord</a><a href="#staff-messages-panel">Messages</a><a href="#traffic-form">Info trafic</a><a href="#availability-form">Disponibilité des services</a><a href="#slots-panel">Horaires de rendez-vous</a><a href="#security-panel">Sécurité</a><a href="#citizens-panel">Comptes des habitants</a><a href="#audit-panel">Journal des actions</a><a href="#feed-panel">Demandes du concours</a><a class="admin-only" href="#service-form" hidden>Ajouter un service</a><a class="admin-only" href="#news-form" hidden>Publier une actualité</a><a class="admin-only" href="#place-admin" hidden>Lieux de la ville</a></nav>
+            <nav class="jump-nav" aria-label="Dans l’espace agent"><a href="#dashboard-panel">Tableau de bord</a><a href="#staff-messages-panel">Messages</a><a href="#traffic-form">Info trafic</a><a href="#availability-form">Disponibilité des services</a><a href="#slots-panel">Horaires de rendez-vous</a><a href="#security-panel">Sécurité</a><a href="#citizens-panel">Comptes des habitants</a><a href="#audit-panel">Journal des actions</a><a href="#feed-panel">Demandes du concours</a><a href="#concerns-panel">Inquiétudes sur les données</a><a class="admin-only" href="#service-form" hidden>Ajouter un service</a><a class="admin-only" href="#news-form" hidden>Publier une actualité</a><a class="admin-only" href="#place-admin" hidden>Lieux de la ville</a></nav>
             <div class="section-heading staff-heading"><div><span class="section-kicker">ESPACE AGENT</span><h3>Suivi de l’activité</h3></div><p>Demandes citoyennes et flux officiel, dans un espace réservé aux agents.</p></div>
             <section id="dashboard-panel" class="panel dashboard-panel" aria-labelledby="dashboard-title" tabindex="-1">
               <div class="panel-title-row"><h3 id="dashboard-title">Tableau de bord</h3><span id="dashboard-time" class="dashboard-time" data-content></span></div>
@@ -230,6 +245,12 @@
                 <p id="slots-status" class="form-status" role="status" aria-live="polite"></p>
               </form>
               <ul id="staff-appointments" class="appointment-list" aria-labelledby="slots-title" data-content></ul>
+            </section>
+            <section id="concerns-panel" class="panel" aria-labelledby="concerns-title" tabindex="-1">
+              <div class="panel-title-row"><h3 id="concerns-title">Inquiétudes sur les données</h3><strong id="concerns-count" class="pending-count" data-content>— à lire</strong></div>
+              <p>Ce que les habitants demandent sur l’usage de leurs données. L’auteur n’apparaît que sous forme réduite. Marquer comme lue, ou répondre : l’habitant est prévenu dans son espace.</p>
+              <ul id="staff-concerns" class="notice-list" data-content></ul>
+              <p id="concerns-status" class="form-status" role="status" aria-live="polite"></p>
             </section>
             <section id="security-panel" class="panel security-panel" aria-labelledby="security-title" tabindex="-1">
               <h3 id="security-title">Sécurité des connexions</h3><p>Tentatives de connexion échouées ou bloquées sur les 15 dernières minutes. Après 5 erreurs depuis une même adresse, 20 sur un même compte ou 40 depuis une même adresse, la connexion est suspendue.</p>
@@ -309,6 +330,18 @@
       </section>
     </main>
 
-    <footer class="site-footer"><span>TERRA <strong>NOVA</strong></span><span>Une cité qui grandit avec ses habitants.</span><a href="#mots">Mots simples</a><a href="#haut">Retour en haut ↑</a></footer>
+      <section class="overview glossary" id="donnees" aria-labelledby="donnees-title" tabindex="-1">
+        <nav class="breadcrumb" aria-label="Fil d’Ariane des données"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Vos données</span></nav>
+        <div class="section-heading"><div><span class="section-kicker">06 / VOS DONNÉES</span><h2 id="donnees-title">Vos données : ce que le portail garde et pourquoi</h2></div><p>Ce texte décrit ce que le portail fait réellement aujourd’hui.</p></div>
+        <dl class="glossary-list">
+          <div><dt>Ce que le portail enregistre</dt><dd>Votre compte : nom affiché, adresse e-mail, mot de passe (gardé sous une forme brouillée que personne ne peut relire), quartier si vous le choisissez, couleurs de votre personnage et date d’inscription. Vos échanges avec la ville : messages et signalements avec le lieu indiqué, rendez-vous réservés, inquiétudes envoyées et réponses, nouvelles sur vos demandes. Votre connexion : un cookie de session valable 7 jours, dont la valeur n’est gardée que sous forme brouillée.</dd></div>
+          <div><dt>Ce qui n’est pas enregistré</dt><dd>Votre position dans le monde 3D reste en mémoire quelques secondes (15 secondes au plus) et n’est pas écrite dans la base. Les connexions ratées sont comptées en mémoire pendant 15 minutes pour limiter les attaques. Vos réglages (langue, taille du texte, contraste, alertes) restent dans votre navigateur.</dd></div>
+          <div><dt>Qui voit quoi</dt><dd>Les agents et les administrateurs de la ville voient vos messages, signalements, rendez-vous et inquiétudes, pour y répondre. Les autres habitants n’y ont pas accès. Dans le monde 3D, votre nom affiché, les couleurs de votre personnage et votre position sont visibles des autres habitants connectés pendant que vous y êtes.</dd></div>
+          <div><dt>Si vous supprimez votre compte</dt><dd>Sont effacés : votre compte, vos messages et signalements, vos inquiétudes et vos nouvelles ; vos rendez-vous réservés sont libérés. Reste : le journal des actions du personnel. Il garde les lignes qui vous concernent (par exemple la suppression du compte ou un rendez-vous) avec seulement votre prénom, l’initiale de votre nom, votre adresse e-mail masquée et votre numéro de compte. Ce n’est pas anonyme : ces éléments peuvent permettre de vous reconnaître. Aucune durée de conservation n’est fixée pour l’instant, et le journal ne peut être ni modifié ni effacé. Seuls les agents et les administrateurs peuvent le lire.</dd></div>
+          <div><dt>Partage avec d’autres</dt><dd>Le portail n’envoie aucune donnée d’habitant à un autre service et ne les vend pas. Son seul appel vers l’extérieur lit la liste officielle des demandes du concours, sans aucune donnée d’habitant. L’hébergeur du site peut tenir ses propres journaux techniques : le portail ne les contrôle pas.</dd></div>
+          <div><dt>Ce que vous pouvez faire</dt><dd>Connecté, vous pouvez télécharger vos données et nous faire part d’une inquiétude dans « Mes données et mes inquiétudes ». Vous êtes prévenu de la lecture et de la réponse dans « Nouvelles de mes demandes ». Vous pouvez aussi supprimer votre compte à tout moment.</dd></div>
+        </dl>
+      </section>
+    <footer class="site-footer"><span>TERRA <strong>NOVA</strong></span><span>Une cité qui grandit avec ses habitants.</span><a href="#mots">Mots simples</a><a href="#donnees">Vos données</a><a href="#haut">Retour en haut ↑</a></footer>
   </body>
 </html>
