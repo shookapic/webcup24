@@ -12,6 +12,7 @@
   </head>
   <body>
     <a class="skip-link" href="#contenu">Aller au contenu</a>
+    <div id="alert-banner" class="alert-banner" role="alert"></div>
     <header class="site-header" id="haut">
       <a class="brand" href="#haut" aria-label="Terra Nova, accueil">
         <span class="brand-mark" aria-hidden="true"><span></span></span>
@@ -50,6 +51,7 @@
       <section class="requests-section" id="actualites" aria-labelledby="news-title">
         <nav class="breadcrumb" aria-label="Fil d’Ariane des actualités"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Actualités</span></nav>
         <div class="section-heading"><div><span class="section-kicker">02 / INFORMATIONS</span><h2 id="news-title">Actualités municipales</h2></div><p>Les annonces et informations pratiques publiées par la ville.</p></div>
+        <p class="notify-row"><button id="notify-button" class="notify-button" type="button" hidden>Me prévenir des alertes</button></p>
         <div id="news-list" class="news-grid"></div>
         <p id="news-status" class="section-status" role="status"></p>
       </section>
@@ -104,7 +106,7 @@
 
           <div id="admin-area" class="admin-grid" hidden>
             <form id="service-form" class="panel"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
-            <form id="news-form" class="panel"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <form id="news-form" class="panel"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><label>Public concerné <input name="audience" list="audiences" minlength="2" maxlength="80" placeholder="Tous"></label><datalist id="audiences"><option value="Tous"></option><option value="Quartier sud"></option><option value="Personnes vulnérables"></option></datalist><label class="check-field"><input name="urgent" type="checkbox"> Alerte urgente : afficher en bandeau sur toutes les pages et notifier les habitants</label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
           </div>
         </div>
       </section>

@@ -4,6 +4,8 @@ let user = null;
 let feed = null;
 let knownCodes = null;
 let loadingFeed = false;
+let alertsKey = null;
+let knownAlerts = null;
 const memoryPreferences = new Map();
 
 function preference(key, value) {
@@ -72,14 +74,32 @@ async function loadServices() {
 async function loadNews() {
   try {
     const { announcements } = await api('/api/announcements');
+    renderAlerts(announcements.filter((item) => item.urgent));
     const list = $('#news-list');
     list.replaceChildren();
     for (const item of announcements) {
-      const card = element('article', 'news-card');
+      const card = element('article', item.urgent ? 'news-card news-urgent' : 'news-card');
       const date = item.published_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(`${item.published_at.replace(' ', 'T')}Z`)) : '';
+      if (item.urgent) card.append(element('strong', 'news-badge', 'Alerte en cours'));
       card.append(element('time', 'news-date', date));
       card.append(element('h3', '', item.title));
+      card.append(element('p', 'news-audience', `Public concerné : ${item.audience}`));
       card.append(element('p', '', item.body));
+      if (item.urgent && user?.role === 'admin') {
+        const lift = element('button', 'lift-button', 'Lever l’alerte');
+        lift.type = 'button';
+        lift.addEventListener('click', async () => {
+          lift.disabled = true;
+          try {
+            await api(`/api/announcements/${item.id}`, 'PATCH', { urgent: false });
+            await loadNews();
+          } catch (error) {
+            alert(error.message);
+            lift.disabled = false;
+          }
+        });
+        card.append(lift);
+      }
       list.append(card);
     }
     $('#news-status').textContent = announcements.length ? '' : 'Aucune actualité publiée pour le moment.';
@@ -87,6 +107,36 @@ async function loadNews() {
     $('#news-status').textContent = error.message;
   }
 }
+
+function renderAlerts(alerts) {
+  const fresh = knownAlerts ? alerts.filter((item) => !knownAlerts.has(item.id)) : [];
+  knownAlerts = new Set(alerts.map((item) => item.id));
+  if ('Notification' in window && Notification.permission === 'granted') {
+    for (const item of fresh) new Notification(`Alerte Terra Nova · ${item.audience}`, { body: item.title, tag: `alerte-${item.id}` });
+  }
+  // Only touch the live region when the alerts change, so screen readers don't repeat them every refresh.
+  const key = alerts.map((item) => item.id).join();
+  if (key === alertsKey) return;
+  alertsKey = key;
+  $('#alert-banner').replaceChildren(...alerts.map((item) => {
+    const box = element('div', 'alert-item');
+    box.append(element('p', 'alert-label', `Alerte · ${item.audience}`), element('p', 'alert-title', item.title), element('p', 'alert-body', item.body));
+    return box;
+  }));
+}
+
+function renderNotifyButton() {
+  const button = $('#notify-button');
+  if (!('Notification' in window)) return;
+  button.hidden = false;
+  button.disabled = Notification.permission !== 'default';
+  button.textContent = ({ granted: 'Alertes activées sur cet appareil ✓', denied: 'Notifications bloquées par le navigateur' })[Notification.permission] || 'Me prévenir des alertes';
+}
+$('#notify-button').addEventListener('click', async () => {
+  await Notification.requestPermission();
+  renderNotifyButton();
+});
+renderNotifyButton();
 
 function renderIdentity() {
   $('#guest-area').hidden = Boolean(user);
@@ -107,6 +157,7 @@ function clearIdentity() {
   $('#staff-messages').replaceChildren();
   $('#requests-list').replaceChildren();
   renderIdentity();
+  loadNews();
 }
 
 function renderMessages(messages) {
@@ -230,6 +281,7 @@ async function loadFeed() {
 async function afterAuthentication(nextUser) {
   user = nextUser;
   renderIdentity();
+  if (user?.role === 'admin') loadNews();
   await loadMessages();
   await loadFeed();
 }
@@ -310,7 +362,7 @@ $('#news-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    await api('/api/announcements', 'POST', { title: formValue(form, 'title'), body: formValue(form, 'body') });
+    await api('/api/announcements', 'POST', { title: formValue(form, 'title'), body: formValue(form, 'body'), audience: formValue(form, 'audience'), urgent: form.elements.urgent.checked });
     form.reset();
     setFormStatus('#news-form-status', 'Actualité publiée.');
     await loadNews();
@@ -342,4 +394,4 @@ $('#contrast-toggle').addEventListener('click', () => { preference('highContrast
 applyContrast();
 
 Promise.allSettled([loadServices(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]);
-setInterval(() => { if (user) loadMessages(); if (['agent', 'admin'].includes(user?.role)) loadFeed(); }, 30_000);
+setInterval(() => { loadNews(); if (user) loadMessages(); if (['agent', 'admin'].includes(user?.role)) loadFeed(); }, 30_000);

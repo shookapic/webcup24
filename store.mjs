@@ -56,7 +56,6 @@ if (!messageColumns.has('kind')) db.exec("ALTER TABLE messages ADD COLUMN kind T
 if (!messageColumns.has('location')) db.exec('ALTER TABLE messages ADD COLUMN location TEXT');
 const userColumns = new Set(db.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
 if (!userColumns.has('avatar')) db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');
-
 if (db.prepare('SELECT COUNT(*) AS count FROM services').get().count === 0) {
   const insert = db.prepare('INSERT INTO services (title, description, details) VALUES (?, ?, ?)');
   insert.run('Relations citoyennes', 'Une question ou une difficulté ?', 'Depuis votre espace personnel, envoyez un message aux services municipaux et suivez son traitement.');
@@ -68,6 +67,24 @@ if (db.prepare('SELECT COUNT(*) AS count FROM announcements').get().count === 0)
   db.prepare('INSERT INTO announcements (title, body) VALUES (?, ?)').run(
     'Bienvenue sur le portail de Terra Nova',
     'Le portail ouvre ses premiers services numériques. Créez votre espace pour contacter la ville et suivre vos échanges.'
+  );
+}
+
+const announcementColumns = new Set(db.prepare('PRAGMA table_info(announcements)').all().map((column) => column.name));
+if (!announcementColumns.has('audience')) db.exec("ALTER TABLE announcements ADD COLUMN audience TEXT NOT NULL DEFAULT 'Tous'");
+if (!announcementColumns.has('urgent')) {
+  db.exec('ALTER TABLE announcements ADD COLUMN urgent INTEGER NOT NULL DEFAULT 0 CHECK (urgent IN (0, 1))');
+  // Alerts already under way in the city when alerts went live (F29, F31).
+  const insert = db.prepare('INSERT INTO announcements (title, body, audience, urgent) VALUES (?, ?, ?, 1)');
+  insert.run(
+    'Montée des eaux dans le quartier sud',
+    'Le niveau de l’eau monte anormalement dans le quartier sud.\nÀ faire maintenant : éloignez-vous des berges et des passages souterrains, ne circulez pas en voiture dans les rues inondées, montez vos objets de valeur et vos papiers en hauteur, et tenez-vous prêts à quitter votre logement si les agents municipaux le demandent.\nEn cas de danger immédiat, appelez le 112.',
+    'Quartier sud'
+  );
+  insert.run(
+    'Vague de chaleur extrême',
+    'Une chaleur extrême touche plusieurs secteurs de la ville. Personnes âgées, malades, femmes enceintes, jeunes enfants : vous êtes les plus exposés.\nÀ faire maintenant : buvez de l’eau régulièrement sans attendre d’avoir soif, restez au frais entre 11 h et 17 h, fermez volets et fenêtres pendant la journée, évitez les efforts physiques et prenez des nouvelles de vos proches isolés.\nEn cas de malaise, appelez le 112.',
+    'Personnes vulnérables'
   );
 }
 

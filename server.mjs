@@ -265,8 +265,19 @@ async function route(request, response) {
     const body = await readJson(request);
     const title = text(body.title, 3, 120, 'Le titre');
     const content = text(body.body, 10, 4000, 'Le contenu');
-    const result = db.prepare('INSERT INTO announcements (title, body) VALUES (?, ?)').run(title, content);
+    if (body.urgent !== undefined && typeof body.urgent !== 'boolean') fail(400, 'Le niveau d’urgence est invalide.');
+    const audience = body.audience ? text(body.audience, 2, 80, 'Le public concerné') : 'Tous';
+    const result = db.prepare('INSERT INTO announcements (title, body, audience, urgent) VALUES (?, ?, ?, ?)').run(title, content, audience, body.urgent ? 1 : 0);
     return sendJson(response, 201, { id: Number(result.lastInsertRowid) });
+  }
+  const announcementMatch = /^\/api\/announcements\/(\d+)$/.exec(path);
+  if (announcementMatch && method === 'PATCH') {
+    requireUser(request, ['admin']);
+    const body = await readJson(request);
+    if (typeof body.urgent !== 'boolean') fail(400, 'Le niveau d’urgence est invalide.');
+    const result = db.prepare('UPDATE announcements SET urgent = ? WHERE id = ?').run(body.urgent ? 1 : 0, Number(announcementMatch[1]));
+    if (!result.changes) fail(404, 'Actualité introuvable.');
+    return sendJson(response, 200, { ok: true });
   }
 
   if (path === '/api/messages' && method === 'GET') {
