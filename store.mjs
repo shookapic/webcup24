@@ -193,6 +193,21 @@ if (db.prepare('SELECT COUNT(*) AS count FROM places').get().count === 0) {
   insert.run('marche-couvert', 'service', 'Marché couvert', 'Covered market', 'Quartier ouest', 'Marché', 'Quartier ouest, à côté de l’arrêt Marché. Étals sous auvent ; information pour les commerçants.', 'West district, next to the Marché stop. Stalls under awnings; information for traders.', 'Du mardi au samedi, de 7 h à 13 h', 'Tuesday to Saturday, 7 am to 1 pm', 0, null, null);
 }
 
+// F49: notices for one resident, written by the server in the same transaction as the change that causes them. Read through polling.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS notices (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code TEXT NOT NULL,
+    ref_id INTEGER,
+    label TEXT NOT NULL,
+    note TEXT,
+    at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    seen_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS notices_user ON notices(user_id, seen_at);
+`);
+
 // F47 / F48: append-only audit trail with a hash chain (see audit.mjs). The triggers refuse any UPDATE or DELETE.
 db.exec(`
   CREATE TABLE IF NOT EXISTS audit_log (

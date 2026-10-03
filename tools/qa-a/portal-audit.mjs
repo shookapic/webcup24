@@ -53,6 +53,7 @@ const $ = (dom, selector) => dom.window.document.querySelector(selector);
 const $$ = (dom, selector) => [...dom.window.document.querySelectorAll(selector)];
 const submit = (dom, selector) => $(dom, selector).dispatchEvent(new dom.window.Event('submit', { cancelable: true, bubbles: true }));
 const fill = (dom, form, values) => { for (const [name, value] of Object.entries(values)) $(dom, `${form} [name=${name}]`).value = value; };
+const tile = (dom, label) => $$(dom, '#dashboard-tiles .dashboard-tile').find((item) => item.querySelector('dt').textContent === label)?.querySelector('dd').textContent;
 const click = (dom, element) => element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
 const login = async (dom, email, password) => { fill(dom, '#login-form', { email, password }); submit(dom, '#login-form'); await wait(1300); };
 
@@ -107,10 +108,15 @@ try {
   await login(agent, 'agent@audit.test', agentPw);
   check('D08/D09 an agent gets the staff area only: no citizen forms, no administrator tools', !$(agent, '#staff-area').hidden && $(agent, '#citizen-area').hidden && $(agent, '#admin-area').hidden && $(agent, '#member-role').textContent === 'Espace agent');
   check('D17 the workload counter says how many requests still wait ("2 à traiter")', $(agent, '#pending-count').textContent === '2 à traiter', $(agent, '#pending-count').textContent);
+  check('F50 dashboard is the first block of the staff space and says when it was updated', $(agent, '#staff-area .jump-nav a').getAttribute('href') === '#dashboard-panel' && $(agent, '#staff-area .panel') === $(agent, '#dashboard-panel') && /Mis à jour à \d\d:\d\d \(heure de la cité\)/.test($(agent, '#dashboard-time').textContent), $(agent, '#dashboard-time').textContent);
+  check('F50 tiles carry a label and a number (no colour-only meaning): 2 messages to handle, 0 in progress, 0 resolved, 2 received today, 1 resident', tile(agent, 'Messages à traiter') === '2' && tile(agent, 'Messages en cours') === '0' && tile(agent, 'Messages résolus') === '0' && tile(agent, 'Messages reçus aujourd’hui') === '2' && tile(agent, 'Habitants inscrits') === '1', $$(agent, '#dashboard-tiles').map((n) => n.textContent).join('|'));
+  check('F50 "to do now" says in words what waits (2 messages, 1 open problem report, the seeded disrupted line T1), never fabricated', $$(agent, '#dashboard-todo li').map((li) => li.textContent).join(' | ').includes('2 messages attendent une réponse.') && $(agent, '#dashboard-todo').textContent.includes('1 signalement de problème n’est pas résolu.') && $(agent, '#dashboard-todo').textContent.includes('Lignes perturbées : T1.'), $(agent, '#dashboard-todo').textContent);
+  check('F50 an agent does not see the administrator-only count of deactivated accounts, and no resident e-mail is on the dashboard', tile(agent, 'Comptes désactivés') === undefined && !$(agent, '#dashboard-panel').textContent.includes('zoe@audit.test'));
   const staffCards = () => $$(agent, '#staff-messages .message-card');
   check('F22 the staff list shows the author, the request, its status and a status selector for each request, new ones first', staffCards().length === 2 && staffCards().every((c) => c.querySelector('.message-author').textContent.includes('zoe@audit.test') && c.querySelector('select')) && staffCards()[0].querySelector('.message-status').textContent === 'À traiter');
   const incidentRow = staffCards().find((c) => c.textContent.includes('Lampadaire cassé'));
   const select = incidentRow.querySelector('select');
+  incidentRow.querySelector('.status-field input').value = 'Un technicien passe demain matin.';
   select.value = 'in_progress';
   select.dispatchEvent(new agent.window.Event('change', { bubbles: true }));
   await wait(1300);
@@ -119,6 +125,7 @@ try {
   resolvedRow.querySelector('select').value = 'resolved';
   resolvedRow.querySelector('select').dispatchEvent(new agent.window.Event('change', { bubbles: true }));
   await wait(1300);
+  check('F50 the dashboard follows: 0 to handle, 1 in progress, 1 resolved, no more waiting message', tile(agent, 'Messages à traiter') === '0' && tile(agent, 'Messages en cours') === '1' && tile(agent, 'Messages résolus') === '1' && !$(agent, '#dashboard-todo').textContent.includes('attendent une réponse'), $$(agent, '#dashboard-tiles').map((n) => n.textContent).join('|'));
   check('F22 resolved requests move to the bottom and the counter reaches zero', $(agent, '#pending-count').textContent === '0 à traiter' && staffCards().at(-1).querySelector('.message-status').textContent === 'Résolu');
   if (key) {
     const feedCards = () => $$(agent, '#requests-list .request-card');
@@ -139,6 +146,12 @@ try {
   await login(zoe, 'zoe@audit.test', 'une-phrase-de-passe-1');
   const progress = (title) => steps(cards().find((c) => c.textContent.includes(title)));
   check('D11 the resident sees the progress without contacting the town hall: handled shows step 1 done and step 2 current, resolved shows all three done', progress('Lampadaire').join('|').includes('step-done:✓ Demande reçue') && progress('Lampadaire').join('|').includes('step-current:En cours de traitement') && progress('Question sur les horaires').every((s) => s.startsWith('step-done:✓')), `${progress('Lampadaire')} // ${progress('Question')}`);
+  check('F49 the resident sees a banner and two unread notices in plain words, each saying what to do, with the town hall note', !$(zoe, '#notice-banner').hidden && $(zoe, '#notice-banner').textContent.includes('Vous avez 2 nouvelles sur vos demandes.') && $(zoe, '#notice-banner').getAttribute('role') === 'status' && $$(zoe, '#notices-list .notice-unread').length === 2 && $(zoe, '#notices-list').textContent.includes('Votre demande « Lampadaire cassé » est en cours de traitement.') && $(zoe, '#notices-list').textContent.includes('Vous n’avez rien à faire pour le moment.') && $(zoe, '#notices-list').textContent.includes('Votre demande « Question sur les horaires » est résolue.') && $(zoe, '#notices-list').textContent.includes('Si le problème persiste, envoyez-nous un nouveau message.') && $(zoe, '#notices-list').textContent.includes('Message de la mairie : Un technicien passe demain matin.'), $(zoe, '#notices-list').textContent);
+  check('F49 unread is stated by the word "Nouveau", not only by colour', $$(zoe, '#notices-list .notice-unread .notice-new').every((n) => n.textContent.startsWith('Nouveau')) && $(zoe, '#notice-banner a[href="#notices-panel"]'));
+  check('F49 nothing was sent to the browser before the resident opted in', zoe.window.__notes.length === 0);
+  click(zoe, $(zoe, '#notices-read'));
+  await wait(1200);
+  check('F49 "Tout marquer comme lu" clears the banner and the unread marks, keeps the history, moves focus to the panel, and the server remembers it', $(zoe, '#notice-banner').hidden && $$(zoe, '#notices-list .notice-unread').length === 0 && $$(zoe, '#notices-list .notice-item').length === 2 && $(zoe, '#notices-read').hidden && zoe.window.document.activeElement === $(zoe, '#notices-panel'));
   check('F26 the status badge in the history follows the staff change', cards().find((c) => c.textContent.includes('Lampadaire')).querySelector('.message-status').textContent === 'En cours' && cards().find((c) => c.textContent.includes('Question')).querySelector('.message-status').textContent === 'Résolu');
 
   // ============ administrator: featured services, urgent alert with audience (F28, F29, F30, F31)
@@ -173,6 +186,16 @@ try {
   zoe.window.loadNews();
   await wait(900);
   check('F30 refreshing again does not notify twice for the same item', zoe.window.__notes.length === 1);
+  const lamp = $$(admin, '#staff-messages .message-card').find((c) => c.textContent.includes('Lampadaire'));
+  lamp.querySelector('.status-field input').value = 'On vous recontacte si besoin.';
+  lamp.querySelector('select').value = 'new';
+  lamp.querySelector('select').dispatchEvent(new admin.window.Event('change', { bubbles: true }));
+  await wait(1300);
+  await zoe.window.loadNotices();
+  await wait(800);
+  check('F49 after consent a new notice triggers exactly one browser notification (stand-in) with the plain sentence; refreshing again does not repeat it', zoe.window.__notes.length === 2 && zoe.window.__notes[1].title === 'Nouvelle sur votre demande' && zoe.window.__notes[1].body === 'Votre demande « Lampadaire cassé » est de nouveau à traiter.', JSON.stringify(zoe.window.__notes));
+  await zoe.window.loadNotices();
+  check('F49 no duplicate on the next poll, banner shows the single unread notice, live region singular', zoe.window.__notes.length === 2 && $(zoe, '#notice-banner').textContent.includes('Vous avez 1 nouvelle sur vos demandes.'));
   check('F31 urgent items are marked as active alerts in the news list too', $$(zoe, '.news-urgent').some((c) => c.textContent.includes('Alerte en cours') && c.textContent.includes('Public concerné : Quartier ouest')));
   admin.window.close();
 

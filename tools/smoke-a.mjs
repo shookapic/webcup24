@@ -325,6 +325,46 @@ try {
   check('F47 robustness: the server is still healthy after the bad requests', (await agent.call('/api/me')).status === 200 && (await agent.call('/api/admin/audit/verify')).data.ok === true);
   const clamped = (await agent.call('/api/admin/audit?limit=999')).data;
   check('F47 robustness: valid edge inputs are accepted (limit above the maximum is clamped to 200, limit=1 gives one row, 29 February of a leap year)', clamped.entries.length <= 200 && clamped.entries.length > 20 && (await agent.call('/api/admin/audit?limit=1')).data.entries.length === 1 && (await agent.call('/api/admin/audit?from=2024-02-29&to=2024-02-29')).status === 200 && (await agent.call('/api/admin/audit?actor=&category=&q=&from=&to=&limit=')).status === 200);
+  // F49: notices for the resident when a request changes state
+  const visitor = new Client();
+  const mine = async (client) => (await client.call('/api/me/notices')).data;
+  const first = await mine(citizen);
+  const moved = first.notices.filter((n) => n.ref_id === msg.data.id);
+  check('F49 the first status change (to in progress) gave the owner exactly one unread notice naming their request', moved.length === 1 && moved[0].code === 'message.in_progress' && moved[0].label === 'Lampadaire cassé' && moved[0].seen_at === null && first.unread >= 1, JSON.stringify(first));
+  await agent.call(`/api/messages/${msg.data.id}`, 'PATCH', { status: 'in_progress' });
+  check('F49 repeating the same status is silent (no duplicate notice)', (await mine(citizen)).notices.length === first.notices.length);
+  check('F49 a note shorter than 5 characters is refused', (await agent.call(`/api/messages/${msg.data.id}`, 'PATCH', { status: 'resolved', note: 'ok' })).status === 400 && (await mine(citizen)).notices.length === first.notices.length);
+  check('F49 resolving with a note creates a notice carrying that note', (await agent.call(`/api/messages/${msg.data.id}`, 'PATCH', { status: 'resolved', note: 'Lampadaire remplacé ce matin.' })).status === 200 && (await mine(citizen)).notices[0].code === 'message.resolved' && (await mine(citizen)).notices[0].note === 'Lampadaire remplacé ce matin.');
+  const neighbour = new Client();
+  await neighbour.call('/api/auth/register', 'POST', { name: 'Autre Habitant', email: 'neighbour@smoke.test', password: 'neighbour-password-123' });
+  const others = await mine(neighbour);
+  check('F49 another resident sees none of these notices', !JSON.stringify(others).includes('Lampadaire') && others.notices.every((n) => n.ref_id !== msg.data.id));
+  check('F49 staff and anonymous visitors have no notice list', (await agent.call('/api/me/notices')).status === 403 && (await visitor.call('/api/me/notices')).status === 401 && (await visitor.call('/api/me/notices/seen', 'POST', { ids: [1] })).status === 401);
+  const ids = (await mine(citizen)).notices.map((n) => n.id);
+  check('F49 a resident cannot mark someone else\'s notices as seen', (await neighbour.call('/api/me/notices/seen', 'POST', { ids })).data.seen === 0 && (await mine(citizen)).unread === ids.length);
+  check('F49 invalid id lists are refused', (await citizen.call('/api/me/notices/seen', 'POST', { ids: 'x' })).status === 400 && (await citizen.call('/api/me/notices/seen', 'POST', { ids: [1.5] })).status === 400 && (await citizen.call('/api/me/notices/seen', 'POST', { ids: [] })).status === 200);
+  check('F49 marking seen is per recipient, counted once, and remembered', (await citizen.call('/api/me/notices/seen', 'POST', { ids })).data.seen === ids.length && (await citizen.call('/api/me/notices/seen', 'POST', { ids })).data.seen === 0 && (await mine(citizen)).unread === 0);
+  check('F49 a resident whose requests never changed state has no notice (nothing is invented)', (await mine(neighbour)).notices.length === 0);
+
+  // F50: staff dashboard, derived from the database
+  const dbc = new DatabaseSync(env.DATA_PATH);
+  const count = (sql, ...args) => dbc.prepare(sql).get(...args).n;
+  const board = (await agent.call('/api/admin/dashboard')).data;
+  check('F50 dashboard is for staff only', (await citizen.call('/api/admin/dashboard')).status === 403 && (await visitor.call('/api/admin/dashboard')).status === 401);
+  check('F50 message figures equal the database', board.messages.new === count("SELECT COUNT(*) AS n FROM messages WHERE status = 'new'") && board.messages.in_progress === count("SELECT COUNT(*) AS n FROM messages WHERE status = 'in_progress'") && board.messages.resolved === count("SELECT COUNT(*) AS n FROM messages WHERE status = 'resolved'") && board.messages.resolved >= 1, JSON.stringify(board.messages));
+  check('F50 resident, place, service and alert figures equal the database', board.residents.total === count("SELECT COUNT(*) AS n FROM users WHERE role = 'citizen'") && board.places === count('SELECT COUNT(*) AS n FROM places') && board.services.total === count('SELECT COUNT(*) AS n FROM services') && board.alerts.active === count('SELECT COUNT(*) AS n FROM announcements WHERE urgent = 1'));
+  await neighbour.call('/api/messages', 'POST', { subject: 'Question tableau de bord', body: 'Une question pour compter.' });
+  const board2 = (await agent.call('/api/admin/dashboard')).data;
+  check('F50 a new message raises "new" and today\'s count by one, and gives a waiting time', board2.messages.new === board.messages.new + 1 && board2.messages.received_today === board.messages.received_today + 1 && board2.messages.waiting_hours !== null);
+  const newOne = (await agent.call('/api/messages')).data.messages.find((m) => m.subject === 'Question tableau de bord');
+  await agent.call(`/api/messages/${newOne.id}`, 'PATCH', { status: 'resolved' });
+  const board3 = (await agent.call('/api/admin/dashboard')).data;
+  check('F50 resolving it moves the figure from "new" to "resolved"', board3.messages.new === board.messages.new && board3.messages.resolved === board.messages.resolved + 1);
+  check('F50 the payload carries no citizen e-mail, full name or password data', !/citizen@smoke\.test|doomed@|neighbour@|doomed@|rdv1@|Citoyen Test|Victime Test|scrypt|password/i.test(JSON.stringify(board3)));
+  check('F50 only administrators see the count of deactivated accounts', board3.residents.deactivated === undefined && (await admin.call('/api/admin/dashboard')).data.residents.deactivated === count("SELECT COUNT(*) AS n FROM users WHERE role = 'citizen' AND active = 0"));
+  check('F50 recent actions come from the journal (last five, newest first)', board3.recent.length === 5 && board3.recent.every((r, i) => i === 0 || r.at <= board3.recent[i - 1].at));
+  dbc.close();
+
   const trail = new DatabaseSync(env.DATA_PATH);
   const refused = [() => trail.prepare("UPDATE audit_log SET summary = 'modifié' WHERE id = 1").run(), () => trail.prepare('DELETE FROM audit_log WHERE id = 1').run()].map((run) => { try { run(); return false; } catch (error) { return /append-only/.test(error.message); } });
   check('F47 the journal is append-only at the database level: UPDATE and DELETE are refused', refused.every(Boolean), refused.join());

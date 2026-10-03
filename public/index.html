@@ -15,6 +15,7 @@
     <a class="skip-link" href="#contenu">Aller au contenu</a>
     <div id="alert-banner" class="alert-banner" role="alert" data-content></div>
     <div id="reminder-banner" class="reminder-banner" role="status" data-content hidden></div>
+    <div id="notice-banner" class="notice-banner" role="status" data-content hidden></div>
     <header class="site-header" id="haut">
       <a class="brand" href="#haut" aria-label="Terra Nova, accueil">
         <span class="brand-mark" aria-hidden="true"><span></span></span>
@@ -115,6 +116,11 @@
           <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name" tabindex="-1" data-content></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
           <div id="citizen-area" hidden>
             <nav class="jump-nav" aria-label="Dans mon espace"><a href="#message-form">Écrire à la ville</a><a href="#appointments-panel">Rendez-vous</a><a href="#profile-form">Mon profil</a><a href="#delete-form">Supprimer mon compte</a></nav>
+            <section id="notices-panel" class="panel" aria-labelledby="notices-title" tabindex="-1">
+              <div class="panel-title-row"><h3 id="notices-title">Nouvelles de mes demandes</h3><button id="notices-read" type="button" hidden>Tout marquer comme lu</button></div>
+              <p class="reminder-help">Vous êtes prévenu ici quand l’état d’une de vos demandes change. Ces nouvelles s’affichent quand vous êtes connecté, sur le portail et dans le monde 3D : aucun e-mail ni SMS n’est envoyé.</p>
+              <ul id="notices-list" class="notice-list" data-content></ul>
+            </section>
             <section id="guide" class="panel guide" aria-labelledby="guide-title" hidden>
               <h3 id="guide-title">Bienvenue ! Vos premiers pas</h3>
               <p>Trois étapes pour bien démarrer sur le portail de Terra Nova.</p>
@@ -173,8 +179,17 @@
           </div>
 
           <div id="staff-area" hidden>
-            <nav class="jump-nav" aria-label="Dans l’espace agent"><a href="#staff-messages-panel">Messages</a><a href="#traffic-form">Info trafic</a><a href="#availability-form">Disponibilité des services</a><a href="#slots-panel">Horaires de rendez-vous</a><a href="#security-panel">Sécurité</a><a href="#citizens-panel">Comptes des habitants</a><a href="#audit-panel">Journal des actions</a><a href="#feed-panel">Demandes du concours</a><a class="admin-only" href="#service-form" hidden>Ajouter un service</a><a class="admin-only" href="#news-form" hidden>Publier une actualité</a><a class="admin-only" href="#place-admin" hidden>Lieux de la ville</a></nav>
+            <nav class="jump-nav" aria-label="Dans l’espace agent"><a href="#dashboard-panel">Tableau de bord</a><a href="#staff-messages-panel">Messages</a><a href="#traffic-form">Info trafic</a><a href="#availability-form">Disponibilité des services</a><a href="#slots-panel">Horaires de rendez-vous</a><a href="#security-panel">Sécurité</a><a href="#citizens-panel">Comptes des habitants</a><a href="#audit-panel">Journal des actions</a><a href="#feed-panel">Demandes du concours</a><a class="admin-only" href="#service-form" hidden>Ajouter un service</a><a class="admin-only" href="#news-form" hidden>Publier une actualité</a><a class="admin-only" href="#place-admin" hidden>Lieux de la ville</a></nav>
             <div class="section-heading staff-heading"><div><span class="section-kicker">ESPACE AGENT</span><h3>Suivi de l’activité</h3></div><p>Demandes citoyennes et flux officiel, dans un espace réservé aux agents.</p></div>
+            <section id="dashboard-panel" class="panel dashboard-panel" aria-labelledby="dashboard-title" tabindex="-1">
+              <div class="panel-title-row"><h3 id="dashboard-title">Tableau de bord</h3><span id="dashboard-time" class="dashboard-time" data-content></span></div>
+              <p>Chiffres comptés à l’instant dans les données réelles du portail, remis à jour toutes les 30 secondes.</p>
+              <h4>À faire maintenant</h4>
+              <ul id="dashboard-todo" class="dashboard-todo" data-content></ul>
+              <dl id="dashboard-tiles" class="dashboard-tiles" data-content></dl>
+              <h4>Dernières actions</h4>
+              <ol id="dashboard-recent" class="dashboard-recent" data-content></ol>
+            </section>
             <div class="workspace-grid">
               <div class="panel" id="staff-messages-panel" tabindex="-1"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p><div id="staff-messages" class="message-list" data-content></div></div>
               <div class="panel"><div class="panel-title-row"><h3>Flux officiel Terra Nova</h3><button id="refresh-button" type="button">Actualiser ↻</button></div><p id="feed-status" role="status" aria-live="polite">Connexion au flux…</p><div class="mini-stats"><span id="visible-count">— demandes</span><span id="current-wave">Vague —</span><span id="next-wave">Prochaine vague —</span></div></div>

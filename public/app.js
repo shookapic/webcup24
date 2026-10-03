@@ -344,6 +344,8 @@ function renderIdentity() {
   for (const link of document.querySelectorAll('.admin-only')) link.hidden = user?.role !== 'admin';
   renderGuide();
   renderTips();
+  renderNotices(true);
+  renderDashboard();
   renderPlaces();
   renderEmergency();
   renderTransports();
@@ -383,6 +385,12 @@ function clearIdentity() {
   audit = { entries: [], next: null, facets: null };
   auditTarget = null;
   renderAudit();
+  notices = [];
+  noticeKey = null;
+  dashboard = null;
+  for (const id of ['#notices-list', '#notice-banner', '#dashboard-todo', '#dashboard-tiles', '#dashboard-recent']) $(id).replaceChildren();
+  $('#notice-banner').hidden = true;
+  $('#dashboard-time').textContent = '';
   $('#citizens-list').replaceChildren();
   $('#citizens-secret').hidden = true;
   slots = [];
@@ -448,10 +456,15 @@ function renderMessages(messages) {
         select.append(option);
       }
       select.value = item.status;
+      const noteField = element('label', 'status-field', t('Message pour l’habitant (facultatif) '));
+      const note = element('input');
+      note.maxLength = 300;
+      note.setAttribute('aria-label', t('Message pour l’habitant, demande {id}', { id: item.id }));
+      noteField.append(note);
       select.addEventListener('change', async () => {
         select.disabled = true;
         try {
-          await api(`/api/messages/${item.id}`, 'PATCH', { status: select.value });
+          await api(`/api/messages/${item.id}`, 'PATCH', note.value.trim() ? { status: select.value, note: note.value.trim() } : { status: select.value });
           await loadMessages();
         } catch (error) {
           alert(error.message);
@@ -459,10 +472,120 @@ function renderMessages(messages) {
         }
       });
       label.append(select);
-      card.append(label);
+      card.append(label, noteField);
     }
     list.append(card);
   }
+}
+
+// ---- F49: notices. The server writes one for the owner when a request really changes state; we poll and show them.
+// No e-mail or SMS exists: they appear on the page and, if the person opted in with the alerts button, as a browser notification.
+let notices = [];
+let noticeKey = null;
+const noticeLines = {
+  'message.in_progress': ['Votre demande « {label} » est en cours de traitement.', 'Vous n’avez rien à faire pour le moment.'],
+  'message.resolved': ['Votre demande « {label} » est résolue.', 'Si le problème persiste, envoyez-nous un nouveau message.'],
+  'message.new': ['Votre demande « {label} » est de nouveau à traiter.', 'Vous n’avez rien à faire : un agent la reprendra.'],
+};
+const noticeText = (item) => (noticeLines[item.code] ? t(noticeLines[item.code][0], { label: item.label }) : item.label);
+
+async function loadNotices() {
+  if (user?.role !== 'citizen') return;
+  try {
+    ({ notices } = await api('/api/me/notices'));
+    renderNotices();
+  } catch (error) {
+    if (error.status === 401) clearIdentity();
+  }
+}
+
+function renderNotices(force = false) {
+  const unread = notices.filter((item) => !item.seen_at);
+  if (user && 'Notification' in window && Notification.permission === 'granted') {
+    for (const item of unread) {
+      const seen = `noticeNotified:${user.id}:${item.id}`;
+      if (preference(seen) === 'true') continue;
+      preference(seen, 'true');
+      new Notification(t('Nouvelle sur votre demande'), { body: noticeText(item), tag: `notice-${item.id}` });
+    }
+  }
+  $('#notices-list').replaceChildren(...(notices.length ? notices : [null]).map((item) => {
+    if (!item) return element('li', 'list-empty', t('Aucune nouvelle pour le moment. Vous serez prévenu ici quand une de vos demandes changera d’état.'));
+    const line = element('li', item.seen_at ? 'notice-item' : 'notice-item notice-unread');
+    const [, action] = noticeLines[item.code] || [];
+    if (!item.seen_at) line.append(element('strong', 'notice-new', `${t('Nouveau')} · `));
+    line.append(noticeText(item));
+    if (action) line.append(element('span', 'notice-action', t(action)));
+    if (item.note) line.append(element('span', 'notice-note', t('Message de la mairie : {note}', { note: item.note })));
+    line.append(element('span', 'notice-time', item.at));
+    return line;
+  }));
+  $('#notices-read').hidden = !unread.length;
+  // Touch the live region only when the count changes, so a screen reader does not repeat it at every poll.
+  const key = unread.map((item) => item.id).join();
+  if (key === noticeKey && !force) return;
+  noticeKey = key;
+  const banner = $('#notice-banner');
+  banner.hidden = !unread.length;
+  if (!unread.length) return banner.replaceChildren();
+  const link = element('a', '', t('Voir mes nouvelles'));
+  link.href = '#notices-panel';
+  banner.replaceChildren(element('strong', '', `${t('Nouvelles')} · `), `${t(unread.length === 1 ? 'Vous avez 1 nouvelle sur vos demandes.' : 'Vous avez {n} nouvelles sur vos demandes.', { n: unread.length })} `, link);
+}
+
+$('#notices-read').addEventListener('click', async () => {
+  try {
+    await api('/api/me/notices/seen', 'POST', { ids: notices.filter((item) => !item.seen_at).map((item) => item.id) });
+    await loadNotices();
+    $('#notices-panel').focus();
+  } catch (error) {
+    if (error.status === 401) clearIdentity();
+  }
+});
+
+// ---- F50: the staff dashboard. The server counts everything from the database; here we only lay it out.
+let dashboard = null;
+async function loadDashboard() {
+  if (!['agent', 'admin'].includes(user?.role)) return;
+  try {
+    dashboard = await api('/api/admin/dashboard');
+    renderDashboard();
+  } catch (error) {
+    if (error.status === 401) return clearIdentity();
+    $('#dashboard-todo').replaceChildren(element('li', 'list-empty', error.message));
+  }
+}
+
+function renderDashboard() {
+  if (!dashboard) return;
+  const d = dashboard;
+  const when = d.generated_at.replace('T', ' ');
+  $('#dashboard-time').textContent = t('Mis à jour à {time} (heure de la cité)', { time: when.slice(11) });
+  const todo = [];
+  const plural = (n, one, many, params = {}) => t(n === 1 ? one : many, { n, ...params });
+  if (d.messages.new) todo.push(plural(d.messages.new, '1 message attend une réponse.', '{n} messages attendent une réponse.') + (d.messages.waiting_hours ? ` ${t('Le plus ancien attend depuis {h} h.', { h: d.messages.waiting_hours })}` : ''));
+  if (d.messages.incidents_open) todo.push(plural(d.messages.incidents_open, '1 signalement de problème n’est pas résolu.', '{n} signalements de problèmes ne sont pas résolus.'));
+  if (d.appointments.booked_today) todo.push(plural(d.appointments.booked_today, '1 rendez-vous à venir aujourd’hui.', '{n} rendez-vous à venir aujourd’hui.'));
+  if (d.services.unavailable.length) todo.push(t('Services indisponibles : {names}.', { names: d.services.unavailable.join(', ') }));
+  if (d.alerts.active) todo.push(plural(d.alerts.active, '1 alerte urgente est affichée.', '{n} alertes urgentes sont affichées.'));
+  if (d.transports.disrupted.length) todo.push(t('Lignes perturbées : {names}.', { names: d.transports.disrupted.join(', ') }));
+  if (d.security.blocked_attempts || d.security.failed_logins >= 10) todo.push(t('Connexions : {failed} échecs et {blocked} tentatives bloquées (voir Sécurité).', { failed: d.security.failed_logins, blocked: d.security.blocked_attempts }));
+  $('#dashboard-todo').replaceChildren(...(todo.length ? todo : [t('Rien d’urgent : aucune demande n’attend et rien n’est perturbé.')]).map((line) => element('li', '', line)));
+  const tiles = [
+    ['Messages à traiter', d.messages.new], ['Messages en cours', d.messages.in_progress], ['Messages résolus', d.messages.resolved],
+    ['Messages reçus aujourd’hui', d.messages.received_today], ['Messages reçus sur 7 jours', d.messages.received_week],
+    ['Rendez-vous réservés aujourd’hui', d.appointments.booked_today], ['Rendez-vous réservés sur 7 jours', d.appointments.booked_week], ['Horaires libres sur 7 jours', d.appointments.open_week],
+    ['Habitants inscrits', d.residents.total], ['Nouveaux habitants sur 7 jours', d.residents.new_week],
+    ...(d.residents.deactivated === undefined ? [] : [['Comptes désactivés', d.residents.deactivated]]),
+    ['Services', d.services.total], ['Services indisponibles', d.services.unavailable.length], ['Alertes urgentes affichées', d.alerts.active], ['Lignes perturbées', d.transports.disrupted.length], ['Lieux de la ville', d.places],
+    ['Échecs de connexion (15 min)', d.security.failed_logins], ['Tentatives bloquées (15 min)', d.security.blocked_attempts],
+  ];
+  $('#dashboard-tiles').replaceChildren(...tiles.map(([label, value]) => {
+    const tile = element('div', 'dashboard-tile');
+    tile.append(element('dt', '', t(label)), element('dd', '', String(value)));
+    return tile;
+  }));
+  $('#dashboard-recent').replaceChildren(...(d.recent.length ? d.recent : [null]).map((row) => element('li', row ? '' : 'list-empty', row ? `${row.at.replace('T', ' ').slice(0, 16)} · ${row.actor_name} ${row.summary}` : t('Aucune action enregistrée.'))));
 }
 
 async function loadMessages() {
@@ -470,6 +593,7 @@ async function loadMessages() {
   try {
     const { messages } = await api('/api/messages');
     renderMessages(messages);
+    loadDashboard();
   } catch (error) {
     if (error.status === 401) {
       clearIdentity();
@@ -1436,6 +1560,7 @@ async function afterAuthentication(nextUser) {
   if (user?.role === 'admin') loadNews();
   renderServices();
   await loadMessages();
+  loadNotices();
   await loadFeed();
   loadCitizens();
   loadAppointments();
@@ -1659,4 +1784,4 @@ applyContrast();
 
 setInterval(() => { loadTransports(); loadServices(); loadAppointments(); loadPlaces(); }, 60_000);
 Promise.allSettled([loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]);
-setInterval(() => { if (!document.activeElement?.closest?.('.reason-form')) loadNews(); if (user) loadMessages(); if (['agent', 'admin'].includes(user?.role)) { loadFeed(); loadStaffSlots(); loadSecurity(); } }, 30_000);
+setInterval(() => { if (!document.activeElement?.closest?.('.reason-form')) loadNews(); if (user) { loadMessages(); loadNotices(); } if (['agent', 'admin'].includes(user?.role)) { loadFeed(); loadStaffSlots(); loadSecurity(); } }, 30_000);

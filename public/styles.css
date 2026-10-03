@@ -425,3 +425,24 @@ html[data-contrast=high] .emergency-title a,html[data-contrast=high] .emergency-
 .audit-filter{grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))}
 .chip input:focus-visible{outline:none}
 html[data-contrast=high] .place-kind,html[data-contrast=high] .place-emergency .place-kind{background:#000;border-color:#ffeb00;color:#ffeb00 !important}
+
+/* Wave 8: F49 notices, F50 dashboard. Unread notices say "Nouveau" in words, never colour alone. */
+.notice-banner{margin:0;padding:12px 40px;background:#d4e9f7;color:#0b2a44;font-size:.9375rem;line-height:1.5;border-bottom:2px solid #1a5a8a}
+.notice-banner[hidden]{display:none}
+.notice-banner a{color:#0b2a44;font-weight:700}
+.notice-list,.dashboard-todo,.dashboard-recent{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.notice-item{padding:10px 12px;border:1px solid var(--line,#c9d3dc);border-left-width:4px;border-radius:4px;display:grid;gap:4px;overflow-wrap:anywhere}
+.notice-unread{border-left-color:#1a5a8a;background:#eef6fc;font-weight:600}
+.notice-action,.notice-note{font-weight:400}
+.notice-time{font-size:.8125rem;font-weight:400;opacity:.8}
+.dashboard-time{font-size:.8125rem}
+.dashboard-todo li{padding:8px 12px;border-left:4px solid #7a5b08;background:#fbf3d9;color:#1d1405;border-radius:3px;overflow-wrap:anywhere}
+.dashboard-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(10.5rem,1fr));gap:10px;margin:14px 0}
+.dashboard-tile{border:1px solid var(--line,#c9d3dc);border-radius:4px;padding:10px 12px;display:grid;gap:2px}
+.dashboard-tile dt{font-size:.8125rem;overflow-wrap:anywhere}
+.dashboard-tile dd{margin:0;font-size:1.5rem;font-weight:700}
+.dashboard-recent li{font-size:.875rem;overflow-wrap:anywhere}
+html[data-contrast=high] .notice-banner{background:#000;color:#ffeb00;border-bottom-color:#ffeb00}
+html[data-contrast=high] .notice-banner a{color:#ffeb00}
+html[data-contrast=high] .notice-unread,html[data-contrast=high] .dashboard-todo li{background:#000;color:#fff;border-color:#ffeb00}
+@media(max-width:620px){.notice-banner{padding:12px 16px}}

@@ -279,6 +279,7 @@ function eraseUser(id) {
     db.prepare("UPDATE appointments SET citizen_id = NULL, reason = NULL, booked_at = NULL, status = 'open' WHERE citizen_id = ? AND status = 'booked'").run(id);
     db.prepare('DELETE FROM appointments WHERE citizen_id = ?').run(id);
     db.prepare('DELETE FROM messages WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM notices WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
   });
   presence.delete(id);
@@ -441,6 +442,45 @@ async function route(request, response) {
     return sendJson(response, 200, { user: publicUser(user), ...(earlierFailures >= 3 ? { notice: { failedAttempts: earlierFailures } } : {}) });
   }
 
+  // F50: the staff dashboard. Every figure is counted from the database at request time; the payload holds numbers and service/line names only.
+  if (path === '/api/admin/dashboard' && method === 'GET') {
+    const staff = requireUser(request, ['agent', 'admin']);
+    const one = (sql, ...args) => db.prepare(sql).get(...args);
+    const now = cityNow();
+    const today = now.slice(0, 10);
+    const utc = (local) => new Date(`${local}:00${cityOffset}`).toISOString().slice(0, 19).replace('T', ' ');
+    const dayStart = utc(`${today}T00:00`);
+    const weekStart = utc(`${addMinutes(`${today}T00:00`, -6 * 1440)}`);
+    const byStatus = Object.fromEntries(db.prepare('SELECT status, COUNT(*) AS n FROM messages GROUP BY status').all().map((row) => [row.status, row.n]));
+    const oldest = one("SELECT MIN(created_at) AS at FROM messages WHERE status = 'new'").at;
+    const waitingHours = oldest ? Math.max(0, Math.floor((Date.now() - Date.parse(oldest.replace(' ', 'T') + 'Z')) / 3_600_000)) : null;
+    const week = addMinutes(`${today}T00:00`, 7 * 1440);
+    const unavailable = db.prepare("SELECT title FROM services WHERE availability = 'unavailable'").all().map(serviceView).filter((row) => row.availability === 'unavailable').map((row) => row.title);
+    const dashboard = {
+      generated_at: now,
+      messages: {
+        new: byStatus.new || 0, in_progress: byStatus.in_progress || 0, resolved: byStatus.resolved || 0,
+        waiting_hours: waitingHours,
+        received_today: one('SELECT COUNT(*) AS n FROM messages WHERE created_at >= ?', dayStart).n,
+        received_week: one('SELECT COUNT(*) AS n FROM messages WHERE created_at >= ?', weekStart).n,
+        incidents_open: one("SELECT COUNT(*) AS n FROM messages WHERE kind = 'incident' AND status != 'resolved'").n,
+      },
+      appointments: {
+        booked_today: one("SELECT COUNT(*) AS n FROM appointments WHERE status = 'booked' AND substr(starts_at, 1, 10) = ? AND starts_at > ?", today, now).n,
+        booked_week: one("SELECT COUNT(*) AS n FROM appointments WHERE status = 'booked' AND starts_at > ? AND starts_at < ?", now, week).n,
+        open_week: one("SELECT COUNT(*) AS n FROM appointments WHERE status = 'open' AND starts_at > ? AND starts_at < ?", now, week).n,
+      },
+      services: { total: one('SELECT COUNT(*) AS n FROM services').n, unavailable },
+      alerts: { active: one('SELECT COUNT(*) AS n FROM announcements WHERE urgent = 1').n },
+      transports: { disrupted: db.prepare("SELECT code FROM transport_status WHERE status != 'normal' ORDER BY code").all().map((row) => row.code) },
+      residents: { total: one("SELECT COUNT(*) AS n FROM users WHERE role = 'citizen'").n, new_week: one("SELECT COUNT(*) AS n FROM users WHERE role = 'citizen' AND created_at >= ?", weekStart).n },
+      places: one('SELECT COUNT(*) AS n FROM places').n,
+      security: (({ failedLogins, blockedAttempts }) => ({ failed_logins: failedLogins, blocked_attempts: blockedAttempts }))(summary()),
+      recent: db.prepare('SELECT at, actor_name, summary FROM audit_log ORDER BY id DESC LIMIT 5').all(),
+    };
+    if (staff.role === 'admin') dashboard.residents.deactivated = one("SELECT COUNT(*) AS n FROM users WHERE role = 'citizen' AND active = 0").n;
+    return sendJson(response, 200, dashboard);
+  }
   if (path === '/api/admin/security' && method === 'GET') {
     requireUser(request, ['agent', 'admin']);
     const { windowMinutes, failedLogins, blockedAttempts, failures } = summary();
@@ -765,16 +805,34 @@ async function route(request, response) {
     const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location, service_id) VALUES (?, ?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location, serviceId);
     return sendJson(response, 201, { id: Number(result.lastInsertRowid), status: 'new', confirmation: 'Votre message a bien été transmis.' });
   }
+  // F49: the resident's own notices (newest first, unread flagged). Polling only; nothing is sent by e-mail or SMS.
+  if (path === '/api/me/notices' && method === 'GET') {
+    const user = requireUser(request, ['citizen']);
+    const notices = db.prepare('SELECT id, code, ref_id, label, note, at, seen_at FROM notices WHERE user_id = ? ORDER BY id DESC LIMIT 50').all(user.id);
+    return sendJson(response, 200, { notices, unread: notices.filter((n) => !n.seen_at).length });
+  }
+  if (path === '/api/me/notices/seen' && method === 'POST') {
+    const user = requireUser(request, ['citizen']);
+    const { ids } = await readJson(request);
+    if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => Number.isInteger(id) && id > 0)) fail(400, 'Liste de notifications invalide.');
+    const mark = db.prepare('UPDATE notices SET seen_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND seen_at IS NULL');
+    let changed = 0;
+    for (const id of ids) changed += Number(mark.run(id, user.id).changes);
+    return sendJson(response, 200, { seen: changed });
+  }
   const messageMatch = /^\/api\/messages\/(\d+)$/.exec(path);
   if (messageMatch && method === 'PATCH') {
     const staff = requireUser(request, ['agent', 'admin']);
     const body = await readJson(request);
     if (!['new', 'in_progress', 'resolved'].includes(body.status)) fail(400, 'Statut invalide.');
-    const item = db.prepare('SELECT id, subject, status FROM messages WHERE id = ?').get(Number(messageMatch[1]));
+    const note = body.note ? text(body.note, 5, 300, 'Le message pour l’habitant') : null;
+    const item = db.prepare('SELECT id, user_id, subject, status FROM messages WHERE id = ?').get(Number(messageMatch[1]));
     if (!item) fail(404, 'Message introuvable.');
     const names = { new: 'à traiter', in_progress: 'en cours', resolved: 'résolu' };
     tx(() => {
       db.prepare('UPDATE messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(body.status, item.id);
+      // F49: only a real change tells the resident something; repeating the same status is silent.
+      if (body.status !== item.status) db.prepare('INSERT INTO notices (user_id, code, ref_id, label, note) VALUES (?, ?, ?, ?, ?)').run(item.user_id, `message.${body.status}`, item.id, item.subject, note);
       audit(staff, { category: 'message', action: 'message.status', target: { type: 'message', id: item.id, label: item.subject }, summary: `a passé le message « ${item.subject} » de « ${names[item.status]} » à « ${names[body.status]} »`, details: { avant: item.status, apres: body.status } });
     });
     return sendJson(response, 200, { ok: true });
