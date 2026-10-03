@@ -5,7 +5,7 @@ const [base] = process.argv.slice(2);
 const browser = await puppeteer.launch({ executablePath: process.env.BROWSER || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: 'new', protocolTimeout: 300000, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const results = [];
 const check = (name, ok, info = {}) => { results.push(ok); console.log(ok ? 'PASS' : 'FAIL', name, JSON.stringify(info)); };
-async function scenario(label, handler, login) {
+async function scenario(label, handler, login, pattern = /colony-pack\.glb/) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1100, height: 700 });
   if (login) {
@@ -17,7 +17,7 @@ async function scenario(label, handler, login) {
     });
   }
   await page.setRequestInterception(true);
-  page.on('request', (r) => (/colony-pack\.glb/.test(r.url()) ? handler(r) : r.continue()));
+  page.on('request', (r) => (pattern.test(r.url()) ? handler(r) : r.continue()));
   await page.goto(base + '/monde/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.world-error', { timeout: 30000 }).catch(() => null);
   const info = await page.evaluate(() => {
@@ -32,6 +32,7 @@ await scenario('network abort (guest)', (r) => r.abort('failed'), false);
 await scenario('404 json (guest)', (r) => r.respond({ status: 404, contentType: 'application/json', body: '{"error":"Introuvable"}' }), false);
 await scenario('SPA html served as glb (guest)', (r) => r.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><html></html>' }), false);
 await scenario('network abort (logged in)', (r) => r.abort('failed'), true);
+await scenario('hospital glb 404 (guest)', (r) => r.respond({ status: 404, contentType: 'application/json', body: '{"error":"Introuvable"}' }), false, /hospital-a-v001\.glb/);
 await browser.close();
 console.log(results.every(Boolean) ? 'ALL PASS' : 'FAILURES');
 process.exit(results.every(Boolean) ? 0 : 1);
