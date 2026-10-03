@@ -20,6 +20,21 @@ function preference(key, value) {
   }
 }
 
+let lang = preference('lang') === 'en' ? 'en' : 'fr';
+
+// Translate a French interface string; {name} placeholders are filled from vars.
+function t(text, vars = {}) {
+  const value = lang === 'en' ? english[text] ?? text : text;
+  return value.replace(/\{(\w+)\}/g, (_, name) => vars[name] ?? '');
+}
+
+function translateError(message) {
+  const range = /^(.+) doit contenir entre (\d+) et (\d+) caractères\.$/.exec(message);
+  if (range && range[1] !== 'Le mot de passe') return t('{label} doit contenir entre {min} et {max} caractères.', { label: t(range[1]), min: range[2], max: range[3] });
+  if (range) return t('Le mot de passe doit contenir entre {min} et {max} caractères.', { min: range[2], max: range[3] });
+  return t(message);
+}
+
 function element(tag, className, value) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -36,7 +51,7 @@ async function api(path, method = 'GET', body) {
     signal: AbortSignal.timeout(10_000),
   });
   const data = await response.json();
-  if (!response.ok) throw Object.assign(new Error(data.error || 'Une erreur est survenue.'), { status: response.status });
+  if (!response.ok) throw Object.assign(new Error(translateError(data.error || 'Une erreur est survenue.')), { status: response.status });
   return data;
 }
 
@@ -66,12 +81,16 @@ function renderServices() {
   list.replaceChildren();
   for (const service of shown) {
     const card = element('article', service.featured ? 'service-card service-featured' : 'service-card');
-    card.append(element('span', 'service-number', service.featured ? 'À la une' : String(service.id).padStart(2, '0')));
-    card.append(element('h3', '', service.title));
-    card.append(element('p', 'service-description', service.description));
-    card.append(element('p', 'service-details', service.details));
+    // Services without an English version stay in French, marked so screen readers pronounce them right.
+    const translated = lang === 'en' && service.title_en;
+    if (lang === 'en' && !translated) card.lang = 'fr';
+    card.append(element('span', 'service-number', service.featured ? t('À la une') : String(service.id).padStart(2, '0')));
+    card.append(element('h3', '', translated ? service.title_en : service.title));
+    card.append(element('p', 'service-description', translated ? service.description_en || service.description : service.description));
+    card.append(element('p', 'service-details', translated ? service.details_en || service.details : service.details));
     if (user?.role === 'admin') {
-      const toggle = element('button', 'feature-button', service.featured ? 'Retirer de la une' : 'Mettre à la une');
+      const toggle = element('button', 'feature-button', t(service.featured ? 'Retirer de la une' : 'Mettre à la une'));
+      toggle.lang = lang;
       toggle.type = 'button';
       toggle.addEventListener('click', async () => {
         toggle.disabled = true;
@@ -87,9 +106,9 @@ function renderServices() {
     }
     list.append(card);
   }
-  $('#services-status').textContent = !services.length ? 'Aucun service publié pour le moment.'
-    : !shown.length ? 'Aucun service ne correspond à votre recherche.'
-    : query ? `${shown.length} service${shown.length > 1 ? 's' : ''} trouvé${shown.length > 1 ? 's' : ''}.` : '';
+  $('#services-status').textContent = !services.length ? t('Aucun service publié pour le moment.')
+    : !shown.length ? t('Aucun service ne correspond à votre recherche.')
+    : query ? t(shown.length > 1 ? '{n} services trouvés.' : '{n} service trouvé.', { n: shown.length }) : '';
 }
 
 async function loadServices() {
@@ -103,20 +122,23 @@ async function loadServices() {
 
 async function loadNews() {
   try {
-    const { announcements } = await api('/api/announcements');
+    // Announcements without an English version stay in French, marked so screen readers pronounce them right.
+    const announcements = (await api('/api/announcements')).announcements.map((item) =>
+      lang === 'en' && item.title_en ? { ...item, title: item.title_en, body: item.body_en || item.body, lang: 'en' } : { ...item, lang: 'fr' });
     renderAlerts(announcements.filter((item) => item.urgent));
     const list = $('#news-list');
     list.replaceChildren();
     for (const item of announcements) {
       const card = element('article', item.urgent ? 'news-card news-urgent' : 'news-card');
-      const date = item.published_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(`${item.published_at.replace(' ', 'T')}Z`)) : '';
-      if (item.urgent) card.append(element('strong', 'news-badge', 'Alerte en cours'));
+      const date = item.published_at ? new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'long' }).format(new Date(`${item.published_at.replace(' ', 'T')}Z`)) : '';
+      if (item.urgent) card.append(element('strong', 'news-badge', t('Alerte en cours')));
       card.append(element('time', 'news-date', date));
-      card.append(element('h3', '', item.title));
-      card.append(element('p', 'news-audience', `Public concerné : ${item.audience}`));
-      card.append(element('p', '', item.body));
+      const title = element('h3', '', item.title);
+      const body = element('p', '', item.body);
+      title.lang = body.lang = item.lang;
+      card.append(title, element('p', 'news-audience', t('Public concerné : {audience}', { audience: t(item.audience) })), body);
       if (item.urgent && user?.role === 'admin') {
-        const lift = element('button', 'lift-button', 'Lever l’alerte');
+        const lift = element('button', 'lift-button', t('Lever l’alerte'));
         lift.type = 'button';
         lift.addEventListener('click', async () => {
           lift.disabled = true;
@@ -132,7 +154,7 @@ async function loadNews() {
       }
       list.append(card);
     }
-    $('#news-status').textContent = announcements.length ? '' : 'Aucune actualité publiée pour le moment.';
+    $('#news-status').textContent = announcements.length ? '' : t('Aucune actualité publiée pour le moment.');
   } catch (error) {
     $('#news-status').textContent = error.message;
   }
@@ -142,7 +164,7 @@ function renderAlerts(alerts) {
   const fresh = knownAlerts ? alerts.filter((item) => !knownAlerts.has(item.id)) : [];
   knownAlerts = new Set(alerts.map((item) => item.id));
   if ('Notification' in window && Notification.permission === 'granted') {
-    for (const item of fresh) new Notification(`Alerte Terra Nova · ${item.audience}`, { body: item.title, tag: `alerte-${item.id}` });
+    for (const item of fresh) new Notification(t('Alerte Terra Nova · {audience}', { audience: t(item.audience) }), { body: item.title, tag: `alerte-${item.id}` });
   }
   // Only touch the live region when the alerts change, so screen readers don't repeat them every refresh.
   const key = alerts.map((item) => item.id).join();
@@ -150,7 +172,8 @@ function renderAlerts(alerts) {
   alertsKey = key;
   $('#alert-banner').replaceChildren(...alerts.map((item) => {
     const box = element('div', 'alert-item');
-    box.append(element('p', 'alert-label', `Alerte · ${item.audience}`), element('p', 'alert-title', item.title), element('p', 'alert-body', item.body));
+    box.lang = item.lang;
+    box.append(Object.assign(element('p', 'alert-label', t('Alerte · {audience}', { audience: t(item.audience) })), { lang }), element('p', 'alert-title', item.title), element('p', 'alert-body', item.body));
     return box;
   }));
 }
@@ -160,7 +183,7 @@ function renderNotifyButton() {
   if (!('Notification' in window)) return;
   button.hidden = false;
   button.disabled = Notification.permission !== 'default';
-  button.textContent = ({ granted: 'Alertes activées sur cet appareil ✓', denied: 'Notifications bloquées par le navigateur' })[Notification.permission] || 'Me prévenir des alertes';
+  button.textContent = t(({ granted: 'Alertes activées sur cet appareil ✓', denied: 'Notifications bloquées par le navigateur' })[Notification.permission] || 'Me prévenir des alertes');
 }
 $('#notify-button').addEventListener('click', async () => {
   await Notification.requestPermission();
@@ -177,7 +200,7 @@ function renderIdentity() {
   renderGuide();
   if (!user) return;
   $('#member-name').textContent = user.name;
-  $('#member-role').textContent = ({ citizen: 'Espace citoyen', agent: 'Espace agent', admin: 'Administration' })[user.role];
+  $('#member-role').textContent = t(({ citizen: 'Espace citoyen', agent: 'Espace agent', admin: 'Administration' })[user.role]);
   $('#profile-form').elements.name.value = user.name;
   $('#profile-form').elements.district.value = user.district || '';
 }
@@ -188,7 +211,7 @@ function renderGuide() {
   if (!show) return;
   for (const [selector, done] of [['#guide-profile', Boolean(user.district)], ['#guide-request', messageCount > 0]]) {
     $(selector).dataset.done = String(done);
-    $(`${selector} .guide-check`).textContent = done ? '✓ Fait' : '';
+    $(`${selector} .guide-check`).textContent = done ? t('✓ Fait') : '';
   }
 }
 $('#guide-dismiss').addEventListener('click', () => {
@@ -216,9 +239,9 @@ function renderMessages(messages) {
   list.replaceChildren();
   messageCount = messages.length;
   renderGuide();
-  if (staff) $('#pending-count').textContent = `${messages.filter((item) => item.status === 'new').length} à traiter`;
+  if (staff) $('#pending-count').textContent = t('{n} à traiter', { n: messages.filter((item) => item.status === 'new').length });
   if (!messages.length) {
-    list.append(element('p', 'list-empty', staff ? 'Aucun message reçu pour le moment.' : 'Vous n’avez pas encore envoyé de message.'));
+    list.append(element('p', 'list-empty', t(staff ? 'Aucun message reçu pour le moment.' : 'Vous n’avez pas encore envoyé de message.')));
     return;
   }
   const priority = { new: 0, in_progress: 1, resolved: 2 };
@@ -226,19 +249,19 @@ function renderMessages(messages) {
     const card = element('article', 'message-card');
     const heading = element('div', 'message-heading');
     heading.append(element('h4', '', item.subject));
-    heading.append(element('span', `message-status status-${item.status}`, statusLabels[item.status] || item.status));
+    heading.append(element('span', `message-status status-${item.status}`, t(statusLabels[item.status] || item.status)));
     card.append(heading);
-    card.append(element('p', 'message-kind', item.kind === 'incident' ? 'Signalement de problème' : 'Message aux services'));
+    card.append(element('p', 'message-kind', t(item.kind === 'incident' ? 'Signalement de problème' : 'Message aux services')));
     if (staff) card.append(element('p', 'message-author', `${item.citizen_name} · ${item.citizen_email}`));
-    if (item.location) card.append(element('p', 'message-location', `Lieu : ${item.location}`));
+    if (item.location) card.append(element('p', 'message-location', t('Lieu : {location}', { location: item.location })));
     card.append(element('p', 'message-body', item.body));
-    card.append(element('p', 'message-dates', `Reçu le ${item.created_at} · Dernière mise à jour le ${item.updated_at}`));
+    card.append(element('p', 'message-dates', t('Reçu le {created} · Dernière mise à jour le {updated}', { created: item.created_at, updated: item.updated_at })));
     if (staff) {
-      const label = element('label', 'status-field', 'État ');
+      const label = element('label', 'status-field', t('État '));
       const select = element('select');
-      select.setAttribute('aria-label', `État du message ${item.id}`);
+      select.setAttribute('aria-label', t('État du message {id}', { id: item.id }));
       for (const [value, title] of Object.entries(statusLabels)) {
-        const option = element('option', '', title);
+        const option = element('option', '', t(title));
         option.value = value;
         select.append(option);
       }
@@ -286,17 +309,17 @@ function renderRequests() {
     const card = element('article', 'request-card');
     const top = element('div', 'request-top');
     top.append(element('span', 'request-code', item.request_code || '—'));
-    top.append(element('span', 'request-difficulty', item.difficulty || 'Difficulté inconnue'));
+    top.append(element('span', 'request-difficulty', item.difficulty || t('Difficulté inconnue')));
     card.append(top);
-    card.append(element('h4', 'request-message', item.message_public || 'Demande sans description publique.'));
+    card.append(element('h4', 'request-message', item.message_public || t('Demande sans description publique.')));
     card.append(element('p', 'requester', [item.requester_name, item.requester_type].filter(Boolean).join(' · ')));
     const bottom = element('div', 'request-bottom');
-    bottom.append(element('span', '', item.is_initial ? 'Disponible au lancement' : `Vague ${item.wave_number ?? item.visible_since_wave ?? '—'}`));
+    bottom.append(element('span', '', item.is_initial ? t('Disponible au lancement') : t('Vague {n}', { n: item.wave_number ?? item.visible_since_wave ?? '—' })));
     bottom.append(element('strong', '', `${item.xp_available ?? item.xp_total ?? '—'} XP`));
     card.append(bottom);
     list.append(card);
   }
-  $('#requests-empty').textContent = requests.length ? '' : feed ? 'Aucune demande ne correspond à la recherche.' : 'Le flux est en cours de chargement.';
+  $('#requests-empty').textContent = requests.length ? '' : t(feed ? 'Aucune demande ne correspond à la recherche.' : 'Le flux est en cours de chargement.');
 }
 
 async function loadFeed() {
@@ -305,17 +328,17 @@ async function loadFeed() {
   $('#refresh-button').disabled = true;
   try {
     const data = await api('/api/requests');
-    if (!data.session || !Array.isArray(data.requests)) throw new Error('Réponse API invalide.');
+    if (!data.session || !Array.isArray(data.requests)) throw new Error(t('Réponse API invalide.'));
     const codes = new Set(data.requests.map((item) => item.request_code).filter(Boolean));
     const added = knownCodes ? [...codes].filter((code) => !knownCodes.has(code)).length : 0;
     knownCodes = codes;
     feed = data;
-    $('#visible-count').textContent = `${data.session.visible_requests_count ?? data.requests.length} demandes`;
-    $('#current-wave').textContent = `Vague ${data.session.current_wave ?? '—'}`;
+    $('#visible-count').textContent = t('{n} demandes', { n: data.session.visible_requests_count ?? data.requests.length });
+    $('#current-wave').textContent = t('Vague {n}', { n: data.session.current_wave ?? '—' });
     $('#next-wave').textContent = Number(data.session.next_wave_number) > 0
-      ? `Vague ${data.session.next_wave_number} dans environ ${data.session.minutes_until_next_wave ?? '—'} min`
-      : 'Aucune nouvelle vague annoncée';
-    $('#feed-status').textContent = added ? `${added} nouvelle${added > 1 ? 's' : ''} demande${added > 1 ? 's' : ''} publiée${added > 1 ? 's' : ''}.` : 'Flux officiel à jour.';
+      ? t('Vague {n} dans environ {minutes} min', { n: data.session.next_wave_number, minutes: data.session.minutes_until_next_wave ?? '—' })
+      : t('Aucune nouvelle vague annoncée');
+    $('#feed-status').textContent = added ? t(added > 1 ? '{n} nouvelles demandes publiées.' : '{n} nouvelle demande publiée.', { n: added }) : t('Flux officiel à jour.');
     renderRequests();
   } catch (error) {
     if (error.status === 401 || error.status === 403) {
@@ -346,7 +369,7 @@ $('#register-form').addEventListener('submit', async (event) => {
       name: formValue(form, 'name'), email: formValue(form, 'email'), password: passwordValue(form),
     });
     form.reset();
-    setFormStatus('#register-status', 'Compte créé. Bienvenue !');
+    setFormStatus('#register-status', t('Compte créé. Bienvenue !'));
     await afterAuthentication(data.user);
   } catch (error) {
     setFormStatus('#register-status', error.message, true);
@@ -359,7 +382,7 @@ $('#login-form').addEventListener('submit', async (event) => {
   try {
     const data = await api('/api/auth/login', 'POST', { email: formValue(form, 'email'), password: passwordValue(form) });
     form.reset();
-    setFormStatus('#login-status', 'Connexion réussie.');
+    setFormStatus('#login-status', t('Connexion réussie.'));
     await afterAuthentication(data.user);
   } catch (error) {
     setFormStatus('#login-status', error.message, true);
@@ -382,7 +405,7 @@ $('#message-form').addEventListener('submit', async (event) => {
     const data = await api('/api/messages', 'POST', { kind: formValue(form, 'kind'), subject: formValue(form, 'subject'), location: formValue(form, 'location'), body: formValue(form, 'body') });
     form.reset();
     updateLocationField();
-    setFormStatus('#message-status', `${data.confirmation} Référence n°${data.id}.`);
+    setFormStatus('#message-status', t('{confirmation} Référence n°{id}.', { confirmation: t(data.confirmation), id: data.id }));
     await loadMessages();
   } catch (error) {
     setFormStatus('#message-status', error.message, true);
@@ -403,7 +426,7 @@ $('#profile-form').addEventListener('submit', async (event) => {
   try {
     ({ user } = await api('/api/me', 'PATCH', { name: formValue(form, 'name'), district: formValue(form, 'district') }));
     renderIdentity();
-    setFormStatus('#profile-status', 'Profil enregistré.');
+    setFormStatus('#profile-status', t('Profil enregistré.'));
   } catch (error) {
     setFormStatus('#profile-status', error.message, true);
   }
@@ -413,9 +436,9 @@ $('#service-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    await api('/api/services', 'POST', { title: formValue(form, 'title'), description: formValue(form, 'description'), details: formValue(form, 'details'), featured: form.elements.featured.checked });
+    await api('/api/services', 'POST', { title: formValue(form, 'title'), description: formValue(form, 'description'), details: formValue(form, 'details'), featured: form.elements.featured.checked, title_en: formValue(form, 'title_en'), description_en: formValue(form, 'description_en'), details_en: formValue(form, 'details_en') });
     form.reset();
-    setFormStatus('#service-form-status', 'Service publié.');
+    setFormStatus('#service-form-status', t('Service publié.'));
     await loadServices();
   } catch (error) {
     setFormStatus('#service-form-status', error.message, true);
@@ -426,9 +449,9 @@ $('#news-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    await api('/api/announcements', 'POST', { title: formValue(form, 'title'), body: formValue(form, 'body'), audience: formValue(form, 'audience'), urgent: form.elements.urgent.checked });
+    await api('/api/announcements', 'POST', { title: formValue(form, 'title'), body: formValue(form, 'body'), title_en: formValue(form, 'title_en'), body_en: formValue(form, 'body_en'), audience: formValue(form, 'audience'), urgent: form.elements.urgent.checked });
     form.reset();
-    setFormStatus('#news-form-status', 'Actualité publiée.');
+    setFormStatus('#news-form-status', t('Actualité publiée.'));
     await loadNews();
   } catch (error) {
     setFormStatus('#news-form-status', error.message, true);
@@ -455,6 +478,45 @@ function applyContrast() {
   document.documentElement.dataset.contrast = enabled ? 'high' : 'normal';
   $('#contrast-toggle').setAttribute('aria-pressed', String(enabled));
 }
+// Static French text in index.html is translated in place; data lists ([data-content]) are re-rendered instead.
+const originalText = new WeakMap();
+function applyLanguage() {
+  document.documentElement.lang = lang;
+  document.title = t('Terra Nova — Le portail de la cité');
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node; (node = walker.nextNode());) {
+    if (node.parentElement.closest('[data-content]')) continue;
+    if (!originalText.has(node)) {
+      if (!(node.nodeValue.trim() in english)) continue;
+      originalText.set(node, node.nodeValue);
+    }
+    const french = originalText.get(node);
+    node.nodeValue = french.replace(french.trim(), t(french.trim()));
+  }
+  for (const target of document.querySelectorAll('[placeholder], [aria-label]')) {
+    if (target.closest('[data-content]')) continue;
+    if (!originalText.has(target)) originalText.set(target, { placeholder: target.getAttribute('placeholder'), 'aria-label': target.getAttribute('aria-label') });
+    for (const [name, french] of Object.entries(originalText.get(target))) if (french) target.setAttribute(name, t(french));
+  }
+  const toggle = $('#lang-toggle');
+  toggle.textContent = lang === 'en' ? 'Français' : 'English';
+  toggle.lang = lang === 'en' ? 'fr' : 'en';
+}
+$('#lang-toggle').addEventListener('click', () => {
+  lang = lang === 'en' ? 'fr' : 'en';
+  preference('lang', lang);
+  applyLanguage();
+  renderIdentity();
+  renderServices();
+  renderNotifyButton();
+  renderRequests();
+  alertsKey = null;
+  loadNews();
+  loadMessages();
+  loadFeed();
+});
+applyLanguage();
+
 $('#contrast-toggle').addEventListener('click', () => { preference('highContrast', String(preference('highContrast') !== 'true')); applyContrast(); });
 applyContrast();
 

@@ -98,4 +98,23 @@ if (!serviceColumns.has('featured')) {
   insert.run('Prévention et santé publique', 'Chaleur, montée des eaux, épidémies : les bons gestes.', 'Le service de prévention informe sur les risques sanitaires et accompagne les personnes vulnérables. Les alertes en cours s’affichent en haut de chaque page ; activez les notifications pour être prévenu.', 0);
 }
 
+if (!serviceColumns.has('title_en')) {
+  for (const column of ['title_en', 'description_en', 'details_en']) db.exec(`ALTER TABLE services ADD COLUMN ${column} TEXT`);
+  const translate = db.prepare('UPDATE services SET title_en = ?, description_en = ?, details_en = ? WHERE title = ?');
+  translate.run('Citizen relations', 'A question or a difficulty?', 'From your personal space, send a message to the city services and follow how it is handled.', 'Relations citoyennes');
+  translate.run('Personal space', 'All your requests in one place.', 'Create an account to access your information and find your conversations with the city.', 'Espace personnel');
+  translate.run('Request tracking', 'Keep track of your conversations.', 'Check the status of each message: received, in progress or resolved.', 'Suivi des demandes');
+  translate.run('Health centre', 'Consultations, vaccinations and local care.', 'The city health centre welcomes residents for general medicine, vaccinations and nursing care. To book an appointment, send a message from your personal space.', 'Centre de santé');
+  translate.run('Report a problem', 'Broken street light, roads, cleanliness…', 'From your personal space, choose “Report a problem”, describe what happened and give the location. You can then follow how it is handled.', 'Signaler un problème');
+  translate.run('Prevention and public health', 'Heat, rising water, epidemics: what to do.', 'The prevention service informs residents about health risks and supports vulnerable people. Active alerts appear at the top of every page; turn on notifications to be warned.', 'Prévention et santé publique');
+}
+if (!announcementColumns.has('title_en')) {
+  db.exec('ALTER TABLE announcements ADD COLUMN title_en TEXT');
+  db.exec('ALTER TABLE announcements ADD COLUMN body_en TEXT');
+  const translate = db.prepare('UPDATE announcements SET title_en = ?, body_en = ? WHERE title = ?');
+  translate.run('Welcome to the Terra Nova portal', 'The portal opens its first digital services. Create your space to contact the city and follow your conversations.', 'Bienvenue sur le portail de Terra Nova');
+  translate.run('Rising water in the south district', 'The water level is rising unusually in the south district.\nDo this now: keep away from riverbanks and underpasses, do not drive through flooded streets, move valuables and documents up high, and be ready to leave your home if city staff ask you to.\nIn immediate danger, call 112.', 'Montée des eaux dans le quartier sud');
+  translate.run('Extreme heatwave', 'Extreme heat is hitting several parts of the city. Older people, sick people, pregnant women and young children are most at risk.\nDo this now: drink water regularly without waiting to feel thirsty, stay somewhere cool between 11 am and 5 pm, keep shutters and windows closed during the day, avoid physical effort and check on isolated relatives.\nIf you feel unwell, call 112.', 'Vague de chaleur extrême');
+}
+
 db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());

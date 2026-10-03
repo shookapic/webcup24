@@ -26,6 +26,11 @@ La commande affiche un mot de passe aléatoire une seule fois. Conservez-le dans
 - Espace agent avec nombre de messages à traiter, changement de statut et flux officiel des demandes du concours, actualisé toutes les 30 secondes.
 - Services et actualités consultables par tous ; publication réservée aux administrateurs.
 - Repères de navigation, structure adaptée au clavier et au lecteur d’écran, contraste renforcé et taille de texte réglable jusqu’à 150 %.
+- Alertes : l’administrateur publie une actualité urgente avec son public concerné ; elle s’affiche en bandeau `role="alert"` en haut de chaque page, les habitants peuvent activer les notifications du navigateur, et l’alerte peut être levée.
+- Recherche instantanée dans les services (sans tenir compte des accents) et services mis à la une par l’administrateur.
+- Guide de première connexion (profil, service, démarche) et profil citoyen avec quartier.
+- Interface, services et actualités en français ou en anglais (bouton « English »). Un contenu sans version anglaise reste affiché en français.
+- Monde 3D servi sous `/monde/`, avec avatar et présence des autres joueurs (`/api/me/avatar`, `/api/presence`).
 
 La clé API reste sur le serveur. Le flux du concours est accessible aux agents et administrateurs authentifiés uniquement. Le serveur ne déduit ni le nombre ni le calendrier des vagues : il affiche les demandes réellement reçues et utilise `request_code` comme référence stable.
 

@@ -200,3 +200,7 @@ html[data-contrast=high] .feature-button{color:#ffeb00;border-color:#ffeb00}
 .profile-form{margin-top:18px;max-width:560px}
 html[data-contrast=high] .guide-steps a,html[data-contrast=high] .guide-check,html[data-contrast=high] #guide-dismiss{color:#ffeb00;border-color:#ffeb00}
 html[data-contrast=high] .guide-steps span{color:#fff}
+.lang-toggle{background:transparent;color:#e7f5f4;border:1px solid #ffffff35;border-radius:4px;padding:8px 10px;font-size:.75rem;font-weight:700;cursor:pointer}
+.lang-toggle:hover{background:#70e7d4;color:#07152c}
+html[data-contrast=high] .lang-toggle{color:#ffeb00;border-color:#ffeb00}
+@media(max-width:480px){.lang-toggle{padding:7px 5px;font-size:.6875rem}}

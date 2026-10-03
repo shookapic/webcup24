@@ -7,12 +7,13 @@
     <meta name="description" content="Terra Nova, les services numériques de la cité.">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
+    <script src="/i18n.js" defer></script>
     <script src="/app.js" defer></script>
     <title>Terra Nova — Le portail de la cité</title>
   </head>
   <body>
     <a class="skip-link" href="#contenu">Aller au contenu</a>
-    <div id="alert-banner" class="alert-banner" role="alert"></div>
+    <div id="alert-banner" class="alert-banner" role="alert" data-content></div>
     <header class="site-header" id="haut">
       <a class="brand" href="#haut" aria-label="Terra Nova, accueil">
         <span class="brand-mark" aria-hidden="true"><span></span></span>
@@ -20,6 +21,7 @@
       </a>
       <nav aria-label="Navigation principale"><a href="#services">Services</a><a href="#actualites">Actualités</a><a href="#espace">Mon espace</a></nav>
       <div class="header-tools">
+        <button id="lang-toggle" class="lang-toggle" type="button" lang="en">English</button>
         <div class="accessibility-tools" role="group" aria-label="Options d’affichage">
           <button id="font-down" type="button" aria-label="Réduire la taille du texte">A−</button>
           <button id="font-up" type="button" aria-label="Agrandir la taille du texte">A+</button>
@@ -45,7 +47,7 @@
         <nav class="breadcrumb" aria-label="Fil d’Ariane des services"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Services</span></nav>
         <div class="section-heading"><div><span class="section-kicker">01 / VIE QUOTIDIENNE</span><h2 id="services-title">Les services de la cité</h2></div><p>Choisissez le service qui répond à votre besoin et retrouvez les informations utiles.</p></div>
         <label class="search-field service-search"><span class="visually-hidden">Rechercher un service</span><span aria-hidden="true">⌕</span><input id="service-search" type="search" placeholder="Rechercher un service : santé, signalement…" aria-describedby="services-status"></label>
-        <div id="services-list" class="service-grid"></div>
+        <div id="services-list" class="service-grid" data-content></div>
         <p id="services-status" class="section-status" role="status"></p>
       </section>
 
@@ -53,7 +55,7 @@
         <nav class="breadcrumb" aria-label="Fil d’Ariane des actualités"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Actualités</span></nav>
         <div class="section-heading"><div><span class="section-kicker">02 / INFORMATIONS</span><h2 id="news-title">Actualités municipales</h2></div><p>Les annonces et informations pratiques publiées par la ville.</p></div>
         <p class="notify-row"><button id="notify-button" class="notify-button" type="button" hidden>Me prévenir des alertes</button></p>
-        <div id="news-list" class="news-grid"></div>
+        <div id="news-list" class="news-grid" data-content></div>
         <p id="news-status" class="section-status" role="status"></p>
       </section>
 
@@ -80,7 +82,7 @@
         </div>
 
         <div id="member-area" hidden>
-          <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name" tabindex="-1"></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
+          <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name" tabindex="-1" data-content></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
           <div id="citizen-area" hidden>
             <section id="guide" class="panel guide" aria-labelledby="guide-title" hidden>
               <h3 id="guide-title">Bienvenue ! Vos premiers pas</h3>
@@ -102,7 +104,7 @@
                 <button class="button button-primary" type="submit">Envoyer mon message</button>
                 <p id="message-status" class="form-status" role="status" aria-live="polite"></p>
               </form>
-              <div class="panel"><h3>Mes messages</h3><p>Suivez les réponses de la ville.</p><div id="citizen-messages" class="message-list"></div></div>
+              <div class="panel"><h3>Mes messages</h3><p>Suivez les réponses de la ville.</p><div id="citizen-messages" class="message-list" data-content></div></div>
             </div>
             <form id="profile-form" class="panel profile-form">
               <h3>Mon profil</h3><p>Ces informations aident la ville à vous adresser les annonces qui vous concernent.</p>
@@ -117,15 +119,15 @@
           <div id="staff-area" hidden>
             <div class="section-heading staff-heading"><div><span class="section-kicker">ESPACE AGENT</span><h3>Suivi de l’activité</h3></div><p>Demandes citoyennes et flux officiel, dans un espace réservé aux agents.</p></div>
             <div class="workspace-grid">
-              <div class="panel"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p><div id="staff-messages" class="message-list"></div></div>
+              <div class="panel"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p><div id="staff-messages" class="message-list" data-content></div></div>
               <div class="panel"><div class="panel-title-row"><h3>Flux officiel Terra Nova</h3><button id="refresh-button" type="button">Actualiser ↻</button></div><p id="feed-status" role="status" aria-live="polite">Connexion au flux…</p><div class="mini-stats"><span id="visible-count">— demandes</span><span id="current-wave">Vague —</span><span id="next-wave">Prochaine vague —</span></div></div>
             </div>
-            <div class="feed-panel"><div class="section-heading"><div><span class="section-kicker">BESOINS PUBLIÉS</span><h3>Demandes du concours</h3></div><p>Seules les demandes déjà diffusées figurent ici.</p></div><label class="search-field"><span class="visually-hidden">Rechercher dans les demandes officielles</span><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Rechercher un besoin ou un code…"></label><div id="requests-list" class="requests-grid"></div><p id="requests-empty" class="section-status"></p></div>
+            <div class="feed-panel"><div class="section-heading"><div><span class="section-kicker">BESOINS PUBLIÉS</span><h3>Demandes du concours</h3></div><p>Seules les demandes déjà diffusées figurent ici.</p></div><label class="search-field"><span class="visually-hidden">Rechercher dans les demandes officielles</span><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Rechercher un besoin ou un code…"></label><div id="requests-list" class="requests-grid" data-content></div><p id="requests-empty" class="section-status"></p></div>
           </div>
 
           <div id="admin-area" class="admin-grid" hidden>
-            <form id="service-form" class="panel"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><label class="check-field"><input name="featured" type="checkbox"> Mettre en avant (affiché en premier)</label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
-            <form id="news-form" class="panel"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><label>Public concerné <input name="audience" list="audiences" minlength="2" maxlength="80" placeholder="Tous"></label><datalist id="audiences"><option value="Tous"></option><option value="Quartier sud"></option><option value="Personnes vulnérables"></option></datalist><label class="check-field"><input name="urgent" type="checkbox"> Alerte urgente : afficher en bandeau sur toutes les pages et notifier les habitants</label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <form id="service-form" class="panel"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="100"></label><label>Résumé en anglais (facultatif) <input name="description_en" minlength="5" maxlength="180"></label><label>Informations utiles en anglais (facultatif) <textarea name="details_en" minlength="10" maxlength="2000" rows="4"></textarea></label><label class="check-field"><input name="featured" type="checkbox"> Mettre en avant (affiché en premier)</label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <form id="news-form" class="panel"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="120"></label><label>Contenu en anglais (facultatif) <textarea name="body_en" minlength="10" maxlength="4000" rows="4"></textarea></label><label>Public concerné <input name="audience" list="audiences" minlength="2" maxlength="80" placeholder="Tous"></label><datalist id="audiences"><option value="Tous"></option><option value="Quartier sud"></option><option value="Personnes vulnérables"></option></datalist><label class="check-field"><input name="urgent" type="checkbox"> Alerte urgente : afficher en bandeau sur toutes les pages et notifier les habitants</label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
           </div>
         </div>
       </section>

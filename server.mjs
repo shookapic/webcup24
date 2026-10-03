@@ -13,6 +13,7 @@ const host = process.env.HOST || '127.0.0.1';
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/i18n.js', ['i18n.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
   ['/favicon.svg', ['favicon.svg', 'image/svg+xml']],
 ]);
@@ -262,7 +263,12 @@ async function route(request, response) {
     const description = text(body.description, 5, 180, 'La description');
     const details = text(body.details, 10, 2000, 'Les informations');
     if (body.featured !== undefined && typeof body.featured !== 'boolean') fail(400, 'La mise en avant est invalide.');
-    const result = db.prepare('INSERT INTO services (title, description, details, featured) VALUES (?, ?, ?, ?)').run(title, description, details, body.featured ? 1 : 0);
+    // English versions are optional; without a title_en the service shows in French.
+    const titleEn = body.title_en ? text(body.title_en, 3, 100, 'Le titre') : null;
+    const descriptionEn = body.description_en ? text(body.description_en, 5, 180, 'La description') : null;
+    const detailsEn = body.details_en ? text(body.details_en, 10, 2000, 'Les informations') : null;
+    const result = db.prepare('INSERT INTO services (title, description, details, featured, title_en, description_en, details_en) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(title, description, details, body.featured ? 1 : 0, titleEn, descriptionEn, detailsEn);
     return sendJson(response, 201, { id: Number(result.lastInsertRowid) });
   }
   const serviceMatch = /^\/api\/services\/(\d+)$/.exec(path);
@@ -285,7 +291,10 @@ async function route(request, response) {
     const content = text(body.body, 10, 4000, 'Le contenu');
     if (body.urgent !== undefined && typeof body.urgent !== 'boolean') fail(400, 'Le niveau d’urgence est invalide.');
     const audience = body.audience ? text(body.audience, 2, 80, 'Le public concerné') : 'Tous';
-    const result = db.prepare('INSERT INTO announcements (title, body, audience, urgent) VALUES (?, ?, ?, ?)').run(title, content, audience, body.urgent ? 1 : 0);
+    const titleEn = body.title_en ? text(body.title_en, 3, 120, 'Le titre') : null;
+    const contentEn = body.body_en ? text(body.body_en, 10, 4000, 'Le contenu') : null;
+    const result = db.prepare('INSERT INTO announcements (title, body, audience, urgent, title_en, body_en) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(title, content, audience, body.urgent ? 1 : 0, titleEn, contentEn);
     return sendJson(response, 201, { id: Number(result.lastInsertRowid) });
   }
   const announcementMatch = /^\/api\/announcements\/(\d+)$/.exec(path);
