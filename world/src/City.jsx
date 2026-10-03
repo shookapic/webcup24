@@ -121,7 +121,7 @@ function Habitat() {
   );
 }
 
-function Rocks() {
+export function Rocks() {
   const matrices = useMemo(() => {
     let seed = 7;
     const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -146,21 +146,26 @@ function Rocks() {
 
 const paths = [[0, -11, 3, 22, 0], [16, -3, 30, 3, 0], [-16, -1, 30, 3, 0], [0, 19, 3, 36, 0], [-12, -30, 3, 22, 0.5]];
 
+export function Ground() {
+  return (
+    <mesh rotation-x={-Math.PI / 2}>
+      {/* subdivided so the curve shader has vertices to bend */}
+      <planeGeometry args={[440, 440, 160, 160]} />
+      <meshStandardMaterial color="#b5532c" roughness={1} />
+    </mesh>
+  );
+}
+
+// Everything here gets an automatic box collider.
 export function City() {
   return (
     <>
-      <mesh rotation-x={-Math.PI / 2}>
-        {/* subdivided so the curve shader has vertices to bend */}
-        <planeGeometry args={[440, 440, 160, 160]} />
-        <meshStandardMaterial color="#b5532c" roughness={1} />
-      </mesh>
       {paths.map(([x, z, w, d, turn]) => (
         <mesh key={`${x},${z}`} rotation={[-Math.PI / 2, 0, turn]} position={[x, 0.02, z]}>
-          <planeGeometry args={[w, d, 1, Math.ceil(d / 2)]} />
+          <planeGeometry args={[w, d, Math.ceil(w / 2), Math.ceil(d / 2)]} />
           <meshStandardMaterial color="#e0a27a" roughness={0.9} />
         </mesh>
       ))}
-      <Rocks />
       <Mairie />
       <Sante />
       <QuartierSud />
