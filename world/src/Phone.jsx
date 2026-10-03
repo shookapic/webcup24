@@ -337,6 +337,14 @@ export function PhoneScreen({
   status = 'ready', error, lastUpdated, onAcknowledge, onClose, onRetry, locale,
 }) {
   const loc = normalizeLocale(locale ?? getLocale());
+  // Opt-in experiment for browsers/GPUs where the physical phone's text is sliced or missing (not reproduced here: Chrome, Edge and
+  // headless Firefox on an RTX 5070 Ti at 1x-2x): /monde/?phonefix=layer | nomask | smooth. See world/src/styles.css. Inert without the parameter.
+  useEffect(() => {
+    const mode = new URLSearchParams(window.location.search).get('phonefix');
+    if (!['layer', 'nomask', 'smooth'].includes(mode)) return undefined;
+    document.documentElement.dataset.phonefix = mode;
+    return () => { delete document.documentElement.dataset.phonefix; };
+  }, []);
   const now = useNow(30_000);
   const [localPage, setLocalPage] = useState(page);
   const [detail, setDetail] = useState(null);
