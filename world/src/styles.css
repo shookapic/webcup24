@@ -124,3 +124,11 @@ html, body, #root { margin: 0; height: 100%; background: #0b0614; color: #fff; f
 .phone-nav { grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr)); }
 .phone-nav button { overflow-wrap: normal; word-break: normal; hyphens: none; }
 @media (hover: none) { .phone-close kbd { display: none; } }
+
+/* Opt-in experiments for sliced/missing phone text (use /monde/?phonefix=layer|nomask|smooth); nothing changes without them.
+   layer: rasterise the host once as its own layer instead of re-rasterising text on every transform change.
+   nomask: no rounded overflow clip on the transformed host (a clip + 3D transform makes a mask layer).
+   smooth: grayscale anti-aliasing and geometric text positioning. */
+html[data-phonefix=layer] .phone-host { will-change: transform; backface-visibility: hidden; }
+html[data-phonefix=nomask] .phone-host { overflow: visible !important; border-radius: 0 !important; }
+html[data-phonefix=smooth] .phone-host { -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
