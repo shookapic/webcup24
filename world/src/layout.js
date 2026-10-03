@@ -58,6 +58,7 @@ const hospitalFootprints = landmarkFootprints(landmarks[1], [
   { x0: 2.2, x1: 2.85, z0: 4.5675, z1: 6.2175, h: 6.25 },          // porch pier
   { x0: -2.85, x1: -2.2, z0: 4.5675, z1: 6.2175, h: 6.25 },        // porch pier
   { x0: -2.2, x1: 2.2, z0: 4.5675, z1: 6.2175, y: 2.85, h: 3.4 },  // canopy soffit and upper block over the porch; underside 0.1 m below the visual soffit (2.95) so a jump never clips the model
+  { x0: -7.3575, x1: 7.3575, z0: -6.3675, z1: 6.3675, h: 0.12, thin: true }, // paved apron slab (visual 0.12 m): the avatar stands on it instead of sinking into it
   { x0: -2.1, x1: 2.1, z0: 4.5675, z1: 5.2, h: 0.35, thin: true },   // step B (door sill level)
   { x0: -2.1, x1: 2.1, z0: 5.2, z1: 5.8, h: 0.24, thin: true },     // step A
 ]);

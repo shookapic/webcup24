@@ -1,0 +1,3 @@
+PASS hospital glb network abort (guest): visible error with alert role, accessible-portal link and retry {"role":"alert","heading":"Le monde 3D n’a pas pu se charger","portal":"/","retry":true,"interceptedUrl":"http://127.0.0.1:3100/monde/models/buildings/hospital-a-v001.glb"}
+PASS hospital glb 404 (guest): visible error with alert role, accessible-portal link and retry {"role":"alert","heading":"Le monde 3D n’a pas pu se charger","portal":"/","retry":true,"interceptedUrl":"http://127.0.0.1:3100/monde/models/buildings/hospital-a-v001.glb"}
+ALL PASS

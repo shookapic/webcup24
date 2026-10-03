@@ -73,12 +73,16 @@ const doorX = L.x - 4.5675; // door anchor (declared contract); the doors face w
 // 1. the bench at (31.5,-6) stands on the straight line to the door (the old stop-side axis): prove it, then walk a realistic route around it
 const straight = await follow([26, -6], [[doorX, -6]], 9);
 check('straight line along z=-6 from x=26 is stopped by the bench at x 31.5 (known obstacle, not the clinic)', straight.rows.at(-1)[0] < 31.2 && straight.reached === 0, `stops at x ${straight.rows.at(-1)[0].toFixed(2)}`);
-const route = await follow([30, 0.5], [[32.6, -3.6], [34.2, -6], [doorX, -6]], 16);
-await shot('route-end');
-check('realistic route from the Santé stop area, around the bench, up the steps and to the doors', route.rows.at(-1)[0] >= doorX - 0.5, `end x ${route.rows.at(-1)[0].toFixed(2)} z ${route.rows.at(-1)[2].toFixed(2)} (door face x ${doorX.toFixed(2)}), ${route.rows.length} samples`);
-const direct = await follow([33, -6], [[doorX, -6]], 8); // the doorway waypoint is the door face itself: the player ends against it (capsule radius 0.35)
-console.log('INFO route body y (stand on ground ~1.0): min', Math.min(...route.rows.map((r) => r[1])).toFixed(2), 'max', Math.max(...route.rows.map((r) => r[1])).toFixed(2), 'last 3', route.rows.slice(-3).map((r) => r[1].toFixed(2)).join(' '));
-check('short direct segment from beyond the bench through the porch to the doors', direct.rows.at(-1)[0] >= doorX - 0.5, `end x ${direct.rows.at(-1)[0].toFixed(2)}, body y ${Math.min(...direct.rows.map((r) => r[1])).toFixed(2)}..${Math.max(...direct.rows.map((r) => r[1])).toFixed(2)}`);
+async function routeAndDirect(label) {
+  const route = await follow([30, 0.5], [[32.6, -3.6], [34.2, -6], [doorX, -6]], 16);
+  if (label === '') await shot('route-end');
+  check(`${label}realistic route from the Santé stop area, around the bench, up the steps and to the doors`, route.rows.at(-1)[0] >= doorX - 0.5, `end x ${route.rows.at(-1)[0].toFixed(2)} z ${route.rows.at(-1)[2].toFixed(2)} (door face x ${doorX.toFixed(2)}), ${route.rows.length} samples, body y ${Math.min(...route.rows.map((r) => r[1])).toFixed(2)}..${Math.max(...route.rows.map((r) => r[1])).toFixed(2)}, end y ${route.rows.at(-1)[1].toFixed(2)}`);
+  const direct = await follow([33, -6], [[doorX, -6]], 8); // the doorway waypoint is the door face itself: the player ends against it (capsule radius 0.35)
+  check(`${label}short direct segment from beyond the bench through the porch to the doors`, direct.rows.at(-1)[0] >= doorX - 0.5, `end x ${direct.rows.at(-1)[0].toFixed(3)}, body y ${Math.min(...direct.rows.map((r) => r[1])).toFixed(2)}..${Math.max(...direct.rows.map((r) => r[1])).toFixed(2)}, end y ${direct.rows.at(-1)[1].toFixed(2)}`);
+}
+await routeAndDirect('');
+if (process.env.ROUTE_REPEATS) { for (let i = 1; i <= Number(process.env.ROUTE_REPEATS); i++) await routeAndDirect(`repeat ${i}: `); }
+if (process.env.ROUTE_ONLY) { await browser.close(); console.log(bad ? `FAILURES (${bad})` : 'ALL PASS (route only)'); process.exit(bad ? 1 : 0); }
 // 2. jumping under the canopy: only samples horizontally under the soffit (local z 4.5675..6.2175 -> world x 33.78..35.43) count
 const jumpUnder = await walk([L.x - 5.4, 1.3, L.z], -Math.PI / 2, 4, true);
 const under = jumpUnder.filter((r) => r[0] > L.x - 6.2175 + 0.35 && r[0] < L.x - 4.5675 - 0.0 && Math.abs(r[2] - L.z) < 2);

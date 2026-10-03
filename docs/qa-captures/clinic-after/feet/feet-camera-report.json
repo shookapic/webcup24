@@ -1,0 +1,59 @@
+{
+  "hospitalAt": [
+    40,
+    -6
+  ],
+  "canopyUndersideY": 2.85,
+  "results": [
+    {
+      "name": "A-feet-on-apron",
+      "body": [
+        34.20000076293945,
+        0.9676570892333984,
+        -10.5
+      ]
+    },
+    {
+      "name": "B-feet-on-ground",
+      "body": [
+        24,
+        0.9747917652130127,
+        -10.5
+      ]
+    },
+    {
+      "name": "C-canopy-steep-down",
+      "polar": 0.35,
+      "camera": [
+        33.60308538563798,
+        4.621200781584378,
+        -6
+      ],
+      "target": [
+        34.599998474121094,
+        1.8901452541351318,
+        -6
+      ],
+      "blockers": 27,
+      "canopyBlocker": true,
+      "valid": true
+    },
+    {
+      "name": "D-canopy-steep-up",
+      "polar": 2.5,
+      "camera": [
+        31.69330878844041,
+        1.9506024386341858,
+        -6
+      ],
+      "target": [
+        34.599998474121094,
+        1.8901452541351318,
+        -6
+      ],
+      "blockers": 27,
+      "canopyBlocker": true,
+      "valid": true
+    }
+  ]
+}
