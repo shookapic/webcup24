@@ -13,7 +13,7 @@ The user explicitly authorizes combining every completed A+B delivery and a norm
 - B has not finished. B2 districts, tram/stations and composition are in progress on `world`; PM will merge B's exact final committed HEAD after its handoff.
 - Latest remote state is session-reported `ffec17b`. PM's Git SSH read failed with Windows `sh.exe` CreateFileMapping error 5. A is asked to fetch and report the actual tip before release.
 - PM build attempt on the combined candidate is **UNAVAILABLE**: Vite fails spawning a child process (`EPERM`) in this tool sandbox. This does not prove a build defect. A is asked to run build/API/portal/Node-served world gates through its working execution environment, covering the physical phone rather than assuming the old flat-dialog selectors.
-- Public Hodifly URL is unknown in repo configuration; requested from the user. Host deployment and runtime checks remain **UNVERIFIED** until the actual address is checked.
+- Public Hodifly URLs supplied by the user: https://losfablitos.lareunion.webcup.hodi.cloud/ and `/monde/`. Host deployment and runtime checks remain **UNVERIFIED** until the combined release is pushed and checked. GitHub reports Hodifly success for B's earlier `ffec17b` slice; that is not proof of the combined release.
 
 ## Evidence and scope
 
@@ -26,7 +26,7 @@ The user explicitly authorizes combining every completed A+B delivery and a norm
 | F36 world | IN PROGRESS | API/portal/phone already present; B finishing stations and moving tram. |
 | Production | UNVERIFIED | Push authorized after B final handoff and release checks. Actual host URL, build result, assets/CSP and persistence still need checking. |
 
-Official inventory: Wave 6, 42 requests per A's watcher at 16:01. `FEATURE_MATRIX.md` contains exact current wording: 26 PASS / 14 PARTIAL / 2 UNVERIFIED at A's last checkpoint. The separate contest snapshot is historical Wave 5; it must not be mistaken for latest completeness. Next wave expected around 16:25; A owns the single watcher and flags new requests for triage. Reminders are in-app/opt-in browser/calendar; no email or SMS implementation exists.
+Official inventory: Wave 6, 42 requests in the existing watcher snapshot, refreshed into the committed contest record during this release review. `FEATURE_MATRIX.md` contains exact current wording: 26 PASS / 14 PARTIAL / 2 UNVERIFIED at A's last checkpoint. Next wave expected around 16:25; A owns the single watcher and flags new requests for triage. Reminders are in-app/opt-in browser/calendar; no email or SMS implementation exists.
 
 ## Release sequence
 

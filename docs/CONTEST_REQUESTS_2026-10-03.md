@@ -1,17 +1,21 @@
 # Terra Nova — contest request snapshot
 
-Source: authorized official API watcher snapshot at 2026-10-03 14:57:25 Europe/Paris. An independent authenticated GET to the same endpoint at 2026-10-03T12:54:25.543Z also confirmed wave 5 and the same 36 request codes. This is a point-in-time scope record, not a claim about future waves or feature completion.
+Source: existing authorized official API watcher snapshot copied on 2026-10-03 at approximately 16:14 Europe/Paris. The captured publisher timestamp, current wave and request count appear below. This is an inventory, not a declaration of feature completion; FEATURE_MATRIX.md records acceptance evidence.
 
 Endpoint: https://24h.webcup.fr/wp-json/webcup/v1/requests. Credentials remain server/local environment only; none are included here.
 
-The request text below is copied from the local watcher snapshot. API-reported XP is retained for traceability. Session metadata is informational, not a deadline guarantee.
-
 # Terra Nova — demandes API
 
-Mis à jour : 03/10/2026 14:57:25 · vague 5 · 36 demandes · H+6h32 · prochaine vague (6) dans 28 min
+Mis à jour : 03/10/2026 16:04:01 · vague 6 · 42 demandes · H+7h39 · prochaine vague (7) dans 21 min
 
 | Code | Vu le | Vague | Difficulté | XP | Demandeur | Demande |
 |---|---|---|---|---|---|---|
+| F44 | 15:25 | 6 | Moyenne | 620 | Citoyen | J’aimerais pouvoir grossir le contenu sans casser l’affichage. L’objectif est que ce besoin améliore réellement l’usage de la plateforme, sans isoler ces utilisateurs dans un parcours incomplet. |
+| F43 | 15:25 | 6 | Facile | 310 | Citoyen | J’ai du mal à distinguer certaines couleurs sur la plateforme. L’objectif est que ce besoin améliore réellement l’usage de la plateforme, sans isoler ces utilisateurs dans un parcours incomplet. |
+| F42 | 15:25 | 6 | Difficile | 930 | Institution | Nos équipes d’inclusion ont testé plusieurs formulaires et composants interactifs de la plateforme. Certains restent difficiles à comprendre ou à utiliser avec des technologies d’assistance. Vérifiez que les actions essentielles, champs et messages d’erreur sont réellement accessibles. |
+| F41 | 15:25 | 6 | Moyenne | 620 | Citoyen | Bonjour, j’utilise uniquement le clavier pour naviguer. Certaines actions sont difficiles à atteindre. L’objectif est que ce besoin améliore réellement l’usage de la plateforme, sans isoler ces utilisateurs dans un parcours incomplet. |
+| D20 | 15:25 | 6 | Difficile | 930 | Institution | La plateforme doit être utilisable par tous les habitants, y compris les personnes en situation de handicap. L’objectif est que ce besoin améliore réellement l’usage de la plateforme, sans isoler ces utilisateurs dans un parcours incomplet. |
+| D13 | 15:25 | 6 | Facile | 310 | Citoyen | Certains mots utilisés dans la plateforme sont difficiles à comprendre. Cela complique les démarches. Cette évolution doit répondre à un usage concret de la plateforme et rester suffisamment claire pour être comprise sans explication technique. |
 | F40 |  | 5 | Facile | 300 | Citoyen | Je voudrais recevoir un rappel avant mon rendez-vous. Le parcours doit éviter les ambiguïtés sur le créneau choisi et donner à l’habitant les informations nécessaires pour préparer son rendez-vous. |
 | F39 |  | 5 | Moyenne | 600 | Institution | Les citoyens devraient pouvoir prendre rendez-vous avec un agent. Le parcours doit éviter les ambiguïtés sur le créneau choisi et donner à l’habitant les informations nécessaires pour préparer son rendez-vous. |
 | F38 |  | 5 | Moyenne | 600 | Citoyen | Un service municipal peut parfois être interrompu pour maintenance ou à cause d’un incident. Les habitants doivent pouvoir savoir qu’il est indisponible avant de commencer une démarche et comprendre quand revenir ou quoi faire à la place. |
