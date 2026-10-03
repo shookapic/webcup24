@@ -1,0 +1,56 @@
+{
+  "loader": "three GLTFLoader (the loader family B uses)",
+  "url": "/models/buildings/hospital-a-v001.glb",
+  "rootName": "hospital",
+  "sceneChildren": [
+    "hospital"
+  ],
+  "nodes": 10,
+  "meshCount": 8,
+  "meshes": [
+    "hospital_amber",
+    "hospital_ceramic",
+    "hospital_glass",
+    "hospital_lobbyglass",
+    "hospital_paving",
+    "hospital_slate",
+    "hospital_teal",
+    "hospital_terracotta"
+  ],
+  "materials": [
+    "Hospital_Amber",
+    "Hospital_Ceramic",
+    "Hospital_Glass",
+    "Hospital_LobbyGlass",
+    "Hospital_Paving",
+    "Hospital_Slate",
+    "Hospital_Teal",
+    "Hospital_Terracotta"
+  ],
+  "triangles": 6208,
+  "meshesWithoutNormals": 0,
+  "meshesWithUv": 0,
+  "bounds": {
+    "min": [
+      -7.3575,
+      0,
+      -6.3675
+    ],
+    "max": [
+      7.3575,
+      7.75,
+      6.3675
+    ],
+    "size": [
+      14.715,
+      7.75,
+      12.735
+    ],
+    "centre": [
+      0,
+      3.875,
+      0
+    ]
+  },
+  "parserWarnings": []
+}

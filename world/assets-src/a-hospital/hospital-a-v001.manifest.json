@@ -1,0 +1,229 @@
+{
+  "asset": "hospital-a-v001",
+  "file": "world/public/models/buildings/hospital-a-v001.glb",
+  "generator": "Khronos glTF Blender I/O v5.2.40",
+  "glTF": "2.0",
+  "axes": "glTF: +Y up, +Z front (entrance side), metres, scale 1",
+  "origin": "centre of the ground footprint, y = 0",
+  "node": "hospital",
+  "meshNodes": 8,
+  "materials": [
+    {
+      "name": "Hospital_Amber",
+      "baseColor": [
+        0.6308,
+        0.3231,
+        0.0482,
+        1
+      ],
+      "roughness": 0.75,
+      "metallic": 0
+    },
+    {
+      "name": "Hospital_Ceramic",
+      "baseColor": [
+        0.7835,
+        0.7454,
+        0.6584,
+        1
+      ],
+      "roughness": 0.8500000238418579,
+      "metallic": 0
+    },
+    {
+      "name": "Hospital_Glass",
+      "baseColor": [
+        0.0685,
+        0.162,
+        0.2159,
+        1
+      ],
+      "roughness": 0.30000001192092896,
+      "metallic": 0
+    },
+    {
+      "name": "Hospital_LobbyGlass",
+      "baseColor": [
+        0.0513,
+        0.1356,
+        0.1946,
+        1
+      ],
+      "roughness": 0.30000001192092896,
+      "metallic": 0,
+      "emissive": [
+        0.10000000149011612,
+        0.06938717468659839,
+        0.03515326135088892
+      ]
+    },
+    {
+      "name": "Hospital_Paving",
+      "baseColor": [
+        0.6105,
+        0.4621,
+        0.3278,
+        1
+      ],
+      "metallic": 0
+    },
+    {
+      "name": "Hospital_Slate",
+      "baseColor": [
+        0.15,
+        0.2122,
+        0.2502,
+        1
+      ],
+      "roughness": 0.699999988079071,
+      "metallic": 0.10000000149011612
+    },
+    {
+      "name": "Hospital_Teal",
+      "baseColor": [
+        0.0685,
+        0.2623,
+        0.2423,
+        1
+      ],
+      "roughness": 0.800000011920929,
+      "metallic": 0
+    },
+    {
+      "name": "Hospital_Terracotta",
+      "baseColor": [
+        0.3968,
+        0.1301,
+        0.0685,
+        1
+      ],
+      "roughness": 0.800000011920929,
+      "metallic": 0
+    }
+  ],
+  "triangles": 6208,
+  "vertices": 12096,
+  "trianglesPerMaterial": {
+    "Hospital_Amber": 164,
+    "Hospital_Ceramic": 948,
+    "Hospital_Glass": 708,
+    "Hospital_LobbyGlass": 60,
+    "Hospital_Paving": 12,
+    "Hospital_Slate": 3836,
+    "Hospital_Teal": 420,
+    "Hospital_Terracotta": 60
+  },
+  "textures": 0,
+  "bytes": 334356,
+  "gzipBytes": 54757,
+  "bounds": {
+    "min": [
+      -7.3575,
+      0,
+      -6.3675
+    ],
+    "max": [
+      7.3575,
+      7.75,
+      6.3675
+    ],
+    "size": [
+      14.715,
+      7.75,
+      12.735
+    ],
+    "centre": [
+      0,
+      3.875,
+      0
+    ]
+  },
+  "footprint": {
+    "x": 14.715,
+    "z": 12.735,
+    "matchesCollisionBox": true,
+    "collisionBoxHeight": 6.75
+  },
+  "heightNotes": {
+    "mainMassTop": 6.7,
+    "aboveCollisionBox": 1,
+    "what": "roof plant room, vent stacks, solar panels and the roof cross rise above 6.75 m; nothing walkable or reachable is above the collision box, and nothing projects outside the footprint"
+  },
+  "doorAnchor": {
+    "description": "centre of the glazed double doors at the back of the recessed porch",
+    "local": [
+      0,
+      0.35,
+      4.5675
+    ],
+    "approachPointOnFootprintEdge": [
+      0,
+      0,
+      6.3675
+    ]
+  },
+  "worldPlacement": {
+    "clinic": {
+      "x": 40,
+      "z": -6,
+      "ry": -1.5707963267948966,
+      "scale": 1
+    },
+    "doorAnchorWorld": [
+      35.4325,
+      0.35,
+      -6
+    ],
+    "faces": "world -X (toward the Santé tram stop at x = 28)"
+  },
+  "checks": [
+    {
+      "name": "one scene root named \"hospital\" (the registry key)",
+      "ok": true
+    },
+    {
+      "name": "no textures, no images, no samplers (constant-colour materials only)",
+      "ok": true
+    },
+    {
+      "name": "no external URI: the only buffer is the GLB binary chunk",
+      "ok": true
+    },
+    {
+      "name": "no cameras, lights, animations, skins",
+      "ok": true
+    },
+    {
+      "name": "extensions are only core PBR add-ons (emissive strength allowed), nothing that needs a decoder",
+      "ok": true
+    },
+    {
+      "name": "no custom authoring metadata (extras) and no gameplay, service or interaction data in any node, mesh or material name",
+      "ok": true
+    },
+    {
+      "name": "every mesh is non-empty and every material has a stable Hospital_* name",
+      "ok": true
+    },
+    {
+      "name": "footprint equals the collision box exactly (14.715 x 12.735 m, tolerance 1 mm)",
+      "ok": true
+    },
+    {
+      "name": "origin is the centre of the ground footprint at y = 0",
+      "ok": true
+    },
+    {
+      "name": "triangle budget: below 20k (landmark target 5-20k)",
+      "ok": true
+    },
+    {
+      "name": "material slots are modest (8 or fewer) and meshes are merged per material",
+      "ok": true
+    },
+    {
+      "name": "size budget: under 400 KB raw and under 100 KB gzipped",
+      "ok": true
+    }
+  ]
+}
