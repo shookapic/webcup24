@@ -80,8 +80,18 @@
         </div>
 
         <div id="member-area" hidden>
-          <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name"></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
+          <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name" tabindex="-1"></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
           <div id="citizen-area" hidden>
+            <section id="guide" class="panel guide" aria-labelledby="guide-title" hidden>
+              <h3 id="guide-title">Bienvenue ! Vos premiers pas</h3>
+              <p>Trois étapes pour bien démarrer sur le portail de Terra Nova.</p>
+              <ol class="guide-steps">
+                <li id="guide-profile"><a href="#profile-form">Compléter mon profil</a><span>Indiquez votre quartier pour être informé de ce qui vous concerne.</span><strong class="guide-check"></strong></li>
+                <li><a href="#services">Trouver un service</a><span>Parcourez les services de la cité ou recherchez par mot-clé.</span></li>
+                <li id="guide-request"><a href="#message-form">Commencer une démarche</a><span>Posez une question ou signalez un problème, puis suivez son état ici.</span><strong class="guide-check"></strong></li>
+              </ol>
+              <button id="guide-dismiss" type="button">J’ai compris, masquer le guide</button>
+            </section>
             <div class="workspace-grid">
               <form id="message-form" class="panel">
                 <h3>Contacter ou signaler</h3><p>Posez une question ou signalez un problème dans la ville. Vous recevrez une confirmation et pourrez suivre son état ici.</p>
@@ -94,6 +104,14 @@
               </form>
               <div class="panel"><h3>Mes messages</h3><p>Suivez les réponses de la ville.</p><div id="citizen-messages" class="message-list"></div></div>
             </div>
+            <form id="profile-form" class="panel profile-form">
+              <h3>Mon profil</h3><p>Ces informations aident la ville à vous adresser les annonces qui vous concernent.</p>
+              <label>Nom affiché <input name="name" type="text" autocomplete="name" required minlength="2" maxlength="80"></label>
+              <label>Quartier <input name="district" type="text" list="districts" minlength="2" maxlength="80" placeholder="Ex. Quartier sud"></label>
+              <datalist id="districts"><option value="Centre-ville"></option><option value="Quartier nord"></option><option value="Quartier sud"></option><option value="Quartier est"></option><option value="Quartier ouest"></option></datalist>
+              <button class="button button-primary" type="submit">Enregistrer mon profil</button>
+              <p id="profile-status" class="form-status" role="status" aria-live="polite"></p>
+            </form>
           </div>
 
           <div id="staff-area" hidden>

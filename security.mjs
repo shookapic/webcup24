@@ -36,13 +36,18 @@ export function clearSession(request, response) {
   response.setHeader('Set-Cookie', `tn_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
 }
 
+// The user fields any client may see; never the password hash.
+export function publicUser({ id, email, name, role, avatar, district }) {
+  return { id, email, name, role, avatar: avatar ? JSON.parse(avatar) : null, district: district || null };
+}
+
 export function currentUser(request) {
   const token = request.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith('tn_session='))?.slice(11);
   if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
   const user = db.prepare(`
-    SELECT users.id, users.email, users.name, users.role, users.avatar
+    SELECT users.id, users.email, users.name, users.role, users.avatar, users.district
     FROM sessions JOIN users ON users.id = sessions.user_id
     WHERE sessions.token_hash = ? AND sessions.expires_at > ?
   `).get(tokenHash(token), Date.now());
-  return user ? { ...user, avatar: user.avatar ? JSON.parse(user.avatar) : null } : null;
+  return user ? publicUser(user) : null;
 }

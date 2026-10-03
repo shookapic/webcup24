@@ -5,6 +5,7 @@ let feed = null;
 let knownCodes = null;
 let loadingFeed = false;
 let services = [];
+let messageCount = 0;
 let alertsKey = null;
 let knownAlerts = null;
 const memoryPreferences = new Map();
@@ -173,13 +174,32 @@ function renderIdentity() {
   $('#citizen-area').hidden = user?.role !== 'citizen';
   $('#staff-area').hidden = !['agent', 'admin'].includes(user?.role);
   $('#admin-area').hidden = user?.role !== 'admin';
+  renderGuide();
   if (!user) return;
   $('#member-name').textContent = user.name;
   $('#member-role').textContent = ({ citizen: 'Espace citoyen', agent: 'Espace agent', admin: 'Administration' })[user.role];
+  $('#profile-form').elements.name.value = user.name;
+  $('#profile-form').elements.district.value = user.district || '';
 }
+
+function renderGuide() {
+  const show = user?.role === 'citizen' && preference(`guideDone:${user.id}`) !== 'true';
+  $('#guide').hidden = !show;
+  if (!show) return;
+  for (const [selector, done] of [['#guide-profile', Boolean(user.district)], ['#guide-request', messageCount > 0]]) {
+    $(selector).dataset.done = String(done);
+    $(`${selector} .guide-check`).textContent = done ? '✓ Fait' : '';
+  }
+}
+$('#guide-dismiss').addEventListener('click', () => {
+  preference(`guideDone:${user.id}`, 'true');
+  renderGuide();
+  $('#member-name').focus();
+});
 
 function clearIdentity() {
   user = null;
+  messageCount = 0;
   feed = null;
   knownCodes = null;
   $('#citizen-messages').replaceChildren();
@@ -194,6 +214,8 @@ function renderMessages(messages) {
   const staff = ['agent', 'admin'].includes(user?.role);
   const list = staff ? $('#staff-messages') : $('#citizen-messages');
   list.replaceChildren();
+  messageCount = messages.length;
+  renderGuide();
   if (staff) $('#pending-count').textContent = `${messages.filter((item) => item.status === 'new').length} à traiter`;
   if (!messages.length) {
     list.append(element('p', 'list-empty', staff ? 'Aucun message reçu pour le moment.' : 'Vous n’avez pas encore envoyé de message.'));
@@ -374,6 +396,18 @@ function updateLocationField() {
 }
 $('#message-kind').addEventListener('change', updateLocationField);
 updateLocationField();
+
+$('#profile-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    ({ user } = await api('/api/me', 'PATCH', { name: formValue(form, 'name'), district: formValue(form, 'district') }));
+    renderIdentity();
+    setFormStatus('#profile-status', 'Profil enregistré.');
+  } catch (error) {
+    setFormStatus('#profile-status', error.message, true);
+  }
+});
 
 $('#service-form').addEventListener('submit', async (event) => {
   event.preventDefault();

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, sep } from 'node:path';
 import { db } from './store.mjs';
-import { clearSession, createSession, currentUser, hashPassword, verifyPassword } from './security.mjs';
+import { clearSession, createSession, currentUser, hashPassword, publicUser, verifyPassword } from './security.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const apiUrl = 'https://24h.webcup.fr/wp-json/webcup/v1/requests';
@@ -176,6 +176,14 @@ async function route(request, response) {
   }
 
   if (path === '/api/me' && method === 'GET') return sendJson(response, 200, { user: currentUser(request) });
+  if (path === '/api/me' && method === 'PATCH') {
+    const user = requireUser(request);
+    const body = await readJson(request);
+    const name = text(body.name, 2, 80, 'Le nom');
+    const district = body.district ? text(body.district, 2, 80, 'Le quartier') : null;
+    db.prepare('UPDATE users SET name = ?, district = ? WHERE id = ?').run(name, district, user.id);
+    return sendJson(response, 200, { user: { ...user, name, district } });
+  }
   if (path === '/api/me/avatar' && method === 'PUT') {
     const user = requireUser(request);
     const body = await readJson(request);
@@ -218,7 +226,7 @@ async function route(request, response) {
     }
     clearSession(request, response);
     createSession(response, Number(result.lastInsertRowid));
-    return sendJson(response, 201, { user: { id: Number(result.lastInsertRowid), email: address, name, role: 'citizen', avatar: null } });
+    return sendJson(response, 201, { user: publicUser({ id: Number(result.lastInsertRowid), email: address, name, role: 'citizen' }) });
   }
 
   if (path === '/api/auth/login' && method === 'POST') {
@@ -236,7 +244,7 @@ async function route(request, response) {
     loginAttempts.delete(key);
     clearSession(request, response);
     createSession(response, user.id);
-    return sendJson(response, 200, { user: { id: user.id, email: user.email, name: user.name, role: user.role, avatar: user.avatar ? JSON.parse(user.avatar) : null } });
+    return sendJson(response, 200, { user: publicUser(user) });
   }
 
   if (path === '/api/auth/logout' && method === 'POST') {
