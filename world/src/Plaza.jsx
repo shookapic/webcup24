@@ -59,17 +59,14 @@ export function Plaza() {
   return (
     <group>
       <Paving />
-      {/* Mairie: glazed round hall, two wings, entrance canopy, antenna */}
-      <Prop name="hangar_roundGlass" position={[0, 0, -27]} scale={6} />
-      <Prop name="hangar_largeA" position={[-16.5, 0, -26]} scale={[4, 4, 4]} />
-      <Prop name="hangar_largeA" position={[16.5, 0, -26]} scale={4} />
+      {/* Mairie (hall and wings come from layout.buildings): entrance canopy, antenna, beacon masts */}
       <Prop name="platform_large" position={[0, 3.9, -16.5]} scale={[2.6, 3, 2.1]} />
       {pillars.map(([x, z]) => <Prop key={`${x},${z}`} name="supports_high" position={[x, 0, z]} scale={[1.1, 3.9, 1.1]} />)}
       <Prop name="satelliteDish_large" position={[16.5, 4, -27]} scale={4} rotation-y={0.4} />
-      <Prop name="chimney" position={[-12, 0, -15]} scale={[2, 3, 2]} />
-      <mesh material={mats.amber} position={[-12, 6.1, -15]}><sphereGeometry args={[0.35, 12, 8]} /></mesh>
-      <Prop name="chimney" position={[12, 0, -15]} scale={[2, 3, 2]} />
-      <mesh material={mats.amber} position={[12, 6.1, -15]}><sphereGeometry args={[0.35, 12, 8]} /></mesh>
+      <Prop name="chimney" position={[-12, 0, -16]} scale={[2, 3, 2]} />
+      <mesh material={mats.amber} position={[-12, 6.1, -16]}><sphereGeometry args={[0.35, 12, 8]} /></mesh>
+      <Prop name="chimney" position={[12, 0, -16]} scale={[2, 3, 2]} />
+      <mesh material={mats.amber} position={[12, 6.1, -16]}><sphereGeometry args={[0.35, 12, 8]} /></mesh>
       {/* Plaza furniture: benches facing the fountain-less centre, planters, lamps */}
       <Bench position={[-8.5, 0, -2]} rotation={Math.PI / 2} />
       <Bench position={[8.5, 0, -2]} rotation={-Math.PI / 2} />
@@ -79,9 +76,9 @@ export function Plaza() {
       {[[-13, -3], [13, -3], [-6, -11], [6, -11], [0, 14]].map(([x, z]) => <Lamp key={`${x},${z}`} position={[x, 0, z]} />)}
       <Prop name="rock_largeA" position={[-9, 0, 9]} scale={2.4} rotation-y={1} />
       <Prop name="rocks_smallA" position={[10, 0, 8]} scale={3} />
-      <Prop name="machine_generatorLarge" position={[-20, 0, -12]} scale={2.4} rotation-y={0.6} />
-      <Prop name="machine_barrelLarge" position={[21, 0, -13]} scale={2.4} />
-      <Prop name="barrels" position={[19.5, 0, -11]} scale={2} />
+      <Prop name="machine_generatorLarge" position={[-23, 0, -17]} scale={2.4} rotation-y={0.6} />
+      <Prop name="machine_barrelLarge" position={[24, 0, -17]} scale={2.4} />
+      <Prop name="barrels" position={[22, 0, -16]} scale={2} />
     </group>
   );
 }

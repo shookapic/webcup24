@@ -41,7 +41,7 @@ export default function PlayableCity(props) {
       </RigidBody>
       {!debug.floorOnly && (
         <>
-          <City />
+          <City reducedMotion={props.reducedMotion} />
           <Footprints />
         </>
       )}

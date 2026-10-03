@@ -58,7 +58,7 @@ export function App() {
   const viewBeforePhone = useRef('tps'); // snapshot once per phone session
   const phoneRef = useRef(phone);
   phoneRef.current = phone;
-  const timers = useRef([]);
+  const timer = useRef(0); // the single pending phone transition; every new transition cancels the previous one
 
   const { announcements, unseen: pending, status, error, lastUpdated, acknowledge, retry } = useAnnouncements({ userId: user?.id, ready: user !== undefined });
   const phoneUp = phone.phase !== 'closed';
@@ -69,22 +69,29 @@ export function App() {
   const services = useServices(phoneUp);
   const transports = useTransports(true);
 
-  const later = (fn) => (PHONE_MS ? timers.current.push(setTimeout(fn, PHONE_MS)) : fn());
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const later = (fn) => {
+    clearTimeout(timer.current);
+    if (PHONE_MS) timer.current = setTimeout(fn, PHONE_MS);
+    else fn();
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   const openPhone = useCallback((source) => {
     const { phase } = phoneRef.current;
     if (phase === 'opening' || phase === 'open') return;
+    // Snapshot only when coming from fully closed: reopening mid-lowering keeps the original view to restore.
     if (phase === 'closed') setView((current) => { viewBeforePhone.current = current; return 'fps'; });
-    setPhone({ phase: 'opening', source });
+    setPhone((p) => ({ phase: 'opening', source: phase === 'closing' ? p.source : source }));
+    phoneRef.current = { ...phoneRef.current, phase: 'opening' };
     later(() => setPhone((p) => (p.phase === 'opening' ? { ...p, phase: 'open' } : p)));
   }, []);
 
   const closePhone = useCallback(() => {
     if (!['opening', 'open'].includes(phoneRef.current.phase)) return;
     setPhone((p) => ({ ...p, phase: 'closing' }));
+    phoneRef.current = { ...phoneRef.current, phase: 'closing' };
     later(() => {
-      setPhone((p) => (p.phase === 'closing' ? { ...p, phase: 'closed' } : p));
+      setPhone((p) => ({ ...p, phase: 'closed' }));
       setView(viewBeforePhone.current);
       setPage('home');
     });
@@ -153,7 +160,7 @@ export function App() {
     <>
       <Canvas aria-hidden="true" shadows dpr={[1, 1.5]} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
         <fog attach="fog" args={['#d3b295', 90, 300]} />
-        <hemisphereLight args={['#a9c4d8', '#6b5446', 0.9]} />
+        <hemisphereLight args={['#b9d0e0', '#8a6c58', 1.6]} />
         <Sun />
         {debug.simFps > 0 && <SimDriver />}
         <Sky reducedMotion={reducedMotion} />
@@ -161,10 +168,10 @@ export function App() {
         {!debug.floorOnly && <Rocks />}
         {!debug.floorOnly && <Npcs reducedMotion={reducedMotion} />}
         {user ? (
-          <Suspense fallback={<City />}>
+          <Suspense fallback={<City reducedMotion={reducedMotion} />}>
             <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} inputEnabled={!editing && !phoneUp} />
           </Suspense>
-        ) : <City />}
+        ) : <City reducedMotion={reducedMotion} />}
         <LabelProjector />
         {physical && phoneUp && <PhoneRig phase={phone.phase} reducedMotion={reducedMotion} outfit={avatar.outfit} />}
         {/* Glow materials use toneMapped={false} and intensity > 1, so only they cross the bloom threshold. */}

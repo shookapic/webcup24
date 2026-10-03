@@ -72,10 +72,38 @@ Assets: Kenney Space Kit + Blocky Characters (CC0), see `docs/ASSETS.md`.
 
 Fixed on the way: `Texture.clone()` shares its `Source` with the glTF texture, so replacing `.image` on a clone corrupted every later recolour (black/garbled limbs); the clone now gets its own `Source`.
 
+## B2 + F36 + phone race fix (2026-10-03 ~17:30, final B commit of the test release)
+
+**Layout** (`layout.js`, single source): 15 kit buildings (render, collision footprint, scale, rotation, district accent), roads, five stops, tram lines, NPC graph, labels. Footprints are derived from the kit sizes and the building scale, so render and collision cannot drift apart. Districts (`Districts.jsx`): Mairie hall + wings (plaza canopy, antenna, masts), Santé (3 buildings, teal accent, cross sign), Marché (6 booths with coloured awnings, crates, aisle), Habitat (2 rows of modules, lane, planters), Quartier sud (homes by the water, rail + flood hazard signs, pumps, restrained water shader frozen under reduced motion).
+
+**F36 in the world** (`Tram.jsx`): elevated rail on columns (6 m, never crosses a walking route), T1 Habitat - Mairie - Quartier sud and T2 Marché - Mairie - Santé sharing the Mairie trunk, one three-car tram per line shuttling with a 5 s dwell at each stop and reversing at the ends. Every stop has a shelter, bench and a pole sign with one disc per serving line (line colours = API colours). `nearestStop()` uses the shelter positions and drives the HUD district and the phone's nearest stop. The tram is **decorative and not synchronised with `/api/transports`**; nothing in the UI presents it as live tracking. Boarding is not implemented (not required).
+
+**Phone transition race (PM review of ffec17b): CONFIRMED and fixed.** Reproduced with `tools/qa/phone-race.mjs`: on ffec17b, reopening within the 300 ms lowering left the phone up while the old close timer restored the third-person view (2 FAIL: "reopened during lowering stays up in first person", "reopen 20 ms before the lowering timer"). Fix: one cancellable transition timer (`later()` clears the previous), snapshot only when coming from fully closed, source kept when reopening mid-lowering. After the fix 12/12 PASS: rapid close/reopen, reopen 20 ms before the timer, alert arriving during manual use shown inside the open phone, acknowledge keeps a manual phone open, T closes it afterwards with the third-person view restored, alert raises the phone, **withdrawal while displayed puts the phone away and restores the view**.
+
+### Evidence (final build)
+
+| Check | Result |
+|---|---|
+| `world-checks.mjs` (15) 30/60/144 Hz, with and without uneven frame times (wall test now on the Mairie west wing: stops at z = -19.65, slides, camera pulled in to 0.4 m) | PASS |
+| `alert-flow.mjs` (14), `phone-capture.mjs` (physical phone, normal + alert), `phone-race.mjs` (12) | PASS |
+| `tram-check.mjs` (8): both trams cover the whole line, dwell at all 3 stops, reverse, zero 4xx/5xx for models/textures | PASS |
+| `movement.mjs` floor 30/60/144: 39.3 m, lateral <= 0.001 m, tilt 0, stop 0.27-0.28 s, camera jitter 0 | PASS. `turn_flips` now reads 1 because the avatar starts rotated by pi (the yaw sample wraps at +-pi); steady-state yaw range 0 deg, rate flips 0. |
+| `smoke-a.mjs` on the merged server | 62/62 PASS (earlier merge); final combined run is PM's |
+| Captures `docs/qa-captures/`: `plaza-*`, `spawn`, `mairie`, `sante`, `marche`, `habitat`, `sud`, `tram-side`, `tram`, `walk-cycle`, `phone-*` | taken from the final build (plaza + districts) |
+
+### Honest gaps (PARTIAL / UNVERIFIED — remain on the roadmap)
+
+- **Visual gate: PARTIAL.** Districts are recognisable and share one palette, but buildings are kit hangars with scale/colour variants, the character is blocky, the foreground is still wide; no reduced-clutter pass on label overlap.
+- **Performance: UNVERIFIED.** No 60 s route, draw-call or triangle measurement; shadows 2048 always on; no quality setting; every kit prop is a separate mesh (no instancing).
+- **Mobile / touch: UNVERIFIED.** Narrow screens fall back to A's flat phone dialog but there is no touch movement; do not claim mobile game support. The portal remains the accessible route.
+- **Human high-refresh retest and UI-drag-vs-camera: UNVERIFIED.**
+- Foot sliding not measured; no jump/fall clip; service-marker interaction (E near a building) not built; F45/F46 world wayfinding not started.
+- NPCs have no mutual avoidance; remote players do not show jumping (API has no such state).
+
 ## Wave 6 triage (15:25, H+7h) — A, with B support
 
 D13 plain wording (310), D20 inclusive platform (930), F41 keyboard-only (620), F42 assistive-tech forms/errors (930), F43 colour distinction (310), F44 zoom without breaking layout (620). All portal/UI shaped: **Session A**. B support only: world HUD/phone must stay keyboard-operable (movement keys are ignored inside dialogs, T/V/Escape documented), colour must not be the only signal (alert badge has text), world HUD must survive 200% zoom (A's CSS). The world is not a substitute for the portal route; "Version accessible" link stays visible.
 
-## Not started
+## Wave 7 triage (16:25, H+8h)
 
-B1 (licensed assets, plaza, rigged avatar, lighting/shadows, scoped curvature), B2 (five districts, F36 tram/stations in the world), B3 (physical phone rig), B4 (release). No assets added yet, so no `docs/ASSETS.md`.
+F45 locate physical services in the city (960), F46 where are hospitals/emergency services (320), F47 justify actions / traceability (960), F48 who changed what in admin (640). F47/F48: **A** (audit trail, agent workspace). F45/F46: **A** owns the information (service locations/addresses on the portal and in the phone services page); **B support** once A exposes a location field: world signs/markers at the Santé clinic and other service buildings and the contextual "open services" prompt within ~3 m (roadmap section 6). Not started; the world already has the Santé district with a cross sign and a stop at each district.
