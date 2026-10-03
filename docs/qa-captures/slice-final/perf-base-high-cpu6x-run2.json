@@ -1,0 +1,82 @@
+{
+  "hardware": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "dpr": 1.0000000149011612,
+    "cores": 32
+  },
+  "results": [
+    {
+      "stop": "spawn",
+      "frames": 245,
+      "p50": 24.899999999999636,
+      "p95": 39.29999999999927,
+      "p99": 42.899999999999636,
+      "max": 57.20000000000073,
+      "calls": 856,
+      "triangles": 196163,
+      "geometries": 371,
+      "textures": 49
+    },
+    {
+      "stop": "mairie",
+      "frames": 342,
+      "p50": 17.799999999999272,
+      "p95": 25,
+      "p99": 28.600000000002183,
+      "max": 50,
+      "calls": 797,
+      "triangles": 202307,
+      "geometries": 371,
+      "textures": 49
+    },
+    {
+      "stop": "sante",
+      "frames": 362,
+      "p50": 14.30000000000291,
+      "p95": 28.599999999998545,
+      "p99": 39.29999999999927,
+      "max": 42.79999999999927,
+      "calls": 577,
+      "triangles": 185184,
+      "geometries": 378,
+      "textures": 49
+    },
+    {
+      "stop": "marche",
+      "frames": 320,
+      "p50": 17.89999999999418,
+      "p95": 32.099999999998545,
+      "p99": 35.69999999999709,
+      "max": 46.5,
+      "calls": 820,
+      "triangles": 192376,
+      "geometries": 387,
+      "textures": 54
+    },
+    {
+      "stop": "habitat",
+      "frames": 380,
+      "p50": 14.30000000000291,
+      "p95": 21.400000000001455,
+      "p99": 25,
+      "max": 28.599999999998545,
+      "calls": 719,
+      "triangles": 189632,
+      "geometries": 387,
+      "textures": 54
+    },
+    {
+      "stop": "sud",
+      "frames": 283,
+      "p50": 21.30000000000291,
+      "p95": 32.200000000004366,
+      "p99": 42.900000000001455,
+      "max": 57.10000000000582,
+      "calls": 854,
+      "triangles": 203885,
+      "geometries": 393,
+      "textures": 69
+    }
+  ]
+}

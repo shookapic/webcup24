@@ -1,0 +1,6 @@
+PASS host visible and on screen {"x":653,"y":160,"w":287.280029296875,"h":611.2680053710938,"opacity":"1"}
+PASS exactly one focusable screen {}
+PASS focus is inside the screen {}
+PASS alert acknowledge button reachable {"x":796.6399841308594,"y":403.2653045654297,"text":"J’ai compris"}
+PASS click on 3D screen acknowledged the alert {}
+ALL PASS

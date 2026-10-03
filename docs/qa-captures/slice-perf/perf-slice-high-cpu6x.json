@@ -1,0 +1,82 @@
+{
+  "hardware": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "dpr": 1.0000000149011612,
+    "cores": 32
+  },
+  "results": [
+    {
+      "stop": "spawn",
+      "frames": 289,
+      "p50": 17.799999999999272,
+      "p95": 25.099999999998545,
+      "p99": 32.19999999999891,
+      "max": 60.80000000000109,
+      "calls": 745,
+      "triangles": 225755,
+      "geometries": 316,
+      "textures": 48
+    },
+    {
+      "stop": "mairie",
+      "frames": 236,
+      "p50": 21.399999999999636,
+      "p95": 32.20000000000073,
+      "p99": 35.70000000000073,
+      "max": 71.5,
+      "calls": 696,
+      "triangles": 224465,
+      "geometries": 316,
+      "textures": 48
+    },
+    {
+      "stop": "sante",
+      "frames": 311,
+      "p50": 14.30000000000291,
+      "p95": 25.100000000002183,
+      "p99": 28.600000000002183,
+      "max": 35.70000000000073,
+      "calls": 533,
+      "triangles": 208729,
+      "geometries": 326,
+      "textures": 48
+    },
+    {
+      "stop": "marche",
+      "frames": 235,
+      "p50": 17.900000000001455,
+      "p95": 32.20000000000073,
+      "p99": 35.79999999999927,
+      "max": 57.099999999998545,
+      "calls": 768,
+      "triangles": 215975,
+      "geometries": 338,
+      "textures": 53
+    },
+    {
+      "stop": "habitat",
+      "frames": 259,
+      "p50": 17.900000000001455,
+      "p95": 28.599999999998545,
+      "p99": 32.099999999998545,
+      "max": 32.10000000000582,
+      "calls": 668,
+      "triangles": 205781,
+      "geometries": 338,
+      "textures": 53
+    },
+    {
+      "stop": "sud",
+      "frames": 219,
+      "p50": 21.5,
+      "p95": 35.799999999995634,
+      "p99": 39.30000000000291,
+      "max": 42.80000000000291,
+      "calls": 744,
+      "triangles": 226597,
+      "geometries": 344,
+      "textures": 63
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+PASS forced cycle started {}
+PASS state order approach > turn > sitDown > sit > standUp > walk {"modes":["approach","turn","sitDown","sit","standUp","walk"]}
+PASS seated: thighs on the seat (y = 0.176) with the sit clip active {"mode":"sit","f":380,"x":-8.6,"z":-1.45,"y":0.176,"heading":1.571,"sit":true}
+PASS no teleport: largest single-frame move <= 0.2 m {"maxStep":"0.047"}
+PASS seat released after standing up {"owner":null}
+PASS natural sitting happens (>= 3 episodes in 6 min) {"episodes":54,"seatSeconds":738}
+PASS a seat never has two occupants or owners {"doubleOwner":0,"mismatch":0}
+PASS seated NPCs never overlap (< 0.5 m) {"overlap":0}
+PASS no NaN positions, no teleports (<= 0.2 m per frame) {"nan":0,"maxStep":"0.063"}
+PASS walkers keep travelling (total path > 300 m) {"travelled":4488}
+ALL PASS (reduced motion)

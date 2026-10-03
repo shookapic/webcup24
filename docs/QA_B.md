@@ -179,3 +179,37 @@ D13 plain wording (310), D20 inclusive platform (930), F41 keyboard-only (620), 
 ## Wave 7 triage (16:25, H+8h)
 
 F45 locate physical services in the city (960), F46 where are hospitals/emergency services (320), F47 justify actions / traceability (960), F48 who changed what in admin (640). F47/F48: **A** (audit trail, agent workspace). F45/F46: **A** owns the information (service locations/addresses on the portal and in the phone services page); **B support** once A exposes a location field: world signs/markers at the Santé clinic and other service buildings and the contextual "open services" prompt within ~3 m (roadmap section 6). Not started; the world already has the Santé district with a cross sign and a stop at each district.
+
+## GLTF asset pipeline + four-object slice (task 179f9875) — checkpoint
+
+Scope: Mairie (`townHall`), `streetLamp`, `bench`, `colonyTree`, authored in Blender 5.2.2 by committed scripts (`tools/assets/`), packed into `world/public/models/colony-pack.glb` (221 KB, no textures), loaded by `world/src/assets/` (registry + `WorldAsset` + `WorldAssetInstances`). Details: `docs/ASSETS.md`, `docs/BLENDER_TOOLING.md`. No city-wide migration, no hospital, no push.
+
+Final-source review fixes: lamps (-13,-3), (13,-3), (0,14) sat on NPC routes; moved to (-12.5,-6.5), (12.5,-6.5), (4.5,12.5), and (+-6,-11) to (+-7.5,-14) (they were 1.48 m from a route). One source (`layout.lamps`) still drives render + collider. `tools/qa/lamp-clearance.mjs`: every lamp >= 1.70 m (lane 0.8 + lamp 0.2 + body 0.4 + margin 0.3) from every route segment and node, clear of bench approach points, benches, trees, tram supports and crossings: PASS, min route distance 2.41 m. Mairie steps flattened to 0.05 m each (0.15 m total, decorative, no collider) so the player does not clip a 0.5 m block. Mairie label raised from 12 to 16 m (beacon top is 13.7 m). Registry townHall budget corrected to 2336 triangles (measured by `validate.mjs`; 2432 was stale). `tools/assets/build.mjs` now moves to the project root itself (checked from another cwd).
+
+Asset failure: `WorldErrorBoundary` wraps the whole app (not partial streaming): role=alert, "Le monde 3D n'a pas pu se charger", link to the accessible portal `/`, retry button. `tools/qa/asset-fallback.mjs` ALL PASS (pack aborted, 404 JSON, SPA HTML served as GLB, logged-in abort; log `docs/qa-captures/slice-gates/asset-fallback.log`, screenshots beside it). Real server: missing model -> 404 `application/json`; models revalidate (no-cache + ETag).
+
+Regression (PASS/FAIL, source state noted). Full batch `docs/qa-captures/slice-gates/` ran on the slice build BEFORE the lamp/step/label edits; the fast affected checks were re-run on the FINAL source in `docs/qa-captures/slice-final/`:
+
+| Gate | slice-gates (pre lamp move) | slice-final (final source) |
+|---|---|---|
+| world-checks 60 / 30+jitter | PASS / PASS | PASS / PASS |
+| world-checks 144 / 120 | PASS / PASS | not re-run (lamp collider moves only; UNVERIFIED on final source) |
+| movement floor 30/60/144 | 39.47 / 39.33 / 39.33 m, backsteps 0, lateral <= 0.001 m, speed 4.00 | not re-run (floor scene has no lamps) |
+| building (19 + landmark) / tram | PASS / PASS | PASS / PASS |
+| bench normal / reduced-motion | PASS / PASS | normal PASS / reduced not re-run |
+| alert-flow, phone physical, phone alert, phone race, flat phone | all PASS | not re-run (no phone/alert/HUD code changed; label height only) |
+| tier low / high tours | 3 shots each, 0 non-presence failures | same, 0 failures |
+| asset fallback / missing glb | PASS / 404 | PASS (4 scenarios) |
+
+Performance, same machine (RTX 5070 Ti, headed Edge, 1440x900, DPR 1, high tier, CPU throttle x6 as a weak-device PROXY, not real weak hardware), 3 runs each, baseline = 11a3262 on port 3102 vs slice on 3100 (`slice-final/perf-*-run{1,2,3}.json`):
+
+| Stop | draw calls base -> slice | triangles | geometries | p50 median (runs) | p95 median |
+|---|---|---|---|---|---|
+| spawn | 856 -> 763 (-11%) | 203.8k -> 226.9k (+11%) | 399 -> 316 | 24.9 (25.0/24.9/21.5) -> 17.9 (17.9/21.4/17.9) | 35.8 -> 28.6 |
+| Mairie | 791 -> 752 (-5%) | 201.8k -> 218.6k (+8%) | 399 -> 341 | 17.9 (25.0/17.8/17.9) -> 18.0 (18.0/17.9/21.4) | 28.6 -> 28.6 |
+
+Reading: draw calls and geometry count fell; triangles rose (authored detail). Frame times are quantised at 16.7 ms steps under throttling and runs overlap, so a frame-time improvement is NOT proven (spawn looks better, Mairie equal). Load: cold slow-4G playable about +0.8 s, +1 request, +47 KB versus the baseline (`slice-perf/load-*.json`); the slice does not improve load. Real weak-device proof: UNVERIFIED.
+
+Captures: `docs/qa-captures/slice-final/views/` (high), `views-low/` (low), earlier before/after pairs `slice-compare-*.png`. The three-quarter view is re-aimed (the old one was blocked by trees).
+
+Not done / open: hospital (A's `hospital-a-v001.glb`, 6208 triangles, door anchor 1.8 m inside a solid collider and roof 7.75 m over a 6.75 m collider; waits for slice acceptance), all other props still on the older path, binary pack not byte-identical across Blender runs (structure identical), no Draco/Meshopt (not needed at 221 KB).

@@ -37,3 +37,17 @@ Initial playable transfer: the world chunk is ~4.4 MB (1.6 MB gzip) of JS + 0.4 
 ## Not used / rejected
 
 The Space Kit monorail cars (`monorail_trainFront/Passenger/End`, scaled x3.3) are used for the F36 tram; the track and columns are plain boxes because the kit's track pieces are too short and thin to read at colony scale. Quaternius packs were not used: Kenney Blocky Characters already ships matching idle/walk/sprint clips on a single rig, which avoids retargeting.
+
+
+## Authored colony assets (GLTF pipeline slice)
+
+Pipeline: `tools/assets/*.py` (Blender 5.2.2 LTS, headless, deterministic) -> `world/assets-src/colony/*.glb` (source exports, committed, not served) -> `tools/pack-models.mjs` -> `world/public/models/colony-pack.glb` (one request) -> `world/src/assets/registry.js` (semantic ids, calibration, budget) -> `WorldAsset` / `WorldAssetInstances` (drei `useGLTF`, shared geometry/materials, one `InstancedMesh` per material for repeats). Provenance and licences: `world/public/models/ATTRIBUTION.md`; Blender/MCP record: `docs/BLENDER_TOOLING.md`. Rebuild: `node tools/assets/build.mjs`.
+
+| id | what | triangles | materials | placements | budget |
+|---|---|---|---|---|---|
+| `townHall` | Mairie landmark: hall with eight-sided glazed roof and lantern, two wings, entrance steps, canopy on four pillars, flag mast, antenna dish | 2336 | 7 (chalk, slate, slateDark, terracotta, teal, glass, beacon) | 1 (replaces 3 kit buildings, canopy and pillars) | landmark <= 30k |
+| `streetLamp` | 4.3 m slate pole, hexagonal lantern, restrained amber glow (emissive 1.2, not tone-mapped) | 460 | 4 | 13 instanced | small prop <= 3k |
+| `bench` | 2.2 m bench, seat top 0.56 m, back at local -z (same anchors as `layout.js` seats) | 496 | 3 | 9 instanced | small prop <= 3k |
+| `colonyTree` | 5 m tree, faceted canopy, leaf colour variants `warm` / `green` | 416 | 2 | 8 instanced (plaza ring) | small prop <= 3k |
+
+Conventions: metres, Y up, origin at the centre of the base on the ground, front = +Z, no textures (plain PBR colours from the palette), no exported root offset (the registry also zeroes any root translation on the clone). Units/orientation were checked against the collision footprints (`tools/qa/building-check.mjs`) and the seat geometry (`tools/qa/bench-check.mjs`). Collision, seat anchors, paths, service codes and interaction data stay in `layout.js`, not in the GLB.

@@ -1,0 +1,112 @@
+{
+  "profile": "slow4g",
+  "mode": "user",
+  "cold": {
+    "label": "cold slow4g user",
+    "domContentLoaded": 2147,
+    "sceneVisible": 3359,
+    "playable": 7345,
+    "requests": 15,
+    "transferredKB": 1322,
+    "cachedRequests": 1,
+    "byType": {
+      "Document": {
+        "n": 1,
+        "bytes": 1045
+      },
+      "Script": {
+        "n": 4,
+        "bytes": 1243929
+      },
+      "Stylesheet": {
+        "n": 1,
+        "bytes": 3542
+      },
+      "Fetch": {
+        "n": 9,
+        "bytes": 104957
+      }
+    },
+    "biggest": [
+      {
+        "url": "/monde/assets/PlayableCity-B_EV35qy.js",
+        "KB": 837,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/index-B0SHILdO.js",
+        "KB": 353,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/kit-pack.glb",
+        "KB": 41,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/nature-pack.glb",
+        "KB": 29,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/Effects-DvY0BTc9.js",
+        "KB": 23,
+        "encoding": "gzip"
+      }
+    ]
+  },
+  "warm": {
+    "label": "warm slow4g user",
+    "domContentLoaded": 247,
+    "sceneVisible": 1148,
+    "playable": 2142,
+    "requests": 15,
+    "transferredKB": 7,
+    "cachedRequests": 6,
+    "byType": {
+      "Document": {
+        "n": 1,
+        "bytes": 529
+      },
+      "Script": {
+        "n": 4,
+        "bytes": 0
+      },
+      "Stylesheet": {
+        "n": 1,
+        "bytes": 0
+      },
+      "Fetch": {
+        "n": 9,
+        "bytes": 6613
+      }
+    },
+    "biggest": [
+      {
+        "url": "/api/announcements",
+        "KB": 3,
+        "encoding": "identity"
+      },
+      {
+        "url": "/api/transports",
+        "KB": 1,
+        "encoding": "identity"
+      },
+      {
+        "url": "/monde/?debug",
+        "KB": 1,
+        "encoding": "identity"
+      },
+      {
+        "url": "/monde/assets/models/kit-pack.glb",
+        "KB": 1,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/nature-pack.glb",
+        "KB": 1,
+        "encoding": "gzip"
+      }
+    ]
+  }
+}

@@ -33,6 +33,23 @@ for (const r of rows) {
   if (!ok) bad++;
   console.log(ok ? 'PASS' : 'FAIL', r.model, `at ${r.x},${r.z}`, `centre offset ${dc.toFixed(2)} m`, `rendered ${r.w.toFixed(1)}x${r.d.toFixed(1)}x${r.h.toFixed(1)} vs footprint ${r.fw.toFixed(1)}x${r.fd.toFixed(1)}x${r.fh.toFixed(1)}`);
 }
-console.log(bad ? `FAILURES (${bad}/${rows.length})` : `ALL PASS (${rows.length} buildings)`);
+// Authored landmarks: rendered bounds must sit inside / match the union of their collision footprints (hall + wings + canopy pillars).
+const landmarks = await page.evaluate(() => {
+  const tn = window.__tn;
+  return [...(tn.landmarkObjects ?? [])].map(([l, group]) => {
+    group.updateMatrixWorld(true);
+    const box = new tn.THREE.Box3().setFromObject(group);
+    return { id: l.id, x: l.x, z: l.z, min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z], footprints: tn.footprintsNear(l) };
+  });
+});
+for (const l of landmarks) {
+  const fx0 = Math.min(...l.footprints.map((f) => f.x - f.w / 2)), fx1 = Math.max(...l.footprints.map((f) => f.x + f.w / 2));
+  const fz0 = Math.min(...l.footprints.map((f) => f.z - f.d / 2)), fz1 = Math.max(...l.footprints.map((f) => f.z + f.d / 2));
+  const dx = Math.max(Math.abs(l.min[0] - fx0), Math.abs(l.max[0] - fx1)), dz = Math.max(Math.abs(l.min[2] - fz0), Math.abs(l.max[2] - fz1));
+  const ok = dx <= 0.9 && dz <= 0.9 && l.min[1] >= -0.01;
+  if (!ok) bad++;
+  console.log(ok ? 'PASS' : 'FAIL', `landmark ${l.id} at ${l.x},${l.z}`, `x ${l.min[0].toFixed(1)}..${l.max[0].toFixed(1)} (footprints ${fx0.toFixed(1)}..${fx1.toFixed(1)}), z ${l.min[2].toFixed(1)}..${l.max[2].toFixed(1)} (${fz0.toFixed(1)}..${fz1.toFixed(1)}), height ${l.max[1].toFixed(1)} m`);
+}
+console.log(bad ? `FAILURES (${bad})` : `ALL PASS (${rows.length} buildings + ${landmarks.length} landmark)`);
 await browser.close();
 process.exit(bad ? 1 : 0);

@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { Color, MeshStandardMaterial } from 'three';
 import { Scatter } from './nature.jsx';
+import { WorldAssetInstances } from './assets/WorldAsset.jsx';
+import { assets } from './assets/registry.js';
 import { beds, trees } from './layout.js';
 import { settings } from './quality.js';
 
@@ -34,7 +36,7 @@ export function Plantings() {
   }, []);
   const treeLists = useMemo(() => {
     const out = {};
-    for (const t of trees) (out[t.model] ??= []).push([t.x, t.z, t.s, t.ry]);
+    for (const t of trees) (out[`${t.model}|${t.variant ?? ''}`] ??= []).push([t.x, t.z, t.s, t.ry]);
     return out;
   }, []);
   return (
@@ -46,7 +48,10 @@ export function Plantings() {
         </group>
       ))}
       {Object.entries(lists).filter(([, items]) => items.length).map(([name, items]) => <Scatter key={name} name={name} items={items} />)}
-      {Object.entries(treeLists).map(([name, items]) => <Scatter key={name} name={name} items={items} />)}
+      {Object.entries(treeLists).map(([key, items]) => {
+        const [name, variant] = key.split('|');
+        return assets[name] ? <WorldAssetInstances key={key} id={name} variant={variant || undefined} items={items} /> : <Scatter key={key} name={name} items={items} />;
+      })}
     </group>
   );
 }

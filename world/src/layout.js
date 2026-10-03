@@ -13,10 +13,6 @@ export const kitSize = {
 // `scale` is uniform. `variant` recolours the terracotta accent (kit.jsx).
 const B = (model, x, z, scale, ry = 0, variant, extra = {}) => ({ model, x, z, scale, ry, variant, ...extra });
 export const buildings = [
-  // Mairie: glazed round hall, two wings
-  B('hangar_roundGlass', 0, -27, 6),
-  B('hangar_largeA', -16.5, -26, 4),
-  B('hangar_largeA', 16.5, -26, 4),
   // Santé (east): main clinic, two annexes, teal accent
   B('hangar_roundA', 40, -6, 4.5, -Math.PI / 2, 'sante', { cross: true }),
   B('hangar_largeB', 40, -20, 3.5, -Math.PI / 2, 'sante'),
@@ -34,6 +30,18 @@ export const buildings = [
   B('hangar_smallA', 24, 38, 3, 0, 'sud'),
   B('hangar_roundA', 31, 46, 2.6, 0, 'sud'),
 ];
+
+// Authored landmarks (tools/assets/*.py -> models/colony-pack.glb): same placement conventions, collision listed explicitly below.
+// townHall: hall + two wings + canopy on four pillars; its model is built to these footprints (tools/qa/building-check.mjs verifies).
+export const landmarks = [{ id: 'townHall', x: 0, z: -27, ry: 0 }];
+const townHallFootprints = [
+  { shape: 'box', x: 0, z: -27, w: 19.6, d: 17, h: 8.4 },
+  { shape: 'box', x: -16.5, z: -26, w: 8, d: 12, h: 4 },
+  { shape: 'box', x: 16.5, z: -26, w: 8, d: 12, h: 4 },
+];
+
+// Street lamps (instanced, thin collider): plaza ring and both sides of the south avenue.
+export const lamps = [[-12.5, -6.5], [12.5, -6.5], [-7.5, -14], [7.5, -14], [4.5, 12.5], ...[20, 28, 36, 44].flatMap((z) => [[4.5, z], [-4.5, z]])];
 
 // Axis-aligned collision box of a building.
 export function footprintOf(b) {
@@ -86,7 +94,7 @@ const T = (model, x, z, s = 3.4, ry = 0) => ({ model, x, z, s: s * 0.74, ry });
 const ringAngles = [35, 60, 120, 145, 215, 240, 300, 325];
 export const trees = [
   // plaza ring, skipping the four road arms
-  ...ringAngles.map((deg, i) => T(['tree_oak_fall', 'tree_default_fall'][i % 2], PLAZA.x + 14.6 * Math.cos((deg * Math.PI) / 180), PLAZA.z + 14.6 * Math.sin((deg * Math.PI) / 180), 4.2 + (i % 3) * 0.4, i)),
+  ...ringAngles.map((deg, i) => ({ model: 'colonyTree', variant: i % 2 ? 'green' : 'warm', x: PLAZA.x + 14.6 * Math.cos((deg * Math.PI) / 180), z: PLAZA.z + 14.6 * Math.sin((deg * Math.PI) / 180), s: 0.95 + (i % 3) * 0.12, ry: i })),
   // south avenue, both sidewalks
   ...[18, 26, 34, 42].flatMap((z, i) => [T(i % 2 ? 'tree_thin' : 'tree_oak_fall', 3.9, z, 4.5, i), T(i % 2 ? 'tree_oak_fall' : 'tree_thin', -3.9, z + 4, 4.5, i + 2)]),
   // east / west avenues
@@ -121,7 +129,7 @@ export const beds = [
   [-47, -20.5, 1.4], [-40, -20.5, 1.4], [-26, -38, 1.3],
 ];
 
-export const footprints = [...buildings.map(footprintOf), ...pillars, ...benches.map((b) => { const turned = Math.round(Math.abs(b.ry) / (Math.PI / 2)) % 2 === 1; return { shape: 'box', x: b.x, z: b.z, w: turned ? 0.6 : 2.2, d: turned ? 2.2 : 0.6, h: 0.9, thin: true }; }), ...trees.map(({ x, z }) => ({ shape: 'box', x, z, w: 0.5, d: 0.5, h: 3, thin: true })), ...supports.map(({ x, z, y }) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: y, thin: true }))];
+export const footprints = [...buildings.map(footprintOf), ...townHallFootprints, ...lamps.map(([x, z]) => ({ shape: 'box', x, z, w: 0.4, d: 0.4, h: 4, thin: true })), ...pillars, ...benches.map((b) => { const turned = Math.round(Math.abs(b.ry) / (Math.PI / 2)) % 2 === 1; return { shape: 'box', x: b.x, z: b.z, w: turned ? 0.6 : 2.2, d: turned ? 2.2 : 0.6, h: 0.9, thin: true }; }), ...trees.map(({ x, z }) => ({ shape: 'box', x, z, w: 0.5, d: 0.5, h: 3, thin: true })), ...supports.map(({ x, z, y }) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: y, thin: true }))];
 
 // Roads [cx, cz, w, d] (w along x, d along z); drawn as paving and walked by the NPC graph below.
 export const roads = [
@@ -185,7 +193,7 @@ export const pathLinks = {
 
 // DOM labels over the districts (Labels.jsx). The playable area is flat, so plain projection.
 export const districts = [
-  { name: 'Mairie', position: [0, 12, -27] },
+  { name: 'Mairie', position: [0, 16, -27] },
   { name: 'Santé', position: [40, 9, -6] },
   { name: 'Quartier sud', position: [0, 7, 44] },
   { name: 'Marché', position: [-40, 6, -2] },

@@ -1,0 +1,82 @@
+{
+  "hardware": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "dpr": 1.0000000149011612,
+    "cores": 32
+  },
+  "results": [
+    {
+      "stop": "spawn",
+      "frames": 244,
+      "p50": 25,
+      "p95": 35.79999999999927,
+      "p99": 39.399999999999636,
+      "max": 64.39999999999964,
+      "calls": 856,
+      "triangles": 203759,
+      "geometries": 399,
+      "textures": 49
+    },
+    {
+      "stop": "mairie",
+      "frames": 238,
+      "p50": 25,
+      "p95": 35.70000000000073,
+      "p99": 35.79999999999927,
+      "max": 35.79999999999927,
+      "calls": 791,
+      "triangles": 201823,
+      "geometries": 399,
+      "textures": 49
+    },
+    {
+      "stop": "sante",
+      "frames": 322,
+      "p50": 17.899999999997817,
+      "p95": 28.600000000002183,
+      "p99": 32.20000000000073,
+      "max": 35.70000000000073,
+      "calls": 577,
+      "triangles": 185184,
+      "geometries": 399,
+      "textures": 49
+    },
+    {
+      "stop": "marche",
+      "frames": 310,
+      "p50": 17.900000000001455,
+      "p95": 28.599999999998545,
+      "p99": 32.20000000000073,
+      "max": 57.10000000000218,
+      "calls": 810,
+      "triangles": 192006,
+      "geometries": 399,
+      "textures": 54
+    },
+    {
+      "stop": "habitat",
+      "frames": 309,
+      "p50": 17.900000000001455,
+      "p95": 28.599999999998545,
+      "p99": 35.69999999999709,
+      "max": 35.80000000000291,
+      "calls": 718,
+      "triangles": 189552,
+      "geometries": 399,
+      "textures": 54
+    },
+    {
+      "stop": "sud",
+      "frames": 204,
+      "p50": 28.599999999998545,
+      "p95": 39.39999999999418,
+      "p99": 50,
+      "max": 78.5,
+      "calls": 843,
+      "triangles": 203619,
+      "geometries": 399,
+      "textures": 69
+    }
+  ]
+}
