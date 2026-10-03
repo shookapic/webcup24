@@ -123,6 +123,11 @@ Wave 6 (H+7h55, 3 720 XP) — accessibility and plain language, A (portal + A-ow
 18. **F43 (310), colour**: never colour alone — status pills, alert banner, transport lines, featured cards and form errors carry text/icons/patterns; check contrast in normal and high-contrast modes.
 19. **D13 (310), plain language**: replace jargon in the interface ("démarche", "signalement", "statut"…) with everyday words, plus a short "Lexique" (glossary) with `<abbr>`/definitions for the remaining terms, in fr and en.
 
+Wave 7 (H+8h, 2 880 XP) — A, in this order:
+
+20. **F47 (960) + F48 (640), audit log**: one `audit_log` table (`at`, `actor_id`, actor name/role snapshot, `action`, `target_type`, `target_id`, short `details`), written by every staff/admin mutation (message status, services, announcements/alerts, transports status, citizen admin, slots…) and account deletions. Staff space: "Journal des actions" newest first, filter by action/person/date, plain-language lines ("Agent Dupont a désactivé le compte de M. Martin — 03/10 16:40"). Append-only: no edit/delete route.
+21. **F45 (960) + F46 (320), find physical services**: each service gets an address, district, opening hours and nearest tram stop (`GET /api/services` fields, shared with B); service cards show "Où ? / Comment y aller ?" with the next tram from `GET /api/transports`; an always-visible "Urgences" block (112/15/18, centre de santé address and hours, nearest stop) on the home page and in the phone.
+
 ## Original Session B scope — retained for traceability
 
 The active spec supersedes the implementation approach below, particularly the overlay-only phone and global curvature. All functional features remain required.
@@ -149,6 +154,10 @@ Wave 6 (accessibility) — A leads; B covers what lives in B files:
 
 12. **F41/D20 in the world**: full keyboard play (move, run, phone, avatar, help) with no mouse requirement, a visible key legend, no keyboard trap between canvas and DOM; respect `prefers-reduced-motion` (no camera shake, slower tram/NPC easing).
 13. **F43 in the world**: districts, tram lines and stop signs distinguished by label/shape, not colour alone.
+
+Wave 7:
+
+14. **F45/F46 in the world**: from the phone's service or "Urgences" entry, a wayfinding cue (path highlight or arrow) to that service's building; a clear Santé/hospital sign. Uses the service address/district fields A adds to `GET /api/services`.
 
 World rules: no CDN or external fonts/assets (CSP blocks them; drei `<Text>` must get a local font). Canvas `aria-hidden="true"`; the phone is real HTML with `aria-live` for alerts; respect `prefers-reduced-motion`; a visible "Version accessible" link to `/`. The portal stays the accessible version and the fallback.
 
