@@ -1,0 +1,13 @@
+// Same contract as the portal's api() helper in public/app.js.
+export async function api(path, method = 'GET', body) {
+  const response = await fetch(path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin',
+    signal: AbortSignal.timeout(10_000),
+  });
+  const data = response.status === 204 ? {} : await response.json();
+  if (!response.ok) throw new Error(data.error || 'Une erreur est survenue.');
+  return data;
+}

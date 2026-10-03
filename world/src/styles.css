@@ -11,3 +11,13 @@ html, body, #root { margin: 0; height: 100%; background: #0b0614; color: #fff; f
 .welcome p { margin: 0 0 1rem; }
 .welcome a { display: inline-block; }
 .controls-help { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); margin: 0; padding: 0.4rem 0.8rem; max-width: calc(100% - 2rem); background: rgb(11 6 20 / 0.7); border-radius: 0.5rem; font-size: 0.875rem; text-align: center; }
+.avatar-editor { position: fixed; inset: auto 1rem 1rem auto; margin: 0; width: min(20rem, calc(100% - 2rem)); padding: 1.25rem; background: rgb(11 6 20 / 0.92); color: #fff; border: 1px solid #ff4fa3; border-radius: 1rem; }
+.avatar-editor::backdrop { background: transparent; }
+.avatar-editor h2 { margin: 0 0 1rem; font-size: 1.25rem; }
+.avatar-editor label { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; font-weight: 600; }
+.avatar-editor input[type=color] { width: 3rem; height: 2.25rem; padding: 0; border: 2px solid #fff; border-radius: 0.5rem; background: none; cursor: pointer; }
+.avatar-editor .actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.avatar-editor button { padding: 0.5rem 0.9rem; border: 0; border-radius: 0.5rem; font: 600 1rem system-ui, sans-serif; cursor: pointer; }
+.avatar-editor button[type=submit] { background: #ff4fa3; color: #0b0614; }
+.avatar-editor :focus-visible { outline: 3px solid #ff4fa3; outline-offset: 2px; }
+.avatar-editor [role=status]:empty { display: none; }

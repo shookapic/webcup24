@@ -4,6 +4,9 @@ import { OrbitControls } from '@react-three/drei';
 import { Sky } from './Sky.jsx';
 import { City, Ground, Rocks } from './City.jsx';
 import { LabelLayer, LabelProjector } from './Labels.jsx';
+import { AvatarEditor } from './AvatarEditor.jsx';
+import { defaultAvatar } from './Avatar.jsx';
+import { api } from './api.js';
 
 const PlayableCity = lazy(() => import('./PlayableCity.jsx'));
 
@@ -12,10 +15,21 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 export function App() {
   const [user, setUser] = useState();
   const [view, setView] = useState('tps');
+  const [avatar, setAvatar] = useState(defaultAvatar);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    fetch('/api/me').then((r) => r.json()).then((data) => setUser(data.user), () => setUser(null));
+    api('/api/me').then(({ user: me }) => {
+      setUser(me);
+      if (me?.avatar) setAvatar(me.avatar);
+      else if (me) setEditing(true);
+    }, () => setUser(null));
   }, []);
+
+  const edit = () => {
+    setView('tps');
+    setEditing(true);
+  };
 
   useEffect(() => {
     const toggle = (event) => {
@@ -36,7 +50,7 @@ export function App() {
         <Rocks />
         {user ? (
           <Suspense fallback={<City />}>
-            <PlayableCity avatar={user.avatar} view={view} reducedMotion={reducedMotion} />
+            <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} />
           </Suspense>
         ) : <City />}
         <LabelProjector />
@@ -46,9 +60,12 @@ export function App() {
       <nav className="hud" aria-label="Monde">
         <a href="/">Version accessible</a>
         {user && (
-          <button type="button" onClick={() => setView((v) => (v === 'tps' ? 'fps' : 'tps'))}>
-            {view === 'tps' ? 'Vue première personne' : 'Vue troisième personne'} (V)
-          </button>
+          <>
+            <button type="button" onClick={() => setView((v) => (v === 'tps' ? 'fps' : 'tps'))}>
+              {view === 'tps' ? 'Vue première personne' : 'Vue troisième personne'} (V)
+            </button>
+            <button type="button" onClick={edit}>Personnaliser mon colon</button>
+          </>
         )}
       </nav>
       {user === null && (
@@ -58,6 +75,7 @@ export function App() {
           <a href="/">Se connecter</a>
         </div>
       )}
+      {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} />}
       {user && <p className="controls-help">ZQSD / WASD ou flèches pour marcher · Maj pour courir · Espace pour sauter · glisser pour tourner la caméra</p>}
     </>
   );
