@@ -41,13 +41,14 @@ A implements, B consumes. Same origin, same session cookie: a user logged in on 
 | `GET /api/announcements` | `{ announcements: [{ id, title, body, published_at, urgent, audience }] }`. `urgent` 0/1, `audience` free text (`"Tous"`, `"Quartier sud"`, `"Personnes vulnérables"`…). Newest first. |
 | `POST /api/presence` | body `{ x, z, ry }` (finite numbers). Auth required. In memory only. → `204` |
 | `GET /api/presence` | `{ players: [{ id, name, avatar, x, z, ry }] }`, positions updated < 15 s ago, excluding the caller. |
+| `GET /api/transports` | Public. `{ lines: [{ code, name, color, status, message, stops: [{ name, district, next }] }] }`. `code` e.g. `"T1"`; `color` `#rrggbb`; `status` `"normal"` \| `"perturbé"`; `message` text or `null`; `next` = the next 3 departures from that stop as `"HH:MM"` (Terra Nova local time, computed server-side from first/last/frequency). Stop names are world places: `Mairie`, `Santé`, `Quartier sud`, `Marché`, `Habitat`. `district` uses the portal profile list: Mairie → `Centre-ville`, Habitat → `Quartier nord`, Santé → `Quartier est`, Marché → `Quartier ouest`, Quartier sud → `Quartier sud`. |
 | `GET /monde/*` | Files from `dist/monde/`, unknown paths → `dist/monde/index.html`. Path traversal blocked. |
 
 CSP for `/monde/*` responses (the world needs it; keep the portal's strict CSP as is):
 `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' blob: data:; worker-src 'self' blob:; base-uri 'none'; object-src 'none'`
 (Rapier physics is WebAssembly; GLTFLoader uses blob:/data: URLs.)
 
-Polling rates: announcements every 15 s, presence every 2 s. Nothing faster.
+Polling rates: announcements every 15 s, presence every 2 s, transports every 60 s. Nothing faster.
 
 ## Session A — Portal & API (in order)
 
@@ -58,6 +59,13 @@ Polling rates: announcements every 15 s, presence every 2 s. Nothing faster.
 5. **D12 (540)**: first-login guide (complete profile → find a service → start a request), dismissible, remembered per user.
 6. **D14 + F27 (1 080)**: language switch (fr/en at least) for the interface *and* service content.
 7. New waves: triage with B. Portal-shaped requests default to A.
+
+Wave 4 (H+5h, 1 740 XP) — in this order:
+
+8. **F36 (580), transports — API first, B is waiting on it**: `GET /api/transports` exactly as in the contract (2 lines is plenty, e.g. T1 Habitat ↔ Mairie ↔ Quartier sud, T2 Marché ↔ Mairie ↔ Santé). Portal: a "Transports" section that shows the lines, perturbations, and puts the stop of the logged-in user's `district` first, so they see their next departures without browsing.
+9. **F33 (290)**: a citizen deletes their own account: confirm by re-typing the password, delete the user and their sessions (messages stay, anonymised or cascaded — pick one and say it in the UI), log out, confirmation message.
+10. **F34 (580)**: agents/admins administer citizen accounts: list + search, deactivate/reactivate, reset password (show a one-time password like `create-staff`), delete. Server-side role check on every route; staff accounts can't be modified from there; deactivated users can't log in and their sessions are revoked.
+11. **F35 (290)**: short contextual tips at the moment of first use (first message form, first report, first service search), dismissible, remembered per user. Builds on the D12 guide.
 
 ## Session B — World (in order)
 
@@ -70,7 +78,20 @@ Polling rates: announcements every 15 s, presence every 2 s. Nothing faster.
 7. **Other players**: presence polling, interpolate positions.
 8. **Shaders polish**: `@react-three/postprocessing` (bloom, vignette, tone mapping). Cap `dpr` at 1.5.
 
+Steps 1–8 are done and on `main`. Wave 4:
+
+9. **F36 (580), transports in the world**: a tram line with stations at the district stops and a moving tram; the phone gets a "Transports" view with the next departures (from `GET /api/transports`), the player's nearest stop first.
+
 World rules: no CDN or external fonts/assets (CSP blocks them; drei `<Text>` must get a local font). Canvas `aria-hidden="true"`; the phone is real HTML with `aria-live` for alerts; respect `prefers-reduced-motion`; a visible "Version accessible" link to `/`. The portal stays the accessible version and the fallback.
+
+## Watching the API for new waves
+
+`npm run watch-api` polls the contest API every 30 s and writes `api-requests.md` (git-ignored, newest requests on top, with the time each was first seen). It needs `TERRA_NOVA_API_KEY` in `.env`.
+
+- In a terminal: `npm run watch-api` keeps running and prints new requests.
+- In a Claude Code session: ask Claude to run `npm run watch-api -- --exit-on-new` as a background task. It exits when new requests appear, so Claude gets notified; Claude then reports them, triages them A/B, and restarts it.
+
+One watcher per machine is enough. Both sessions add new waves to the lists above.
 
 ## Git workflow
 

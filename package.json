@@ -10,7 +10,8 @@
     "build": "vite build",
     "dev:world": "vite",
     "start": "node --env-file-if-exists=.env server.mjs",
-    "create-staff": "node --env-file-if-exists=.env create-staff.mjs"
+    "create-staff": "node --env-file-if-exists=.env create-staff.mjs",
+    "watch-api": "node --env-file-if-exists=.env tools/watch-api.mjs"
   },
   "devDependencies": {
     "@react-three/drei": "^10.7.9",
