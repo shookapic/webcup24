@@ -3,7 +3,8 @@ import { useFrame } from '@react-three/fiber';
 import { CanvasTexture, Color, DoubleSide, MeshStandardMaterial, RepeatWrapping } from 'three';
 import { Prop } from './kit.jsx';
 import { buildings, footprintOf, footprints, landmarks, lines, stops } from './layout.js';
-import { WorldAsset } from './assets/WorldAsset.jsx';
+import { WorldAsset, preloadAssets } from './assets/WorldAsset.jsx';
+preloadAssets(['hospital']);
 import { debug } from './debug.js';
 
 // Buildings (from layout.buildings, which also feeds collision), district dressing, stop shelters and the Quartier sud water.
@@ -144,8 +145,7 @@ function Stop({ stop }) {
 export function Districts({ reducedMotion }) {
   if (debug.enabled) {
     debug.footprintOf = footprintOf;
-    // footprints that belong to a landmark (within 25 m of its origin, excluding thin trees/lamps/supports): hall, wings, canopy pillars
-    debug.footprintsNear = (l) => footprints.filter((f) => !f.thin || (f.h === 4 && f.w === 0.9)).filter((f) => Math.hypot(f.x - l.x, f.z - l.z) < 25 && f.z < -11 && f.z > -36);
+    debug.footprintsNear = (l) => footprints.filter((f) => f.landmark === l.id || (l.id === 'townHall' && f.h === 4 && f.w === 0.9)); // landmark boxes (+ the Mairie canopy pillars)
   }
   return (
     <group>

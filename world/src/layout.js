@@ -14,7 +14,6 @@ export const kitSize = {
 const B = (model, x, z, scale, ry = 0, variant, extra = {}) => ({ model, x, z, scale, ry, variant, ...extra });
 export const buildings = [
   // Santé (east): main clinic, two annexes, teal accent
-  B('hangar_roundA', 40, -6, 4.5, -Math.PI / 2, 'sante', { cross: true }),
   B('hangar_largeB', 40, -20, 3.5, -Math.PI / 2, 'sante'),
   B('hangar_smallA', 40, 9, 4, -Math.PI / 2, 'sante'),
   // Marché (west): six booths on either side of a central aisle (awnings in Districts.jsx)
@@ -33,12 +32,35 @@ export const buildings = [
 
 // Authored landmarks (tools/assets/*.py -> models/colony-pack.glb): same placement conventions, collision listed explicitly below.
 // townHall: hall + two wings + canopy on four pillars; its model is built to these footprints (tools/qa/building-check.mjs verifies).
-export const landmarks = [{ id: 'townHall', x: 0, z: -27, ry: 0 }];
+export const landmarks = [{ id: 'townHall', x: 0, z: -27, ry: 0 }, { id: 'hospital', x: 40, z: -6, ry: -Math.PI / 2 }];
 const townHallFootprints = [
   { shape: 'box', x: 0, z: -27, w: 19.6, d: 17, h: 8.4 },
   { shape: 'box', x: -16.5, z: -26, w: 8, d: 12, h: 4 },
   { shape: 'box', x: 16.5, z: -26, w: 8, d: 12, h: 4 },
-];
+].map((f) => ({ ...f, landmark: 'townHall' }));
+
+// Boxes given in the model's local frame (x right, z front, metres; x0..x1, z0..z1, base y, height h) -> world footprints for a landmark placed at
+// (x, z) with yaw ry (multiple of PI/2). `y` lifts a box off the ground (overhead parts); omitted = on the ground. `thin` = blocks the player, not the camera.
+function landmarkFootprints(l, boxes) {
+  const c = Math.round(Math.cos(l.ry)), s = Math.round(Math.sin(l.ry));
+  return boxes.map(({ x0, x1, z0, z1, y = 0, h, thin }) => {
+    const lx = (x0 + x1) / 2, lz = (z0 + z1) / 2, w = x1 - x0, d = z1 - z0;
+    const turned = s !== 0;
+    return { shape: 'box', x: l.x + lx * c + lz * s, z: l.z - lx * s + lz * c, w: turned ? d : w, d: turned ? w : d, h, ...(y ? { y } : {}), ...(thin ? { thin } : {}), landmark: l.id };
+  });
+}
+// Santé clinic (tools/assets-a/hospital, measured from hospital-a-v001.glb; docs/ASSET_HANDOFF_A.md). Explicit compound collision, not one solid box:
+// the recessed entrance porch (x +-2.2, z 4.5675..6.2175) stays open at ground level so the doors are reachable from outside.
+const hospitalFootprints = landmarkFootprints(landmarks[1], [
+  { x0: 2.85, x1: 7.2075, z0: -6.2175, z1: 5.2, h: 6 },            // east wing
+  { x0: -7.2075, x1: -2.85, z0: -6.2175, z1: 5.2, h: 6 },          // west wing
+  { x0: -2.85, x1: 2.85, z0: -6.2175, z1: 4.5675, h: 6.25 },       // central block behind the porch (doors on its face)
+  { x0: 2.2, x1: 2.85, z0: 4.5675, z1: 6.2175, h: 6.25 },          // porch pier
+  { x0: -2.85, x1: -2.2, z0: 4.5675, z1: 6.2175, h: 6.25 },        // porch pier
+  { x0: -2.2, x1: 2.2, z0: 4.5675, z1: 6.2175, y: 2.85, h: 3.4 },  // canopy soffit and upper block over the porch; underside 0.1 m below the visual soffit (2.95) so a jump never clips the model
+  { x0: -2.1, x1: 2.1, z0: 4.5675, z1: 5.2, h: 0.35, thin: true },   // step B (door sill level)
+  { x0: -2.1, x1: 2.1, z0: 5.2, z1: 5.8, h: 0.24, thin: true },     // step A
+]);
 
 // Street lamps (instanced, thin collider): plaza ring and both sides of the south avenue.
 export const lamps = [[-12.5, -6.5], [12.5, -6.5], [-7.5, -14], [7.5, -14], [4.5, 12.5], ...[20, 28, 36, 44].flatMap((z) => [[4.5, z], [-4.5, z]])];
@@ -129,7 +151,7 @@ export const beds = [
   [-47, -20.5, 1.4], [-40, -20.5, 1.4], [-26, -38, 1.3],
 ];
 
-export const footprints = [...buildings.map(footprintOf), ...townHallFootprints, ...lamps.map(([x, z]) => ({ shape: 'box', x, z, w: 0.4, d: 0.4, h: 4, thin: true })), ...pillars, ...benches.map((b) => { const turned = Math.round(Math.abs(b.ry) / (Math.PI / 2)) % 2 === 1; return { shape: 'box', x: b.x, z: b.z, w: turned ? 0.6 : 2.2, d: turned ? 2.2 : 0.6, h: 0.9, thin: true }; }), ...trees.map(({ x, z }) => ({ shape: 'box', x, z, w: 0.5, d: 0.5, h: 3, thin: true })), ...supports.map(({ x, z, y }) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: y, thin: true }))];
+export const footprints = [...buildings.map(footprintOf), ...townHallFootprints, ...hospitalFootprints, ...lamps.map(([x, z]) => ({ shape: 'box', x, z, w: 0.4, d: 0.4, h: 4, thin: true })), ...pillars, ...benches.map((b) => { const turned = Math.round(Math.abs(b.ry) / (Math.PI / 2)) % 2 === 1; return { shape: 'box', x: b.x, z: b.z, w: turned ? 0.6 : 2.2, d: turned ? 2.2 : 0.6, h: 0.9, thin: true }; }), ...trees.map(({ x, z }) => ({ shape: 'box', x, z, w: 0.5, d: 0.5, h: 3, thin: true })), ...supports.map(({ x, z, y }) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: y, thin: true }))];
 
 // Roads [cx, cz, w, d] (w along x, d along z); drawn as paving and walked by the NPC graph below.
 export const roads = [

@@ -5,6 +5,7 @@ const base = import.meta.env.BASE_URL;
 
 export const packs = {
   colony: `${base}models/colony-pack.glb`, // tools/assets/build.mjs: Blender scripts -> world/assets-src/colony/*.glb -> this pack
+  hospital: `${base}models/buildings/hospital-a-v001.glb`, // standalone, authored by session A (tools/assets-a/hospital): one file, root node `hospital`
 };
 
 // Calibration: metres, Y up, origin at the centre of the base on the ground, front = +Z. `scale` multiplies the native size.
@@ -13,6 +14,10 @@ export const assets = {
   townHall: {
     pack: 'colony', node: 'townHall', scale: 1, source: 'tools/assets/townhall.py',
     budget: { triangles: 2336, note: 'landmark: <= 30k' },
+  },
+  hospital: {
+    pack: 'hospital', node: 'hospital', scale: 1, source: 'tools/assets-a/hospital/build_hospital.py',
+    budget: { triangles: 6208, note: 'landmark: <= 30k; 8 material meshes, 0 textures, 334356 B raw / 54757 B gzip' },
   },
   streetLamp: {
     pack: 'colony', node: 'streetLamp', scale: 1, source: 'tools/assets/lamp.py',
