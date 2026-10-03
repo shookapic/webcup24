@@ -8,6 +8,7 @@ export const debug = {
   enabled: params.has('debug'),
   floorOnly: params.get('scene') === 'floor',
   simFps: Number(params.get('fps')) || 0,
+  jitter: params.has('jitter'), // uneven frame times: alternating 0.5x/1.5x plus a 100 ms hitch every 20 frames
   input: null, // overrides keyboard while set
   samples: [],
 };

@@ -28,12 +28,14 @@ Speed 4.00 m/s steady, equal diagonal/cardinal, grounded 100 %, monotonic progre
 
 Rejected: `MAX_STEP = 1/20` (to avoid slow motion below 30 fps) made the yaw spring ring at 20 Hz (51 reversals). Kept 1/30: below 30 fps the game slows down rather than destabilising.
 
-### B0 still open
+### B0 closed (2026-10-03 evening)
 
-- `world/src/input.js` (own keyboard: clears on blur/hidden/lock, fresh press to resume, jump once per press, ignores repeat) is written but **not wired**. `Player.jsx` still uses drei `KeyboardControls`; replace `getKeys()` with `useMovementInput(inputEnabled)` and pass `inputEnabled = !editing && phone closed` from `App.jsx`.
-- Explicit building colliders instead of `colliders="cuboid"` on all city meshes (still automatic in `PlayableCity.jsx`); wall sliding/corner tests; camera retract near walls (`CameraControls.colliderMeshes`).
-- FPS wheel zoom guard, playable-area bounds + respawn, jump-once test, run-release test, V switching and mouse-drag tests.
-- Not yet retested by a human on a real high-refresh monitor; please confirm the oscillation is gone.
+Implemented: `input.js` wired (`useMovementInput(inputEnabled)`, `inputEnabled = !editing && !phoneOpen && !alerting`), explicit footprints in `layout.js` (boxes/cylinders for Mairie, Santé, Marché stalls, Habitat, Quartier sud domes; paths/windows/rings/rocks/pond have none), square boundary walls at ±75 + respawn to spawn when y < -5 or outside ±78, camera `colliderMeshes` (invisible footprint meshes), TPS wheel clamp 2.5–14, FPS distance pinned at 0.01.
+
+Harness `tools/qa/world-checks.mjs <base> <fps> [jitter]` (real keyboard events, deterministic frames, `&jitter` = alternating 0.5x/1.5x frame times + 100 ms hitch every 20 frames). 15 checks, **all pass at 30/60/144 Hz, with and without jitter**: W walks; blur stops and stays stopped with key still held; fresh press resumes; hidden tab stops; phone open (T) ignores keys, closed + fresh press walks; jump once per press with Space held (repeat); wall stops at z = -36.65 (face -37, radius 0.35) and slides; camera retracts to 0.6 m against the wall; fall/out-of-bounds respawn; boundary wall holds; FPS wheel stays 0.01; TPS wheel clamps.
+`movement.mjs` floor/city at 30/60/144 unchanged after the change (39.33 m, lateral <= 0.001 m, tilt 0, stop 0.27–0.28 s). With jitter: no reversals, tilt 0, stop 0.29 s; progress is 32.9 m/10 s because hitches are clamped to 1/30 s (slow motion by design); the "cam jitter" metric reads 25 mm there only because it is a second difference of positions over unequal dt.
+
+Still open: human check on a real high-refresh monitor; UI drags not rotating the camera (A's UI not integrated yet); captures (taken with the plaza slice).
 
 ## Wave 5 triage (16:25) â€” all Session A
 

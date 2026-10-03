@@ -1,26 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useRapier } from '@react-three/rapier';
-import { KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import { Ecctrl } from 'ecctrl';
 import { EcctrlCameraControls } from 'ecctrl/camera';
 import { Avatar } from './Avatar.jsx';
 import { Multiplayer } from './Multiplayer.jsx';
 import { debug, record } from './debug.js';
+import { useMovementInput } from './input.js';
 import { Euler, Vector3 } from 'three';
+import { BOUNDS, SPAWN, cameraBlockers } from './layout.js';
 
 const probeEuler = new Euler();
 const probeRendered = new Vector3();
 const probeDir = new Vector3();
-
-const keyboardMap = [
-  { name: 'forward', keys: ['ArrowUp', 'KeyW', 'KeyZ'] },
-  { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
-  { name: 'leftward', keys: ['ArrowLeft', 'KeyA', 'KeyQ'] },
-  { name: 'rightward', keys: ['ArrowRight', 'KeyD'] },
-  { name: 'jump', keys: ['Space'] },
-  { name: 'run', keys: ['Shift'] },
-];
 
 const HEAD = 0.7;
 const MAX_STEP = 1 / 30; // clamp after tab switches / hitches. Measured: 1/20 makes the yaw spring ring at 20 fps; below 30 fps the game slows down instead
@@ -37,30 +29,35 @@ function FrameStep({ after }) {
   return null;
 }
 const distance = { tps: 7, fps: 0.01 };
+// Wheel zoom stays inside these; FPS is pinned so it can never end up half zoomed out.
+const zoomRange = { tps: [2.5, 14], fps: [0.01, 0.01] };
 
-export function Player(props) {
-  return (
-    <KeyboardControls map={keyboardMap}>
-      <Character {...props} />
-    </KeyboardControls>
-  );
-}
-
-function Character({ avatar, view, reducedMotion }) {
+export function Player({ avatar, view, reducedMotion, inputEnabled }) {
   const ecctrl = useRef();
   const controls = useRef();
   const avatarGroup = useRef();
-  const [, getKeys] = useKeyboardControls();
+  const getKeys = useMovementInput(inputEnabled);
+  useEffect(() => { if (debug.enabled) { debug.ecctrl = ecctrl.current; debug.controls = controls.current; } });
 
   useEffect(() => {
-    controls.current?.dollyTo(distance[view], !reducedMotion);
+    const c = controls.current;
+    if (!c) return;
+    [c.minDistance, c.maxDistance] = zoomRange[view];
+    c.dollyTo(distance[view], !reducedMotion);
+    c.colliderMeshes = cameraBlockers; // camera pulls in instead of passing through walls
   }, [view, reducedMotion]);
 
   const follow = ({ camera, clock }) => {
     if (!ecctrl.current?.body || !controls.current) return;
     // ecctrl v2 does not read the keyboard itself; it picks this up next frame.
     ecctrl.current.setMovement(debug.input ?? getKeys());
-    const { x, y, z } = ecctrl.current.body.translation();
+    const body = ecctrl.current.body;
+    let { x, y, z } = body.translation();
+    if (y < -5 || Math.abs(x) > BOUNDS + 3 || Math.abs(z) > BOUNDS + 3) { // fell through or escaped: back to spawn
+      body.setTranslation({ x: SPAWN[0], y: SPAWN[1], z: SPAWN[2] }, true);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      [x, y, z] = SPAWN;
+    }
     controls.current.moveTo(x, y + HEAD, z, !reducedMotion);
     if (debug.enabled) {
       const e = ecctrl.current;
@@ -84,7 +81,7 @@ function Character({ avatar, view, reducedMotion }) {
     <>
       <Ecctrl
         ref={ecctrl}
-        position={[0, 3, 8]}
+        position={SPAWN}
         capsuleHalfHeight={0.4}
         capsuleRadius={0.35}
         maxWalkVel={4}
@@ -109,8 +106,6 @@ function Character({ avatar, view, reducedMotion }) {
         ref={controls}
         makeDefault
         smoothTime={reducedMotion ? 0 : 0.1}
-        minDistance={0.01}
-        maxDistance={20}
         maxPolarAngle={1.55}
         distance={distance[view]}
         polarAngle={1.2}

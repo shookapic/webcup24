@@ -23,9 +23,11 @@ function SimDriver() {
   useEffect(() => {
     debug.run = async (seconds, input = null) => {
       debug.input = input;
-      for (let i = 0; i < Math.round(seconds * debug.simFps); i++) {
+      for (let i = 0, t = 0; t < seconds; i++) {
+        const dt = debug.jitter ? (i % 20 === 19 ? 0.1 : (i % 2 ? 1.5 : 0.5) / debug.simFps) : 1 / debug.simFps;
+        t += dt;
         // frameloop="never": advance() takes seconds and derives delta from clock.elapsedTime.
-        advance(clock.elapsedTime + 1 / debug.simFps);
+        advance(clock.elapsedTime + dt);
         if (i % 30 === 29) await new Promise((resolve) => setTimeout(resolve));
       }
       debug.input = null;
@@ -94,7 +96,7 @@ export function App() {
         {!debug.floorOnly && <Npcs reducedMotion={reducedMotion} />}
         {user ? (
           <Suspense fallback={<City />}>
-            <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} />
+            <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} inputEnabled={!editing && !phoneOpen && !alerting} />
           </Suspense>
         ) : <City />}
         <LabelProjector />
