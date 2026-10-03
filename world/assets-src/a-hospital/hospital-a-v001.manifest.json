@@ -1,181 +1,203 @@
 {
+  "schema": 2,
   "asset": "hospital-a-v001",
   "file": "world/public/models/buildings/hospital-a-v001.glb",
-  "generator": "Khronos glTF Blender I/O v5.2.40",
-  "glTF": "2.0",
-  "axes": "glTF: +Y up, +Z front (entrance side), metres, scale 1",
-  "origin": "centre of the ground footprint, y = 0",
-  "node": "hospital",
-  "meshNodes": 8,
-  "materials": [
-    {
-      "name": "Hospital_Amber",
-      "baseColor": [
-        0.6308,
-        0.3231,
-        0.0482,
-        1
-      ],
-      "roughness": 0.75,
-      "metallic": 0
+  "readMe": "measuredFromGlb is computed from the GLB file by this script on every run. declaredContract is NOT recovered from the GLB: it is the authoring and integration contract, typed into the validator as inputs. comparisons are computed from both, and each boolean is taken from a check result.",
+  "measuredFromGlb": {
+    "generator": "Khronos glTF Blender I/O v5.2.40",
+    "glTF": "2.0",
+    "sceneRoots": [
+      "hospital"
+    ],
+    "meshNodes": 8,
+    "materials": [
+      {
+        "name": "Hospital_Amber",
+        "baseColor": [
+          0.6308,
+          0.3231,
+          0.0482,
+          1
+        ],
+        "roughness": 0.75,
+        "metallic": 0
+      },
+      {
+        "name": "Hospital_Ceramic",
+        "baseColor": [
+          0.7835,
+          0.7454,
+          0.6584,
+          1
+        ],
+        "roughness": 0.8500000238418579,
+        "metallic": 0
+      },
+      {
+        "name": "Hospital_Glass",
+        "baseColor": [
+          0.0685,
+          0.162,
+          0.2159,
+          1
+        ],
+        "roughness": 0.30000001192092896,
+        "metallic": 0
+      },
+      {
+        "name": "Hospital_LobbyGlass",
+        "baseColor": [
+          0.0513,
+          0.1356,
+          0.1946,
+          1
+        ],
+        "roughness": 0.30000001192092896,
+        "metallic": 0,
+        "emissive": [
+          0.10000000149011612,
+          0.06938717468659839,
+          0.03515326135088892
+        ]
+      },
+      {
+        "name": "Hospital_Paving",
+        "baseColor": [
+          0.6105,
+          0.4621,
+          0.3278,
+          1
+        ],
+        "metallic": 0
+      },
+      {
+        "name": "Hospital_Slate",
+        "baseColor": [
+          0.15,
+          0.2122,
+          0.2502,
+          1
+        ],
+        "roughness": 0.699999988079071,
+        "metallic": 0.10000000149011612
+      },
+      {
+        "name": "Hospital_Teal",
+        "baseColor": [
+          0.0685,
+          0.2623,
+          0.2423,
+          1
+        ],
+        "roughness": 0.800000011920929,
+        "metallic": 0
+      },
+      {
+        "name": "Hospital_Terracotta",
+        "baseColor": [
+          0.3968,
+          0.1301,
+          0.0685,
+          1
+        ],
+        "roughness": 0.800000011920929,
+        "metallic": 0
+      }
+    ],
+    "triangles": 6208,
+    "vertices": 12096,
+    "trianglesPerMaterial": {
+      "Hospital_Amber": 164,
+      "Hospital_Ceramic": 948,
+      "Hospital_Glass": 708,
+      "Hospital_LobbyGlass": 60,
+      "Hospital_Paving": 12,
+      "Hospital_Slate": 3836,
+      "Hospital_Teal": 420,
+      "Hospital_Terracotta": 60
     },
-    {
-      "name": "Hospital_Ceramic",
-      "baseColor": [
-        0.7835,
-        0.7454,
-        0.6584,
-        1
+    "textures": 0,
+    "images": 0,
+    "samplers": 0,
+    "extensionsUsed": [],
+    "bytes": 334356,
+    "gzipBytes": 54757,
+    "bounds": {
+      "min": [
+        -7.3575,
+        0,
+        -6.3675
       ],
-      "roughness": 0.8500000238418579,
-      "metallic": 0
-    },
-    {
-      "name": "Hospital_Glass",
-      "baseColor": [
-        0.0685,
-        0.162,
-        0.2159,
-        1
+      "max": [
+        7.3575,
+        7.75,
+        6.3675
       ],
-      "roughness": 0.30000001192092896,
-      "metallic": 0
-    },
-    {
-      "name": "Hospital_LobbyGlass",
-      "baseColor": [
-        0.0513,
-        0.1356,
-        0.1946,
-        1
+      "size": [
+        14.715,
+        7.75,
+        12.735
       ],
-      "roughness": 0.30000001192092896,
-      "metallic": 0,
-      "emissive": [
-        0.10000000149011612,
-        0.06938717468659839,
-        0.03515326135088892
+      "centre": [
+        0,
+        3.875,
+        0
       ]
-    },
-    {
-      "name": "Hospital_Paving",
-      "baseColor": [
-        0.6105,
-        0.4621,
-        0.3278,
-        1
-      ],
-      "metallic": 0
-    },
-    {
-      "name": "Hospital_Slate",
-      "baseColor": [
-        0.15,
-        0.2122,
-        0.2502,
-        1
-      ],
-      "roughness": 0.699999988079071,
-      "metallic": 0.10000000149011612
-    },
-    {
-      "name": "Hospital_Teal",
-      "baseColor": [
-        0.0685,
-        0.2623,
-        0.2423,
-        1
-      ],
-      "roughness": 0.800000011920929,
-      "metallic": 0
-    },
-    {
-      "name": "Hospital_Terracotta",
-      "baseColor": [
-        0.3968,
-        0.1301,
-        0.0685,
-        1
-      ],
-      "roughness": 0.800000011920929,
-      "metallic": 0
     }
-  ],
-  "triangles": 6208,
-  "vertices": 12096,
-  "trianglesPerMaterial": {
-    "Hospital_Amber": 164,
-    "Hospital_Ceramic": 948,
-    "Hospital_Glass": 708,
-    "Hospital_LobbyGlass": 60,
-    "Hospital_Paving": 12,
-    "Hospital_Slate": 3836,
-    "Hospital_Teal": 420,
-    "Hospital_Terracotta": 60
   },
-  "textures": 0,
-  "bytes": 334356,
-  "gzipBytes": 54757,
-  "bounds": {
-    "min": [
-      -7.3575,
-      0,
-      -6.3675
-    ],
-    "max": [
-      7.3575,
-      7.75,
-      6.3675
-    ],
-    "size": [
-      14.715,
-      7.75,
-      12.735
-    ],
-    "centre": [
-      0,
-      3.875,
-      0
-    ]
-  },
-  "footprint": {
-    "x": 14.715,
-    "z": 12.735,
-    "matchesCollisionBox": true,
-    "collisionBoxHeight": 6.75
-  },
-  "heightNotes": {
+  "declaredContract": {
+    "status": "declared in tools/assets-a/hospital/build_hospital.py and B's layout, then checked by eye in docs/qa-captures/a-hospital (front.png, human-entrance.png, fit-footprint.png); not stored in the GLB and not recoverable from its anonymous geometry",
+    "axes": "glTF: +Y up, +Z front (entrance side), metres, scale 1. The front direction is a declaration (set by the export axes in the scripts) confirmed visually; this script cannot derive it",
+    "origin": "centre of the ground footprint, y = 0 (convention; the measured bounds are checked against it)",
+    "collisionBox": {
+      "width": 14.715,
+      "depth": 12.735,
+      "height": 6.75,
+      "basis": "hangar_roundA kit size [3.27, 1.5, 2.83] x 4.5 as footprintOf turns it; read by hand from B's committed world/src, not re-read by this script, B must confirm"
+    },
     "mainMassTop": 6.7,
-    "aboveCollisionBox": 1,
-    "what": "roof plant room, vent stacks, solar panels and the roof cross rise above 6.75 m; nothing walkable or reachable is above the collision box, and nothing projects outside the footprint"
-  },
-  "doorAnchor": {
-    "description": "centre of the glazed double doors at the back of the recessed porch",
-    "local": [
-      0,
-      0.35,
-      4.5675
-    ],
-    "approachPointOnFootprintEdge": [
-      0,
-      0,
-      6.3675
-    ]
-  },
-  "worldPlacement": {
-    "clinic": {
+    "doorAnchor": {
+      "description": "centre of the glazed double doors at the back of the recessed porch",
+      "local": [
+        0,
+        0.35,
+        4.5675
+      ],
+      "storedInGlb": false
+    },
+    "approachPointOnFootprintEdge": {
+      "local": [
+        0,
+        0,
+        6.3675
+      ],
+      "note": "the nearest point of the declared footprint to the door, on the street side; with a solid footprint box this is as close as the player can get"
+    },
+    "worldPlacement": {
       "x": 40,
       "z": -6,
       "ry": -1.5707963267948966,
-      "scale": 1
-    },
-    "doorAnchorWorld": [
-      35.4325,
-      0.35,
-      -6
-    ],
-    "faces": "world -X (toward the Santé tram stop at x = 28)"
+      "scale": 1,
+      "doorAnchorWorld": [
+        35.4325,
+        0.35,
+        -6
+      ],
+      "faces": "world -X (toward the Santé tram stop at x = 28), by calculation from the declared ry"
+    }
   },
+  "comparisons": {
+    "footprintMatchesDeclaredCollisionBox": true,
+    "allGeometryInsideDeclaredFootprint": true,
+    "measuredMaxHeight": 7.75,
+    "metresAboveDeclaredCollisionBoxHeight": 1,
+    "metresFromFootprintEdgeToDeclaredDoorAnchor": 1.8
+  },
+  "unverified": [
+    "whether the solid footprint box collider keeps the recessed door reachable from outside (it fills the porch: the door is declared 1.8 m inside the footprint edge); needs an in-city check by B",
+    "whether anything above the collision box height (plant room, vent stacks, solar panels, roof cross) or the roof itself can be reached by the player, NPCs or the tram; needs an in-city check by B",
+    "collision, shadows, frame cost, bloom and the view from the moving tram inside the real city"
+  ],
   "checks": [
     {
       "name": "one scene root named \"hospital\" (the registry key)",
@@ -206,7 +228,11 @@
       "ok": true
     },
     {
-      "name": "footprint equals the collision box exactly (14.715 x 12.735 m, tolerance 1 mm)",
+      "name": "measured footprint equals the declared collision box exactly (14.715 x 12.735 m, tolerance 1 mm)",
+      "ok": true
+    },
+    {
+      "name": "every vertex lies inside the declared footprint (nothing projects beyond it)",
       "ok": true
     },
     {
@@ -225,5 +251,6 @@
       "name": "size budget: under 400 KB raw and under 100 KB gzipped",
       "ok": true
     }
-  ]
+  ],
+  "allChecksPass": true
 }

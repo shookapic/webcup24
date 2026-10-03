@@ -1,6 +1,6 @@
 """Terra Nova, Santé district: the main clinic ("hospital"), authored from scratch, procedurally, in Blender 5.x.
 
-    blender --background --factory-startup --python tools/assets-a/hospital/build_hospital.py -- \
+    blender --background --factory-startup --python-exit-code 1 --python tools/assets-a/hospital/build_hospital.py -- \
         --out world/assets-src/a-hospital/hospital-a-v001.blend
 
 Contract (docs/ASSET_HANDOFF_A.md): model axes X right, Y up, Z = front (the entrance side), metres, origin at the centre of the
@@ -8,8 +8,16 @@ ground footprint, footprint 14.715 (X) x 12.735 (Z) = the committed hangar_round
 that footprint (so no porch, sign or window projects beyond the collision box). Roof elements may rise above 6.75 m (reported by the
 validator). One mesh per material, root object `hospital`, materials named Hospital_*. No gameplay / service / interaction data.
 
-Everything is built from tagged primitives (obj["managed"]); re-running rebuilds the same scene. It refuses to overwrite a .blend it
-did not create unless --allow-overwrite is given.
+Everything is built from tagged primitives (obj["managed"]); re-running rebuilds the same scene.
+
+File access (checked by asset_paths.py before anything is created; plain resolved-path checks, not an OS sandbox):
+  - writes exactly two files, both directly inside <checkout>/world/assets-src/a-hospital/: --out (must be hospital-a-<version>.blend)
+    and its sibling <name>.build-report.json; the checkout is derived from this file's location, never from the current directory;
+  - rejects any other directory, a nested directory, other suffixes or names, and anything that resolves outside the checkout (`..`,
+    symlinks, junctions);
+  - refuses to overwrite either output unless --allow-overwrite is given (all outputs together, nothing is written if one exists);
+  - must start from the factory scene (--factory-startup), and Blender's .blend1 backup is switched off so no third file appears.
+Blender still writes a temporary '<name>.blend@' next to the output while saving and renames it.
 """
 import argparse
 import json
@@ -17,18 +25,25 @@ import math
 import sys
 from pathlib import Path
 
-import bmesh
-import bpy
-from mathutils import Matrix, Vector
+sys.dont_write_bytecode = True                      # importing the guard must not create tools/assets-a/hospital/__pycache__
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import asset_paths  # noqa: E402
+
+import bmesh  # noqa: E402
+import bpy  # noqa: E402
+from mathutils import Matrix, Vector  # noqa: E402
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 ap = argparse.ArgumentParser()
 ap.add_argument("--out", required=True)
 ap.add_argument("--allow-overwrite", action="store_true")
 args = ap.parse_args(argv)
-OUT = Path(args.out).resolve()
-if OUT.exists() and not args.allow_overwrite:
-    raise SystemExit(f"refusing to overwrite {OUT} (bump the version or pass --allow-overwrite)")
+if bpy.data.filepath:
+    raise SystemExit(f"path guard: start from the factory scene (--factory-startup), not from the opened file {bpy.data.filepath}")
+OUT = asset_paths.output_file(args.out, asset_paths.SOURCE_DIR, ".blend", "--out")
+REPORT = asset_paths.output_file(OUT.with_suffix(".build-report.json"), asset_paths.SOURCE_DIR, ".json", "the build report (sibling of --out)")
+asset_paths.refuse_overwrite([OUT, REPORT], args.allow_overwrite)
+bpy.context.preferences.filepaths.save_version = 0       # no .blend1 backup file next to the output
 
 VERSION = 1
 FOOT_W, FOOT_D = 14.715, 12.735          # hangar_roundA [3.27, 1.5, 2.83] x 4.5 (width, depth), unrotated
@@ -296,9 +311,8 @@ def main():
     root = finish()
     report = {"status": "built", "version": VERSION, "validation": validate(root)}
     root["asset_version"] = VERSION
-    OUT.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(OUT), compress=True)
-    OUT.with_suffix(".build-report.json").write_text(json.dumps(report, indent=2) + chr(10))
+    REPORT.write_text(json.dumps(report, indent=2) + chr(10))
     print(json.dumps(report, indent=2))
 
 
