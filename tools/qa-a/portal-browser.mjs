@@ -86,7 +86,7 @@ try {
   await page.keyboard.press('ArrowDown');
   await wait(200);
   const previewText = await page.$eval('#slot-preview', (el) => el.textContent);
-  check('F39 keyboard selection shows the preview with date, hours, agent, place, preparation', /UTC\+4/.test(previewText) && previewText.includes('Agent B') && previewText.includes('Lieu'), previewText);
+  check('F39 keyboard selection shows the preview with date, hours, agent, place, preparation', /Terra Nova/.test(previewText) && previewText.includes('Agent B') && previewText.includes('Lieu'), previewText);
   await page.screenshot({ path: shots + '/01-slot-preview-desktop.png', clip: { x: 0, y: await page.$eval('#appointments-panel', (e) => e.getBoundingClientRect().top + scrollY - 20), width: 1440, height: 760 }, captureBeyondViewport: true });
   await page.type('#appointment-form [name=reason]', 'Dossier de logement');
   await page.keyboard.press('Enter');

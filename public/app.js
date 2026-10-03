@@ -54,8 +54,23 @@ async function api(path, method = 'GET', body) {
     signal: AbortSignal.timeout(10_000),
   });
   const data = await response.json();
-  if (!response.ok) throw Object.assign(new Error(translateError(data.error || 'Une erreur est survenue.')), { status: response.status, retryAfter: data.retryAfter, attemptsLeft: data.attemptsLeft });
+  if (!response.ok) throw Object.assign(new Error(translateError(data.error || 'Une erreur est survenue.')), { status: response.status, retryAfter: data.retryAfter, attemptsLeft: data.attemptsLeft, field: fieldsOf(data.error || '') });
   return data;
+}
+
+// Which form field a server message is about, so the field can be marked and focused (F42). Candidates: first one in the form wins.
+const fieldByLabel = {
+  'Le nom': ['name'], 'L’adresse e-mail': ['email'], 'Le mot de passe': ['password'], 'Le sujet': ['subject'], 'Le message': ['body', 'message'], 'Le lieu': ['location'],
+  'Le titre': ['title'], 'La description': ['description'], 'Les informations': ['details'], 'Le contenu': ['body'], 'Le quartier': ['district'],
+  'Le public concerné': ['audience'], 'Le motif': ['reason'], 'L’alternative': ['alternative'], 'Les consignes': ['instructions'],
+  'La date de retour': ['until'], 'La date ou l’heure': ['date', 'start'],
+};
+function fieldsOf(message) {
+  const range = /^(.+?) (?:doit contenir|est invalide)/.exec(message);
+  if (range && fieldByLabel[range[1]]) return fieldByLabel[range[1]];
+  if (message === 'Identifiants incorrects.' || message === 'Mot de passe incorrect.') return ['password'];
+  if (/^Adresse e-mail invalide|^Cette adresse est déjà/.test(message)) return ['email'];
+  return undefined;
 }
 
 function formValue(form, name) {
@@ -66,11 +81,53 @@ function passwordValue(form) {
   return new FormData(form).get('password')?.toString() || '';
 }
 
+// Results always start with a word or sign, never colour alone: "Erreur :" for problems, a tick for successes.
 function setFormStatus(selector, message, error = false) {
   const target = $(selector);
-  target.textContent = message;
+  target.closest('form')?.removeAttribute('aria-busy');
   target.dataset.error = String(error);
+  if (!message) {
+    target.textContent = '';
+    return;
+  }
+  const cue = element('span', 'status-cue', error ? '⚠ ' : '✓ ');
+  cue.setAttribute('aria-hidden', 'true');
+  target.replaceChildren(cue, error ? `${t('Erreur :')} ${message}` : message);
 }
+
+// A failed submission: say what is wrong, mark the exact field, tie it to the message and put focus there.
+function reportError(selector, error, message = error.message) {
+  setFormStatus(selector, message, true);
+  const status = $(selector);
+  const form = status.closest('form');
+  const name = (error.field || []).find((candidate) => form?.elements[candidate]);
+  const field = name && form.elements[name];
+  if (field?.setAttribute) {
+    field.setAttribute('aria-invalid', 'true');
+    field.setAttribute('aria-describedby', [...new Set([...(field.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean), status.id])].join(' '));
+    field.focus();
+    return;
+  }
+  status.tabIndex = -1;
+  status.focus();
+}
+document.addEventListener('input', (event) => {
+  const field = event.target;
+  if (field.getAttribute?.('aria-invalid') !== 'true') return;
+  field.removeAttribute('aria-invalid');
+  const rest = (field.getAttribute('aria-describedby') || '').split(/\s+/).filter((id) => id && !id.endsWith('-status'));
+  if (rest.length) field.setAttribute('aria-describedby', rest.join(' '));
+  else field.removeAttribute('aria-describedby');
+});
+// "Sending…" is announced as soon as a form is submitted, and the form is marked busy until the result replaces it.
+document.addEventListener('submit', (event) => {
+  const form = event.target;
+  const status = form.querySelector?.('.form-status');
+  if (!status) return;
+  form.setAttribute('aria-busy', 'true');
+  status.dataset.error = 'false';
+  status.textContent = t('Envoi en cours…');
+}, true);
 
 // Case- and accent-insensitive, so "sante" finds "Santé".
 function fold(value) {
@@ -274,7 +331,7 @@ $('#traffic-form').addEventListener('submit', async (event) => {
     setFormStatus('#traffic-status', t('Info trafic mise à jour.'));
     await loadTransports();
   } catch (error) {
-    setFormStatus('#traffic-status', error.message, true);
+    reportError('#traffic-status', error);
   }
 });
 
@@ -284,6 +341,7 @@ function renderIdentity() {
   $('#citizen-area').hidden = user?.role !== 'citizen';
   $('#staff-area').hidden = !['agent', 'admin'].includes(user?.role);
   $('#admin-area').hidden = user?.role !== 'admin';
+  for (const link of document.querySelectorAll('.admin-only')) link.hidden = user?.role !== 'admin';
   renderGuide();
   renderTips();
   renderTransports();
@@ -765,7 +823,7 @@ $('#availability-form').addEventListener('submit', async (event) => {
     form.dataset.filled = '';
     await loadServices();
   } catch (error) {
-    setFormStatus('#availability-status', error.message, true);
+    reportError('#availability-status', error);
   }
 });
 
@@ -783,7 +841,7 @@ function appointmentDetails(item) {
     box.append(term, detail);
   };
   row(t('Date'), dayOf(item.starts_at));
-  row(t('Heure'), t('de {start} à {end} (heure de Terra Nova, UTC+4)', { start: timeOf(item.starts_at), end: timeOf(item.ends_at) }));
+  row(t('Heure'), t('de {start} à {end} (heure de Terra Nova)', { start: timeOf(item.starts_at), end: timeOf(item.ends_at) }));
   row(t('Avec'), item.agent);
   row(t('Lieu'), item.location, 'fr');
   row(t('À préparer'), item.instructions, 'fr');
@@ -794,7 +852,7 @@ function appointmentDetails(item) {
 function renderSlotSelect() {
   const select = $('#appointment-slot');
   const keep = select.value;
-  select.replaceChildren(Object.assign(element('option', '', t('Choisir un créneau…')), { value: '' }));
+  select.replaceChildren(Object.assign(element('option', '', t('Choisir un horaire…')), { value: '' }));
   const groups = new Map();
   for (const slot of slots) {
     const day = slot.starts_at.slice(0, 10);
@@ -808,7 +866,7 @@ function renderSlotSelect() {
 
 function renderSlotPreview() {
   const slot = slots.find((item) => String(item.id) === $('#appointment-slot').value);
-  $('#slot-preview').replaceChildren(...(slot ? [element('h4', '', t('Vous allez réserver')), appointmentDetails(slot)] : [element('p', 'slot-empty', slots.length ? '' : t('Aucun créneau libre pour le moment. Revenez plus tard.'))]));
+  $('#slot-preview').replaceChildren(...(slot ? [element('h4', '', t('Vous allez réserver')), appointmentDetails(slot)] : [element('p', 'slot-empty', slots.length ? '' : t('Aucun horaire libre pour le moment. Revenez plus tard.'))]));
 }
 $('#appointment-slot').addEventListener('change', renderSlotPreview);
 
@@ -821,7 +879,7 @@ async function loadAppointments() {
     renderReminders();
   } catch (error) {
     if (error.status === 401) return clearIdentity();
-    setFormStatus('#appointment-status', error.message, true);
+    reportError('#appointment-status', error);
   }
 }
 
@@ -842,11 +900,11 @@ function renderMyAppointments() {
     li.append(head, appointmentDetails(item));
     if (upcoming) {
       const actions = element('div', 'appointment-actions');
-      const calendar = element('a', 'button-link', t('Ajouter à mon agenda (.ics)'));
+      const calendar = element('a', 'button-link', t('Ajouter à mon agenda (fichier calendrier)'));
       calendar.href = `/api/appointments/${item.id}/ics`;
       actions.append(calendar);
       if (pendingCancel === item.id) {
-        li.append(element('p', 'citizen-confirm', t('Annuler ce rendez-vous ? Le créneau sera proposé à d’autres habitants.')));
+        li.append(element('p', 'citizen-confirm', t('Annuler ce rendez-vous ? L’horaire sera proposé à d’autres habitants.')));
         const yes = element('button', 'citizen-danger', t('Confirmer l’annulation'));
         const no = element('button', '', t('Garder le rendez-vous'));
         yes.type = no.type = 'button';
@@ -875,10 +933,10 @@ async function cancelAppointment(item) {
     pendingCancel = null;
     $('#appointment-confirmation').hidden = true;
     await loadAppointments();
-    setFormStatus('#appointment-status', t('Rendez-vous annulé. Le créneau est de nouveau proposé.'));
+    setFormStatus('#appointment-status', t('Rendez-vous annulé. L’horaire est de nouveau proposé.'));
     $('#appointment-slot').focus();
   } catch (error) {
-    setFormStatus('#appointment-status', error.message, true);
+    reportError('#appointment-status', error);
   }
 }
 
@@ -886,8 +944,7 @@ $('#appointment-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   if (!form.elements.slot.value) {
-    setFormStatus('#appointment-status', t('Choisissez d’abord un créneau.'), true);
-    form.elements.slot.focus();
+    reportError('#appointment-status', Object.assign(new Error(t('Choisissez d’abord un horaire.')), { field: ['slot'] }));
     return;
   }
   try {
@@ -895,7 +952,7 @@ $('#appointment-form').addEventListener('submit', async (event) => {
     form.reset();
     setFormStatus('#appointment-status', '');
     const box = $('#appointment-confirmation');
-    const calendar = element('a', 'button-link', t('Ajouter à mon agenda (.ics)'));
+    const calendar = element('a', 'button-link', t('Ajouter à mon agenda (fichier calendrier)'));
     calendar.href = `/api/appointments/${appointment.id}/ics`;
     box.replaceChildren(element('h4', '', t('Rendez-vous confirmé')), appointmentDetails(appointment),
       element('p', '', t('Rappel : un message s’affichera en haut de cette page 24 h puis 1 h avant. Vous pouvez aussi l’ajouter à votre agenda.')), calendar);
@@ -903,7 +960,7 @@ $('#appointment-form').addEventListener('submit', async (event) => {
     await loadAppointments();
     box.focus();
   } catch (error) {
-    setFormStatus('#appointment-status', error.message, true);
+    reportError('#appointment-status', error);
     // Someone else may have taken the slot: show the up-to-date list so the next choice is a real one.
     if (error.status === 409) await loadAppointments();
   }
@@ -956,14 +1013,14 @@ async function loadStaffSlots() {
     renderStaffSlots();
   } catch (error) {
     if (error.status === 401) return clearIdentity();
-    setFormStatus('#slots-status', error.message, true);
+    reportError('#slots-status', error);
   }
 }
 
 function renderStaffSlots() {
   const list = $('#staff-appointments');
   list.replaceChildren();
-  if (!staffSlots.length) list.append(element('li', 'list-empty', t('Aucun créneau publié.')));
+  if (!staffSlots.length) list.append(element('li', 'list-empty', t('Aucun horaire publié.')));
   for (const item of staffSlots) {
     const li = element('li', `appointment-card status-${item.status}`);
     li.dataset.appointment = item.id;
@@ -986,7 +1043,7 @@ function renderStaffSlots() {
     } else if (booked) {
       actions.append(button(t('Annuler le rendez-vous'), () => { pendingStaffCancel = item.id; renderStaffSlots(); $(`[data-appointment="${item.id}"] .citizen-danger`).focus(); }, true));
     } else {
-      actions.append(button(t('Retirer le créneau'), () => removeSlot(item), true));
+      actions.append(button(t('Retirer l’horaire'), () => removeSlot(item), true));
     }
     li.append(actions);
     list.append(li);
@@ -998,9 +1055,9 @@ async function removeSlot(item) {
     await api(`/api/appointments/${item.id}`, 'DELETE');
     pendingStaffCancel = null;
     await loadStaffSlots();
-    setFormStatus('#slots-status', t('Créneau mis à jour.'));
+    setFormStatus('#slots-status', t('Horaire mis à jour.'));
   } catch (error) {
-    setFormStatus('#slots-status', error.message, true);
+    reportError('#slots-status', error);
   }
 }
 
@@ -1013,10 +1070,10 @@ $('#slots-form').addEventListener('submit', async (event) => {
       date: formValue(form, 'date'), start: formValue(form, 'start'), count: Number(formValue(form, 'count')), duration: Number(formValue(form, 'duration')),
       location: formValue(form, 'location'), instructions: formValue(form, 'instructions'),
     });
-    setFormStatus('#slots-status', t(created > 1 ? '{n} créneaux publiés.' : '{n} créneau publié.', { n: created }));
+    setFormStatus('#slots-status', t(created > 1 ? '{n} horaires publiés.' : '{n} horaire publié.', { n: created }));
     await loadStaffSlots();
   } catch (error) {
-    setFormStatus('#slots-status', error.message, true);
+    reportError('#slots-status', error);
   }
 });
 
@@ -1044,8 +1101,9 @@ $('#register-form').addEventListener('submit', async (event) => {
     form.reset();
     setFormStatus('#register-status', t('Compte créé. Bienvenue !'));
     await afterAuthentication(data.user);
+    $('#member-name').focus();
   } catch (error) {
-    setFormStatus('#register-status', error.message, true);
+    reportError('#register-status', error);
   }
 });
 
@@ -1058,8 +1116,9 @@ $('#login-form').addEventListener('submit', async (event) => {
     setFormStatus('#login-status', t('Connexion réussie.'));
     await afterAuthentication(data.user);
     showSecurityNotice(data.notice);
+    $('#member-name').focus();
   } catch (error) {
-    setFormStatus('#login-status', loginErrorMessage(error), true);
+    reportError('#login-status', error, loginErrorMessage(error));
     if (error.status === 429 && error.retryAfter) lockLogin(error.retryAfter);
   }
 });
@@ -1068,6 +1127,8 @@ $('#logout-button').addEventListener('click', async () => {
   try {
     await api('/api/auth/logout', 'POST');
     clearIdentity();
+    setFormStatus('#account-status', t('Vous êtes déconnecté.'));
+    $('#account-status').focus();
   } catch (error) {
     alert(error.message);
   }
@@ -1086,7 +1147,7 @@ $('#message-form').addEventListener('submit', async (event) => {
     setFormStatus('#message-status', t('{confirmation} Référence n°{id}.', { confirmation: t(data.confirmation), id: data.id }));
     await loadMessages();
   } catch (error) {
-    setFormStatus('#message-status', error.message, true);
+    reportError('#message-status', error);
   }
 });
 
@@ -1106,7 +1167,7 @@ $('#profile-form').addEventListener('submit', async (event) => {
     renderIdentity();
     setFormStatus('#profile-status', t('Profil enregistré.'));
   } catch (error) {
-    setFormStatus('#profile-status', error.message, true);
+    reportError('#profile-status', error);
   }
 });
 
@@ -1121,7 +1182,7 @@ $('#delete-form').addEventListener('submit', async (event) => {
     setFormStatus('#account-status', t('Votre compte a été supprimé. Vos données ont été effacées.'));
     $('#account-status').focus();
   } catch (error) {
-    setFormStatus('#delete-status', error.message, true);
+    reportError('#delete-status', error);
   }
 });
 
@@ -1134,7 +1195,7 @@ $('#service-form').addEventListener('submit', async (event) => {
     setFormStatus('#service-form-status', t('Service publié.'));
     await loadServices();
   } catch (error) {
-    setFormStatus('#service-form-status', error.message, true);
+    reportError('#service-form-status', error);
   }
 });
 
@@ -1147,7 +1208,7 @@ $('#news-form').addEventListener('submit', async (event) => {
     setFormStatus('#news-form-status', t('Actualité publiée.'));
     await loadNews();
   } catch (error) {
-    setFormStatus('#news-form-status', error.message, true);
+    reportError('#news-form-status', error);
   }
 });
 
@@ -1155,19 +1216,34 @@ $('#search').addEventListener('input', renderRequests);
 $('#service-search').addEventListener('input', renderServices);
 $('#refresh-button').addEventListener('click', loadFeed);
 
-let textScale = Math.min(1.5, Math.max(1, Number(preference('textScale')) || 1));
-function applyTextScale() {
+// aria-disabled, not disabled: a button that becomes disabled while focused throws keyboard focus away.
+const maxScale = 2;
+let textScale = Math.min(maxScale, Math.max(1, Number(preference('textScale')) || 1));
+const sizeStatus = Object.assign(element('span', 'visually-hidden'), { id: 'text-size-status' });
+sizeStatus.setAttribute('role', 'status');
+$('#font-up').closest('.accessibility-tools').append(sizeStatus);
+function applyTextScale(announce = false) {
   document.documentElement.style.fontSize = `${textScale * 100}%`;
   document.documentElement.style.setProperty('--text-scale', textScale);
-  $('#font-down').disabled = textScale === 1;
-  $('#font-up').disabled = textScale === 1.5;
+  $('#font-down').setAttribute('aria-disabled', String(textScale === 1));
+  $('#font-up').setAttribute('aria-disabled', String(textScale === maxScale));
+  if (announce) sizeStatus.textContent = t('Taille du texte : {n} %', { n: Math.round(textScale * 100) });
 }
-$('#font-up').addEventListener('click', () => { textScale = Math.min(1.5, textScale + 0.25); preference('textScale', textScale); applyTextScale(); });
-$('#font-down').addEventListener('click', () => { textScale = Math.max(1, textScale - 0.25); preference('textScale', textScale); applyTextScale(); });
+const changeScale = (step) => {
+  const next = Math.min(maxScale, Math.max(1, textScale + step));
+  if (next === textScale) return;
+  textScale = next;
+  preference('textScale', textScale);
+  applyTextScale(true);
+};
+$('#font-up').addEventListener('click', () => changeScale(0.25));
+$('#font-down').addEventListener('click', () => changeScale(-0.25));
 applyTextScale();
 
 function applyContrast() {
-  const enabled = preference('highContrast') === 'true';
+  // Without a choice of their own, follow the system's "more contrast" setting.
+  const stored = preference('highContrast');
+  const enabled = stored === null ? Boolean(window.matchMedia?.('(prefers-contrast: more)').matches) : stored === 'true';
   document.documentElement.dataset.contrast = enabled ? 'high' : 'normal';
   $('#contrast-toggle').setAttribute('aria-pressed', String(enabled));
 }
@@ -1219,7 +1295,7 @@ $('#lang-toggle').addEventListener('click', () => {
 });
 applyLanguage();
 
-$('#contrast-toggle').addEventListener('click', () => { preference('highContrast', String(preference('highContrast') !== 'true')); applyContrast(); });
+$('#contrast-toggle').addEventListener('click', () => { preference('highContrast', String(document.documentElement.dataset.contrast !== 'high')); applyContrast(); });
 applyContrast();
 
 setInterval(() => { loadTransports(); loadServices(); loadAppointments(); }, 60_000);

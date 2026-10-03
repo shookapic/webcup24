@@ -78,7 +78,7 @@ function serviceView(row) {
 }
 
 // F39
-const defaultInstructions = 'Présentez-vous 5 minutes avant l’heure avec une pièce d’identité et les documents liés à votre demande. En cas d’empêchement, annulez depuis votre espace pour libérer le créneau.';
+const defaultInstructions = 'Présentez-vous 5 minutes avant l’heure avec une pièce d’identité et les documents liés à votre demande. En cas d’empêchement, annulez depuis votre espace pour libérer l’horaire.';
 function appointmentView(row, now = cityNow()) {
   return {
     id: row.id, starts_at: row.starts_at, ends_at: addMinutes(row.starts_at, row.duration_min), duration_min: row.duration_min,
@@ -580,12 +580,12 @@ async function route(request, response) {
     const first = localDateTime(`${body.date}T${body.start}`, 'La date ou l’heure');
     const count = Number(body.count ?? 1);
     const duration = Number(body.duration ?? 20);
-    if (!Number.isInteger(count) || count < 1 || count > 12) fail(400, 'Le nombre de créneaux doit être compris entre 1 et 12.');
+    if (!Number.isInteger(count) || count < 1 || count > 12) fail(400, 'Le nombre de horaires doit être compris entre 1 et 12.');
     if (!Number.isInteger(duration) || duration < 10 || duration > 60) fail(400, 'La durée doit être comprise entre 10 et 60 minutes.');
     const now = cityNow();
-    if (first <= now) fail(400, 'Le premier créneau doit être dans le futur.');
-    if (first > addMinutes(now, 90 * 1440)) fail(400, 'Les créneaux ne peuvent pas être publiés plus de 90 jours à l’avance.');
-    if (addMinutes(first, count * duration).slice(0, 10) !== first.slice(0, 10)) fail(400, 'Les créneaux doivent se terminer le même jour.');
+    if (first <= now) fail(400, 'Le premier horaire doit être dans le futur.');
+    if (first > addMinutes(now, 90 * 1440)) fail(400, 'Les horaires ne peuvent pas être publiés plus de 90 jours à l’avance.');
+    if (addMinutes(first, count * duration).slice(0, 10) !== first.slice(0, 10)) fail(400, 'Les horaires doivent se terminer le même jour.');
     const location = body.location ? text(body.location, 3, 120, 'Le lieu') : 'Mairie, accueil des rendez-vous';
     const instructions = body.instructions ? text(body.instructions, 10, 500, 'Les consignes') : defaultInstructions;
     const insert = db.prepare('INSERT OR IGNORE INTO appointments (agent_id, starts_at, duration_min, location, instructions) VALUES (?, ?, ?, ?, ?)');
@@ -598,7 +598,7 @@ async function route(request, response) {
       db.exec('ROLLBACK');
       throw error;
     }
-    if (!created) fail(409, 'Ces créneaux existent déjà.');
+    if (!created) fail(409, 'Ces horaires existent déjà.');
     return sendJson(response, 201, { created });
   }
   if (path === '/api/appointments/staff' && method === 'GET') {
@@ -629,7 +629,7 @@ async function route(request, response) {
       if (user.role !== 'citizen') fail(403, 'Accès réservé.');
       const body = await readJson(request);
       const reason = body.reason ? text(body.reason, 5, 200, 'Le motif') : null;
-      const taken = 'Ce créneau n’est plus disponible. Choisissez-en un autre.';
+      const taken = 'Cet horaire n’est plus disponible. Choisissez-en un autre.';
       if (!row || row.status !== 'open' || row.starts_at <= now) fail(409, taken);
       const mine = db.prepare("SELECT starts_at, duration_min FROM appointments WHERE citizen_id = ? AND status = 'booked' AND starts_at > ?").all(user.id, now);
       if (mine.length >= 2) fail(409, 'Vous avez déjà deux rendez-vous à venir. Annulez-en un pour en réserver un autre.');

@@ -275,6 +275,90 @@ try {
   await axe(page, 'phone dialog mobile 150%', '[role=dialog]');
   await page.close();
 
+  // ---------- Wave 6 (F44, F41, F43): zoom / reflow matrix, keyboard reach of every phone action, long alert takeover ----------
+  const reflow = [
+    ['text 200 % (1280x800)', 1280, 800, {}, '200%'],
+    ['browser zoom 200 % (640x400)', 640, 400, { deviceScaleFactor: 2 }, ''],
+    ['browser zoom 400 % (320x256)', 320, 256, { deviceScaleFactor: 4 }, ''],
+    ['phone 390x844, text 200 %', 390, 844, { isMobile: true, hasTouch: true }, '200%'],
+  ];
+  for (const [label, w, h, extra, fontSize] of reflow) {
+    for (const mode of ['takeover', 'manual']) {
+      const p = await open(`?user=${mode === 'takeover' ? 40 : 41}`, w, h, extra);
+      if (mode === 'manual') {
+        await p.evaluate(() => localStorage.setItem('world-seen-alerts:41', '[2,3]'));
+        await p.reload({ waitUntil: 'networkidle0' });
+      }
+      if (fontSize) await p.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);
+      if (mode === 'manual') await p.evaluate(() => [...document.querySelectorAll('.hud-controls button')].find((b) => b.textContent.includes('Téléphone')).click());
+      await p.waitForSelector('.phone-sheet', { timeout: 8000 });
+      await wait(250);
+      const pages = mode === 'takeover' ? [null] : ['Accueil', 'Alertes', 'Actualités', 'Services', 'Transports'];
+      for (const pageName of pages) {
+        if (pageName) await clickByText(p, '.phone-nav button', pageName);
+        const m = await p.evaluate(() => {
+          const sheet = document.querySelector('.phone-sheet').getBoundingClientRect();
+          const body = document.querySelector('.phone-body');
+          const screen = document.querySelector('.phone-screen');
+          const nav = document.querySelector('.phone-nav')?.getBoundingClientRect();
+          const close = document.querySelector('.phone-close')?.getBoundingClientRect();
+          const ack = document.querySelector('.phone-ack');
+          return { vw: innerWidth, vh: innerHeight, sheet: { l: sheet.left, r: sheet.right, t: sheet.top, b: sheet.bottom }, bodyOverflowX: body.scrollWidth > body.clientWidth + 1, screenOverflowX: screen.scrollWidth > screen.clientWidth + 1, pageScrollW: document.documentElement.scrollWidth, nav: nav && { b: nav.bottom, h: nav.height }, close: close && { t: close.top, b: close.bottom, r: close.right }, hasAck: Boolean(ack), bodyH: body.clientHeight };
+        });
+        const where = `${label} / ${mode}${pageName ? ' / ' + pageName : ''}`;
+        check(`F44 phone ${where}: the dialog stays inside the screen, no horizontal overflow`, m.sheet.l >= -1 && m.sheet.r <= m.vw + 1 && m.sheet.t >= -1 && m.sheet.b <= m.vh + 1 && !m.bodyOverflowX && !m.screenOverflowX && m.pageScrollW <= m.vw + 1, JSON.stringify(m));
+        if (m.nav) check(`F44 phone ${where}: the tab bar and the Put-away button stay on screen and the content area keeps room (>= 25 % of the screen)`, m.nav.b <= m.vh + 1 && m.close && m.close.b <= m.vh && m.close.r <= m.vw + 1 && m.bodyH >= m.vh * 0.25, JSON.stringify(m));
+      }
+      // keyboard: every control in the dialog can be focused and ends up on screen
+      const reach = await p.evaluate(async () => {
+        const dialog = document.querySelector('[role=dialog]');
+        const items = [...dialog.querySelectorAll('a[href], button, input, summary, [tabindex]:not([tabindex="-1"])')].filter((e) => !e.disabled && e.getBoundingClientRect().width);
+        const bad = [];
+        for (const el of items) {
+          el.focus({ preventScroll: false });
+          await new Promise((r) => setTimeout(r, 20));
+          const r = el.getBoundingClientRect();
+          if (document.activeElement !== el || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) bad.push((el.textContent || el.tagName).trim().slice(0, 20));
+        }
+        return { total: items.length, bad };
+      });
+      check(`F41 phone ${label} / ${mode}: all ${reach.total} controls take focus and are scrolled into view`, reach.bad.length === 0, reach.bad.join(' | '));
+      if (mode === 'takeover') {
+        const ack = await p.evaluate(async () => { const b = document.querySelector('.phone-ack'); b.focus(); await new Promise((r) => setTimeout(r, 30)); const r = b.getBoundingClientRect(); return { onScreen: r.bottom <= innerHeight + 1 && r.top >= 0, h: Math.round(r.height) }; });
+        check(`F44/F41 phone ${label}: the long alert takeover keeps "I understand" reachable by keyboard and at least 44px high`, ack.onScreen && ack.h >= 44, JSON.stringify(ack));
+        await axe(p, `phone takeover ${label}`, '[role=dialog]');
+      }
+      if (label.startsWith('browser zoom 200')) await p.screenshot({ path: join(shots, `w-reflow-${mode}.png` ) });
+      await p.close();
+    }
+  }
+  // the HUD at 200 % zoom: wraps, never covers more than 60 % of the screen
+  page = await open('?user=42', 640, 400, { deviceScaleFactor: 2 });
+  await page.evaluate(() => localStorage.setItem('world-seen-alerts:42', '[2,3]'));
+  await page.reload({ waitUntil: 'networkidle0' });
+  const hudBox = await page.$eval('.world-hud', (n) => { const r = n.getBoundingClientRect(); return { h: r.height, vh: innerHeight, w: r.width, vw: innerWidth }; });
+  check('F44 HUD at browser zoom 200 %: wraps, uses <= 60 % of the screen height, no sideways overflow', hudBox.h <= hudBox.vh * 0.6 && hudBox.w <= hudBox.vw + 1, JSON.stringify(hudBox));
+  await page.close();
+  // colour is never the only cue in the phone (F43): every state has words, errors start with a word
+  page = await open('?user=43');
+  await page.evaluate(() => localStorage.setItem('world-seen-alerts:43', '[2,3]'));
+  await page.reload({ waitUntil: 'networkidle0' });
+  await clickByText(page, '.hud-controls button', 'Téléphone');
+  const cues = {};
+  for (const [pageName, selector, expectText] of [['Alertes', '.phone-badge', /Alerte/], ['Transports', '.phone-line-status', /Perturbé|Trafic normal/], ['Services', '.phone-outage p:first-child strong', /indisponible/i]]) {
+    await clickByText(page, '.phone-nav button', pageName);
+    const texts = await page.$$eval(selector, (nodes) => nodes.map((n) => n.textContent.trim()));
+    cues[pageName] = texts.length > 0 && texts.every((t) => expectText.test(t));
+  }
+  check('F43 phone: alert badges, line status and outage notices all carry words (Alerte / Perturbé / Trafic normal / indisponible)', Object.values(cues).every(Boolean), JSON.stringify(cues));
+  await control({ fail: true });
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 16_500)));
+  await clickByText(page, '.phone-nav button', 'Alertes');
+  const stale = await text(page, '.phone-body');
+  check('F43 phone: a failed refresh is said in words ("Informations enregistrées…") with a Retry button, not a colour change', stale.includes('Informations enregistrées') && (await page.$('.phone-note button')) !== null);
+  await control({ fail: false });
+  await page.close();
+
   // ---------- reduced motion + embedded host (no fixed positioning in PhoneScreen) ----------
   page = await open('?user=11&embed=1');
   await page.evaluate(() => localStorage.setItem('world-seen-alerts:11', '[2,3]'));

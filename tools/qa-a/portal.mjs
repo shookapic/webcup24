@@ -148,7 +148,7 @@ try {
   sf.elements.duration.value = '10';
   submit(staff, '#slots-form');
   await wait(800);
-  check('F39 staff UI: slots published and listed as free', $(staff, '#slots-status').textContent.includes('2 créneaux publiés') && [...doc.querySelectorAll('#staff-appointments > li')].length === 2 && doc.querySelector('#staff-appointments').textContent.includes('Libre'), $(staff, '#slots-status').textContent);
+  check('F39 staff UI: slots published and listed as free', $(staff, '#slots-status').textContent.includes('2 horaires publiés') && [...doc.querySelectorAll('#staff-appointments > li')].length === 2 && doc.querySelector('#staff-appointments').textContent.includes('Libre'), $(staff, '#slots-status').textContent);
   check('F39 staff UI: slot date picker cannot go into the past', sf.elements.date.min === new Date(Date.now() + 4 * 3600_000).toISOString().slice(0, 10));
 
   // language
@@ -201,16 +201,16 @@ try {
   const slotOptions = [...slotSelect.options].filter((o) => o.value);
   check('F39 citizen sees free slots grouped by full date with times, agent and place', slotOptions.length === 2 && slotSelect.querySelectorAll('optgroup').length >= 1 && /\d{2}:\d{2}–\d{2}:\d{2} · Agent P · /.test(slotOptions[0].textContent), slotOptions.map((o) => o.textContent).join('|'));
   submit(cit, '#appointment-form');
-  check('F39 booking without choosing a slot is refused clearly', cd.querySelector('#appointment-status').textContent.includes('Choisissez d’abord un créneau'));
+  check('F39 booking without choosing a slot is refused clearly', cd.querySelector('#appointment-status').textContent.includes('Choisissez d’abord un horaire'));
   slotSelect.value = slotOptions[0].value;
   slotSelect.dispatchEvent(new cit.window.Event('change', { bubbles: true }));
   const preview = cd.querySelector('#slot-preview').textContent;
-  check('F39 preview before confirming: date, hours with time zone, agent, place, what to prepare', preview.includes('Date') && preview.includes('UTC+4') && preview.includes('Agent P') && preview.includes('Lieu') && preview.includes('pièce d’identité'), preview);
+  check('F39 preview before confirming: date, hours with time zone, agent, place, what to prepare', preview.includes('Date') && preview.includes('heure de Terra Nova') && preview.includes('Agent P') && preview.includes('Lieu') && preview.includes('pièce d’identité'), preview);
   cd.querySelector('#appointment-form [name=reason]').value = 'Dossier de logement';
   submit(cit, '#appointment-form');
   await wait(900);
   const conf = cd.querySelector('#appointment-confirmation');
-  check('F39 confirmation shows everything and takes focus', !conf.hidden && conf.textContent.includes('Rendez-vous confirmé') && conf.textContent.includes('Dossier de logement') && conf.textContent.includes('UTC+4') && cd.activeElement === conf && conf.querySelector('a[href$="/ics"]') !== null, conf.textContent.slice(0, 200));
+  check('F39 confirmation shows everything and takes focus', !conf.hidden && conf.textContent.includes('Rendez-vous confirmé') && conf.textContent.includes('Dossier de logement') && conf.textContent.includes('heure de Terra Nova') && cd.activeElement === conf && conf.querySelector('a[href$="/ics"]') !== null, conf.textContent.slice(0, 200));
   check('F39 booked slot left the choices, appears under "Mes rendez-vous"', [...cd.querySelector('#appointment-slot').options].filter((o) => o.value).length === 1 && cd.querySelectorAll('#my-appointments > li').length === 1 && cd.querySelector('#my-appointments').textContent.includes('Confirmé'));
   const banner = cd.querySelector('#reminder-banner');
   check('F40 reminder banner appears (appointment within 24 h), polite live region, links to the details', !banner.hidden && banner.getAttribute('role') === 'status' && banner.textContent.includes('Rappel') && banner.textContent.includes('moins d’une heure') === false && banner.textContent.includes('Rendez-vous dans moins de 24 h') && banner.querySelector('a[href="#appointments-panel"]') !== null, banner.textContent);

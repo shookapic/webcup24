@@ -1,6 +1,6 @@
 # Session A — QA and handoff
 
-Updated 2026-10-03 (H+7h). Scope: A0 scope ledger, A1 phone/HUD/data hook, A2 portal citizen features (F33–F35), A3 delivery, and Wave 5 (F37–F40). Wave 6 (D13, D20, F41–F44) arrived at 15:25 and has **not been started**; see the end.
+Updated 2026-10-03 (H+7h30). Scope: A0 scope ledger, A1 phone/HUD/data hook, A2 portal citizen features (F33–F35), A3 delivery, Wave 5 (F37–F40) and Wave 6 accessibility (D13, D20, F41–F44, delivered as its own commit, see the end).
 
 ## Where the work is
 
@@ -84,6 +84,44 @@ Screenshots: `SHOTS_DIR` (default the OS temp folder) — `p0*` production, `w*`
 - Appointments: max 2 upcoming per citizen, no overlap, slots end the same day, ≤ 90 days ahead, 10–60 min each.
 - jsdom, puppeteer-core and axe-core are **not** project dependencies (`package.json` is B's): `npm i --no-save jsdom puppeteer-core axe-core`.
 
-## Wave 6 (arrived 15:25, H+7h00): not started
+## Wave 6 — accessibility (D13, D20, F41, F42, F43, F44)
 
-D13 plain wording (310), D20 inclusive use (930), F41 keyboard-only (620), F42 forms/errors with assistive tech (930), F43 colour distinction (310), F44 zoom without breaking layout (620): 3,720 XP, all accessibility, all portal-shaped, so A by default. Groundwork already in place: `portal-browser.mjs` (axe + keyboard + 150 % + 390 px) is the regression net. Watcher restarted (`npm run watch-api -- --exit-on-new`, one per machine); next wave expected at H+8h.
+Audit first, then fix. `tools/qa-a/a11y-browser.mjs` (real Chrome + axe, new) was run against the existing portal before any change: **37 failures**. Roughly a third were harness mistakes (smooth scrolling, Tab starting point, date inputs with several Tab stops, a forced-colors API puppeteer lacks); the rest were real and are fixed. It now passes (91 checks), so it can fail and does.
+
+### What the audit found and what changed
+| Finding (measured) | Fix |
+|---|---|
+| Skip link moved the page but not keyboard focus (`main` could not take focus) | `main tabindex="-1"` |
+| Focus ring teal on the light news block: 1.18 : 1 | ring colour per section; yellow in high contrast |
+| 38–53 Tab presses to reach the appointment, message, profile and staff forms | "Dans mon espace" / "Dans l'espace agent" jump links with focusable targets: 13–16 keystrokes (header link + jump links) |
+| Wrong password: no field marked, no cue, focus not on the field | errors start with "⚠ Erreur :", mark the field (`aria-invalid`, `aria-describedby`), move focus to it; mark clears on edit |
+| Server-side rejection of a report: generic message, focus lost | server message mapped to the exact field (name, e-mail, subject, body, location, reason, dates…) |
+| No sending state | "Envoi en cours…" + `aria-busy` until the result replaces it |
+| Focus fell to `<body>` after sign-in and sign-out | focus moved to the personal space / the "signed out" message |
+| Text links 15–17 px high (WCAG 2.5.8 needs 24) | 44 px for nav, breadcrumb, footer and hero links; search input is a full-size target |
+| Text-size control stopped at 150 %; disabling the button threw focus away | up to 200 %, `aria-disabled`, size announced |
+| 320 px and 200 % text on a phone: header/hero/fieldset overflowed, fixed header height | wrapping header, `min-width:0`, fieldset fix, 16 px gutters, sticky bars capped |
+| Jargon: "créneau", "UTC+4", ".ics" | "horaire", "heure de Terra Nova", "fichier calendrier"; 11-term "Les mots expliqués simplement" list (FR/EN) linked from header, footer and breadcrumb |
+| Required fields only known to the browser | "(obligatoire)" / "(required)" added to the label by CSS |
+| Colour-only cues | every status already had words; errors/successes now carry "⚠ Erreur :" / "✓"; forced-colors rules; the system "more contrast" setting switches high contrast on by itself |
+| `matchMedia` missing in some environments aborted the whole script | guarded |
+Also found by running the other suites: my word swap produced "le horaire"; agreement and elision fixed everywhere (`l'horaire`, `cet horaire`).
+
+### Evidence (2026-10-03, local, Chrome headless unless noted)
+| Command | Checks |
+|---|---|
+| `node tools/qa-a/a11y-browser.mjs` | 91 PASS: keyboard reach and order, focus-ring contrast, skip link, sign-in by keyboard, accessibility tree (landmarks, one h1, names), form errors/busy/required, 24 px targets, status cues, jargon and glossary, zoom/reflow matrix (100 %, text 200 %, browser zoom 200 % and 400 %, phone 390 px at text 200 %, citizen and staff), forced-colors, "more contrast" |
+| `node tools/qa-a/world-browser.mjs` | 113 PASS, now including the phone dialog, long alert takeover, tab bar and Put-away at the same zoom matrix; every dialog control takes focus and scrolls into view; words on every status |
+| `node tools/smoke-a.mjs`, `portal.mjs`, `world-ui.mjs`, `portal-browser.mjs`, `world-production.mjs` | 104, 60, 75, 15, 15 PASS (no regression; the production run builds and Node-serves `/monde/` with B's `App.jsx`) |
+Screenshots in `SHOTS_DIR`: `a11y-*` (zoom matrix, four colour-vision simulations, forced colours), `w-reflow-*`.
+
+### Not verified, not claimed
+- **No real assistive technology** (NVDA, JAWS, VoiceOver, TalkBack, switch, voice control) was used. The tests check the DOM, the accessibility tree Chrome exposes, focus movement and axe; what a screen reader actually says is UNVERIFIED. D20, F42 and D13 are therefore PARTIAL.
+- **Plain language (D13) is a judgement.** Vocabulary was replaced and a glossary added; nobody has read it who finds the platform hard to understand.
+- The official requests name no zoom percentage; 200 % text and 400 % browser zoom are my operational targets.
+- Other browsers (Firefox, Safari), real touch devices and real high-contrast Windows mode: UNVERIFIED (forced-colors was emulated).
+- Alert, service and news *content* written by staff or seeded earlier (long sentences with several instructions) was not rewritten; the sentence-length heuristic is applied to interface text only.
+- B's world (canvas, game controls, mobile input) is not covered: the 3D scene is `aria-hidden` with the portal as the accessible route. At 400 % zoom the HUD wraps over a large part of the screen; nobody plays a 3D game there. No B-owned file needed changing for this wave.
+
+### Next
+Watcher still running (one per machine). `sessionA-work` has not been pushed or merged; that is a separate checkpoint.

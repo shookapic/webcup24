@@ -310,3 +310,59 @@ html[data-contrast=high] .availability-badge,html[data-contrast=high] .appointme
 @media(max-width:620px){.reminder-banner{padding:12px 16px}.appointment-details{grid-template-columns:1fr}.appointment-details dt{margin-top:6px}}
 html{scroll-padding-top:5rem}
 .availability-form{max-width:560px}
+/* ===== Wave 6: D13 plain words, D20 / F41 keyboard, F42 forms, F43 colour, F44 zoom ===== */
+[tabindex="-1"]:focus{outline:none}
+/* the light news block: the teal ring was 1.2:1 there */
+.requests-section :focus-visible{outline-color:#0b4f4a}
+html[data-contrast=high] :focus-visible{outline-color:#ffeb00}
+html[data-contrast=high] .requests-section :focus-visible{outline-color:#ffeb00}
+[aria-disabled=true]{opacity:.5;cursor:default}
+/* targets of at least 44px for text links, and a search input that is itself a full-size target */
+.site-header nav a,.account-link,.breadcrumb a,.text-link,.site-footer a,.jump-nav a,.hero-actions .text-link{display:inline-flex;align-items:center;min-height:44px}
+.breadcrumb span{display:inline-flex;align-items:center;min-height:44px}
+.search-field input{min-height:44px}
+.site-header{height:auto;min-height:94px;flex-wrap:wrap;row-gap:10px;padding-top:12px;padding-bottom:12px}
+.site-header nav{flex-wrap:wrap;gap:0 24px}
+.header-tools,.accessibility-tools{flex-wrap:wrap}
+.hero-copy,.hero-copy *{min-width:0;overflow-wrap:anywhere}
+.site-footer{flex-wrap:wrap;gap:4px 24px}
+/* keyboard: jump links inside the personal and staff spaces */
+.jump-nav{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.jump-nav a{padding:0 14px;border:1px solid #70e7d477;border-radius:3px;color:#70e7d4;font-size:.8125rem;font-weight:700;text-decoration:none}
+.jump-nav a:hover{background:#70e7d41a}
+.jump-nav a[hidden]{display:none}
+/* plain words */
+.glossary-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr));gap:14px;margin:0}
+.glossary-list>div{padding:16px;border:1px solid #ffffff27;background:#10243b}
+.glossary-list dt{margin:0 0 6px;font-weight:800}
+.glossary-list dd{margin:0;font-size:.875rem;line-height:1.6;color:#d1e2e7}
+/* forms: groups, required fields said in words, result cues */
+.plain-fieldset{margin:14px 0;padding:6px 14px 10px;border:1px solid #ffffff27}
+.plain-fieldset legend{padding:0 6px;font-size:.8125rem;font-weight:700}
+.plain-fieldset[hidden]{display:none}
+label:has(:required)::after{content:" (obligatoire)";color:#a8c1ca;font-weight:500}
+html[lang=en] label:has(:required)::after{content:" (required)"}
+.form-status .status-cue{font-weight:800}
+[aria-invalid=true]{border-color:#ffb8a1 !important;outline:2px solid #ffb8a1;outline-offset:1px}
+.panel input[aria-invalid=true],.panel select[aria-invalid=true],.panel textarea[aria-invalid=true]{border-width:2px}
+html[data-contrast=high] [aria-invalid=true]{border-color:#ffeb00 !important;outline-color:#ffeb00}
+html[data-contrast=high] .glossary-list>div{background:#000;border-color:#fff}
+html[data-contrast=high] .glossary-list dd{color:#fff}
+html[data-contrast=high] .jump-nav a{color:#ffeb00;border-color:#ffeb00}
+/* Windows high-contrast and other forced colours: keep borders and focus the system way */
+@media (forced-colors:active){
+  button,.button,.button-link,.jump-nav a,select,input,textarea{border:1px solid ButtonText}
+  :focus-visible{outline:3px solid Highlight}
+  .availability-badge,.appointment-state,.citizen-state,.message-status{border:1px solid CanvasText}
+}
+/* zoom and narrow screens: nothing wider than the screen, bars never eat the page */
+@media(max-height:520px){.reminder-banner{position:static}}
+@media(max-width:620px){
+  .site-header,.hero,.overview,.requests-section,.site-footer{padding-left:16px;padding-right:16px}
+  .hero h1{font-size:clamp(2rem,9vw,3rem)}
+  .site-header nav{gap:0 16px}
+}
+fieldset{min-width:0}
+@media (forced-colors:active){
+  .panel button,.panel .button,.panel .button-link,.panel select,.panel input,.panel textarea,.button,button{border:1px solid ButtonText !important}
+}

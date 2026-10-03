@@ -20,7 +20,7 @@
         <span class="brand-mark" aria-hidden="true"><span></span></span>
         <span class="brand-name">TERRA <strong>NOVA</strong><small>LE PORTAIL DE LA CITÉ</small></span>
       </a>
-      <nav aria-label="Navigation principale"><a href="#services">Services</a><a href="#transports">Transports</a><a href="#actualites">Actualités</a><a href="#espace">Mon espace</a></nav>
+      <nav aria-label="Navigation principale"><a href="#services">Services</a><a href="#transports">Transports</a><a href="#actualites">Actualités</a><a href="#espace">Mon espace</a><a href="#mots">Mots simples</a></nav>
       <div class="header-tools">
         <button id="lang-toggle" class="lang-toggle" type="button" lang="en">English</button>
         <div class="accessibility-tools" role="group" aria-label="Options d’affichage">
@@ -32,7 +32,7 @@
       </div>
     </header>
 
-    <main id="contenu">
+    <main id="contenu" tabindex="-1">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
           <span class="eyebrow"><span class="eyebrow-line"></span> PREMIÈRE CITÉ D’UN NOUVEAU MONDE</span>
@@ -96,6 +96,7 @@
           <div id="security-notice" class="security-notice" role="alert" hidden><p id="security-notice-text" data-content></p><button id="security-notice-dismiss" type="button">J’ai compris</button></div>
           <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name" tabindex="-1" data-content></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
           <div id="citizen-area" hidden>
+            <nav class="jump-nav" aria-label="Dans mon espace"><a href="#message-form">Écrire à la ville</a><a href="#appointments-panel">Rendez-vous</a><a href="#profile-form">Mon profil</a><a href="#delete-form">Supprimer mon compte</a></nav>
             <section id="guide" class="panel guide" aria-labelledby="guide-title" hidden>
               <h3 id="guide-title">Bienvenue ! Vos premiers pas</h3>
               <p>Trois étapes pour bien démarrer sur le portail de Terra Nova.</p>
@@ -107,7 +108,7 @@
               <button id="guide-dismiss" type="button">J’ai compris, masquer le guide</button>
             </section>
             <div class="workspace-grid">
-              <form id="message-form" class="panel">
+              <form id="message-form" class="panel" tabindex="-1">
                 <h3>Contacter ou signaler</h3><p>Posez une question ou signalez un problème dans la ville. Vous recevrez une confirmation et pourrez suivre son état ici.</p>
                 <div id="tip-message" class="tip-slot" role="status"></div>
                 <label>Type de demande <select name="kind" id="message-kind"><option value="contact">Question aux services municipaux</option><option value="incident">Signaler un problème</option></select></label>
@@ -122,22 +123,22 @@
               </form>
               <div class="panel"><h3>Mes messages</h3><p>Suivez les réponses de la ville.</p><div id="citizen-messages" class="message-list" data-content></div></div>
             </div>
-            <section id="appointments-panel" class="panel appointments-panel" aria-labelledby="appointments-title">
+            <section id="appointments-panel" class="panel appointments-panel" aria-labelledby="appointments-title" tabindex="-1">
               <h3 id="appointments-title">Rendez-vous avec un agent</h3>
-              <p>Choisissez un créneau libre : vous voyez la date complète, l’heure de début et de fin, le lieu et ce qu’il faut préparer avant de confirmer. Les heures sont celles de Terra Nova (UTC+4).</p>
+              <p>Choisissez un horaire libre. Vous voyez la date, l’heure de début et de fin, le lieu et ce qu’il faut apporter, avant de confirmer. Les heures sont celles de Terra Nova.</p>
               <form id="appointment-form">
-                <label>Créneau disponible <select name="slot" id="appointment-slot" required><option value="">Choisir un créneau…</option></select></label>
+                <label>Horaire disponible <select name="slot" id="appointment-slot" required><option value="">Choisir un horaire…</option></select></label>
                 <div id="slot-preview" class="slot-preview" aria-live="polite" data-content></div>
                 <label>Motif du rendez-vous (facultatif) <input name="reason" type="text" minlength="5" maxlength="200" placeholder="Ex. Dossier de logement"></label>
-                <button class="button button-primary" type="submit">Réserver ce créneau</button>
+                <button class="button button-primary" type="submit">Réserver cet horaire</button>
                 <p id="appointment-status" class="form-status" role="status" aria-live="polite"></p>
               </form>
               <div id="appointment-confirmation" class="appointment-confirmation" role="status" tabindex="-1" data-content hidden></div>
               <h4 id="my-appointments-title">Mes rendez-vous</h4>
-              <p class="reminder-help">Un rappel s’affiche en haut de cette page dès 24 h avant le rendez-vous, puis 1 h avant. Activez les alertes du navigateur (section Actualités) pour être prévenu même sans regarder la page, et ajoutez le rendez-vous à votre agenda : le fichier contient deux alarmes.</p>
+              <p class="reminder-help">Un rappel apparaît en haut de cette page 24 h avant le rendez-vous, puis 1 h avant. Pour être prévenu même sans regarder la page, activez les alertes (section Actualités). Vous pouvez aussi ajouter le rendez-vous à votre agenda : deux alarmes sont prévues.</p>
               <ul id="my-appointments" class="appointment-list" aria-labelledby="my-appointments-title" data-content></ul>
             </section>
-            <form id="profile-form" class="panel profile-form">
+            <form id="profile-form" class="panel profile-form" tabindex="-1">
               <h3>Mon profil</h3><p>Ces informations aident la ville à vous adresser les annonces qui vous concernent.</p>
               <label>Nom affiché <input name="name" type="text" autocomplete="name" required minlength="2" maxlength="80"></label>
               <label>Quartier <input name="district" type="text" list="districts" minlength="2" maxlength="80" placeholder="Ex. Quartier sud"></label>
@@ -145,7 +146,7 @@
               <button class="button button-primary" type="submit">Enregistrer mon profil</button>
               <p id="profile-status" class="form-status" role="status" aria-live="polite"></p>
             </form>
-            <form id="delete-form" class="panel delete-form">
+            <form id="delete-form" class="panel delete-form" tabindex="-1">
               <h3>Supprimer mon compte</h3><p>Votre compte, vos messages et vos signalements seront définitivement supprimés. Cette action est irréversible.</p>
               <label>Confirmez avec votre mot de passe <input name="password" type="password" autocomplete="current-password" required></label>
               <button class="button danger-button" type="submit">Supprimer définitivement mon compte</button>
@@ -154,12 +155,13 @@
           </div>
 
           <div id="staff-area" hidden>
+            <nav class="jump-nav" aria-label="Dans l’espace agent"><a href="#staff-messages-panel">Messages</a><a href="#traffic-form">Info trafic</a><a href="#availability-form">Disponibilité des services</a><a href="#slots-panel">Horaires de rendez-vous</a><a href="#security-panel">Sécurité</a><a href="#citizens-panel">Comptes des habitants</a><a href="#feed-panel">Demandes du concours</a><a class="admin-only" href="#service-form" hidden>Ajouter un service</a><a class="admin-only" href="#news-form" hidden>Publier une actualité</a></nav>
             <div class="section-heading staff-heading"><div><span class="section-kicker">ESPACE AGENT</span><h3>Suivi de l’activité</h3></div><p>Demandes citoyennes et flux officiel, dans un espace réservé aux agents.</p></div>
             <div class="workspace-grid">
-              <div class="panel"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p><div id="staff-messages" class="message-list" data-content></div></div>
+              <div class="panel" id="staff-messages-panel" tabindex="-1"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p><div id="staff-messages" class="message-list" data-content></div></div>
               <div class="panel"><div class="panel-title-row"><h3>Flux officiel Terra Nova</h3><button id="refresh-button" type="button">Actualiser ↻</button></div><p id="feed-status" role="status" aria-live="polite">Connexion au flux…</p><div class="mini-stats"><span id="visible-count">— demandes</span><span id="current-wave">Vague —</span><span id="next-wave">Prochaine vague —</span></div></div>
             </div>
-            <form id="traffic-form" class="panel traffic-form">
+            <form id="traffic-form" class="panel traffic-form" tabindex="-1">
               <h3>Info trafic</h3><p>Signalez une perturbation : elle s’affiche aussitôt dans le portail et dans le monde 3D.</p>
               <label>Ligne <select name="code" data-content></select></label>
               <label>État <select name="status"><option value="normal">Trafic normal</option><option value="perturbé">Perturbé</option></select></label>
@@ -167,57 +169,75 @@
               <button class="button button-primary" type="submit">Mettre à jour l’info trafic</button>
               <p id="traffic-status" class="form-status" role="status" aria-live="polite"></p>
             </form>
-            <form id="availability-form" class="panel availability-form">
+            <form id="availability-form" class="panel availability-form" tabindex="-1">
               <h3>Disponibilité des services</h3><p>Signalez qu’un service est interrompu : les habitants le voient avant de commencer une démarche, avec le motif, la reprise prévue et quoi faire en attendant.</p>
               <label>Service <select name="service" id="availability-service" required data-content></select></label>
               <label>État <select name="availability"><option value="available">Disponible</option><option value="unavailable">Indisponible</option></select></label>
-              <div id="availability-details">
+              <fieldset id="availability-details" class="plain-fieldset">
+                <legend>Détails de l’interruption</legend>
                 <label>Motif (visible par les habitants) <input name="reason" minlength="5" maxlength="200" placeholder="Ex. Maintenance du système de rendez-vous"></label>
                 <label>Motif en anglais (facultatif) <input name="reason_en" minlength="5" maxlength="200"></label>
                 <label>Reprise prévue, heure de Terra Nova (facultatif) <input name="until" type="datetime-local"></label>
                 <label>Que faire en attendant (facultatif) <input name="alternative" minlength="5" maxlength="200" placeholder="Ex. Écrivez aux services depuis votre espace"></label>
                 <label>Que faire en attendant, en anglais (facultatif) <input name="alternative_en" minlength="5" maxlength="200"></label>
-              </div>
+              </fieldset>
               <button class="button button-primary" type="submit">Enregistrer la disponibilité</button>
               <p id="availability-status" class="form-status" role="status" aria-live="polite"></p>
             </form>
-            <section id="slots-panel" class="panel slots-panel" aria-labelledby="slots-title">
-              <h3 id="slots-title">Créneaux de rendez-vous</h3><p>Publiez des créneaux consécutifs. Les habitants les réservent depuis leur espace ; un créneau pris disparaît de la liste.</p>
+            <section id="slots-panel" class="panel slots-panel" aria-labelledby="slots-title" tabindex="-1">
+              <h3 id="slots-title">Horaires de rendez-vous</h3><p>Publiez des horaires de rendez-vous qui se suivent. Les habitants les réservent depuis leur espace. Un horaire pris disparaît de la liste.</p>
               <form id="slots-form">
                 <label>Date <input name="date" type="date" required></label>
                 <label>Heure de début <input name="start" type="time" required></label>
-                <label>Nombre de créneaux (1 à 12) <input name="count" type="number" min="1" max="12" value="4" required></label>
-                <label>Durée d’un créneau, en minutes (10 à 60) <input name="duration" type="number" min="10" max="60" value="20" required></label>
+                <label>Nombre de horaires (1 à 12) <input name="count" type="number" min="1" max="12" value="4" required></label>
+                <label>Durée d’un horaire, en minutes (10 à 60) <input name="duration" type="number" min="10" max="60" value="20" required></label>
                 <label>Lieu <input name="location" minlength="3" maxlength="120" placeholder="Mairie, accueil des rendez-vous"></label>
                 <label>Consignes pour l’habitant (facultatif) <textarea name="instructions" rows="3" minlength="10" maxlength="500" placeholder="Ex. Apportez une pièce d’identité et votre dossier."></textarea></label>
-                <button class="button button-primary" type="submit">Publier les créneaux</button>
+                <button class="button button-primary" type="submit">Publier les horaires</button>
                 <p id="slots-status" class="form-status" role="status" aria-live="polite"></p>
               </form>
               <ul id="staff-appointments" class="appointment-list" aria-labelledby="slots-title" data-content></ul>
             </section>
-            <section id="security-panel" class="panel security-panel" aria-labelledby="security-title">
+            <section id="security-panel" class="panel security-panel" aria-labelledby="security-title" tabindex="-1">
               <h3 id="security-title">Sécurité des connexions</h3><p>Tentatives de connexion échouées ou bloquées sur les 15 dernières minutes. Après 5 erreurs depuis une même adresse, 20 sur un même compte ou 40 depuis une même adresse, la connexion est suspendue.</p>
               <p id="security-summary" class="security-summary" role="status" data-content></p>
               <ul id="security-targets" class="security-targets" data-content></ul>
             </section>
-            <section id="citizens-panel" class="panel citizens-panel" aria-labelledby="citizens-title">
+            <section id="citizens-panel" class="panel citizens-panel" aria-labelledby="citizens-title" tabindex="-1">
               <h3 id="citizens-title">Comptes des habitants</h3><p>Désactivez, réactivez, réinitialisez le mot de passe ou supprimez le compte d’un habitant. Les comptes du personnel ne sont pas modifiables ici.</p>
               <label>Rechercher un habitant <input id="citizen-search" type="search" maxlength="80" placeholder="Nom ou adresse e-mail" autocomplete="off"></label>
               <p id="citizens-status" class="form-status" role="status" aria-live="polite"></p>
               <div id="citizens-secret" class="citizen-secret" role="status" tabindex="-1" hidden></div>
               <ul id="citizens-list" class="citizen-list" data-content></ul>
             </section>
-            <div class="feed-panel"><div class="section-heading"><div><span class="section-kicker">BESOINS PUBLIÉS</span><h3>Demandes du concours</h3></div><p>Seules les demandes déjà diffusées figurent ici.</p></div><label class="search-field"><span class="visually-hidden">Rechercher dans les demandes officielles</span><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Rechercher un besoin ou un code…"></label><div id="requests-list" class="requests-grid" data-content></div><p id="requests-empty" class="section-status"></p></div>
+            <div class="feed-panel" id="feed-panel" tabindex="-1"><div class="section-heading"><div><span class="section-kicker">BESOINS PUBLIÉS</span><h3>Demandes du concours</h3></div><p>Seules les demandes déjà diffusées figurent ici.</p></div><label class="search-field"><span class="visually-hidden">Rechercher dans les demandes officielles</span><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Rechercher un besoin ou un code…"></label><div id="requests-list" class="requests-grid" data-content></div><p id="requests-empty" class="section-status"></p></div>
           </div>
 
           <div id="admin-area" class="admin-grid" hidden>
-            <form id="service-form" class="panel"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="100"></label><label>Résumé en anglais (facultatif) <input name="description_en" minlength="5" maxlength="180"></label><label>Informations utiles en anglais (facultatif) <textarea name="details_en" minlength="10" maxlength="2000" rows="4"></textarea></label><label class="check-field"><input name="featured" type="checkbox"> Mettre en avant (affiché en premier)</label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
-            <form id="news-form" class="panel"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="120"></label><label>Contenu en anglais (facultatif) <textarea name="body_en" minlength="10" maxlength="4000" rows="4"></textarea></label><label>Public concerné <input name="audience" list="audiences" minlength="2" maxlength="80" placeholder="Tous"></label><datalist id="audiences"><option value="Tous"></option><option value="Quartier sud"></option><option value="Personnes vulnérables"></option></datalist><label class="check-field"><input name="urgent" type="checkbox"> Alerte urgente : afficher en bandeau sur toutes les pages et notifier les habitants</label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <form id="service-form" class="panel" tabindex="-1"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="100"></label><label>Résumé en anglais (facultatif) <input name="description_en" minlength="5" maxlength="180"></label><label>Informations utiles en anglais (facultatif) <textarea name="details_en" minlength="10" maxlength="2000" rows="4"></textarea></label><label class="check-field"><input name="featured" type="checkbox"> Mettre en avant (affiché en premier)</label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <form id="news-form" class="panel" tabindex="-1"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="120"></label><label>Contenu en anglais (facultatif) <textarea name="body_en" minlength="10" maxlength="4000" rows="4"></textarea></label><label>Public concerné <input name="audience" list="audiences" minlength="2" maxlength="80" placeholder="Tous"></label><datalist id="audiences"><option value="Tous"></option><option value="Quartier sud"></option><option value="Personnes vulnérables"></option></datalist><label class="check-field"><input name="urgent" type="checkbox"> Alerte urgente : afficher en bandeau sur toutes les pages et notifier les habitants</label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
           </div>
         </div>
       </section>
+      <section class="overview glossary" id="mots" aria-labelledby="mots-title" tabindex="-1">
+        <nav class="breadcrumb" aria-label="Fil d’Ariane des mots expliqués"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Mots simples</span></nav>
+        <div class="section-heading"><div><span class="section-kicker">05 / COMPRENDRE</span><h2 id="mots-title">Les mots expliqués simplement</h2></div><p>Un mot n’est pas clair ? Voici ce qu’il veut dire sur ce site.</p></div>
+        <dl class="glossary-list">
+          <div><dt>Démarche</dt><dd>Ce que vous faites pour obtenir quelque chose de la ville : une demande, un signalement ou un rendez-vous.</dd></div>
+          <div><dt>Signalement</dt><dd>Un message pour dire qu’un problème existe dans la ville, par exemple un lampadaire cassé. Vous indiquez l’endroit.</dd></div>
+          <div><dt>Alerte</dt><dd>Une information urgente qui demande d’agir tout de suite. Elle apparaît en haut de chaque page.</dd></div>
+          <div><dt>Public concerné</dt><dd>Les personnes à qui une annonce s’adresse : tout le monde, un quartier ou les personnes fragiles.</dd></div>
+          <div><dt>Quartier</dt><dd>La partie de la ville où vous habitez. Il sert à vous montrer l’arrêt de tram le plus utile.</dd></div>
+          <div><dt>Horaire de rendez-vous</dt><dd>Un jour et une heure où un agent peut vous recevoir. Les heures sont celles de Terra Nova.</dd></div>
+          <div><dt>Service indisponible</dt><dd>Un service qui ne marche pas pour le moment. Nous disons pourquoi, quand il revient et quoi faire en attendant.</dd></div>
+          <div><dt>Trafic perturbé</dt><dd>Les trams roulent avec du retard ou ne passent pas comme prévu.</dd></div>
+          <div><dt>Pause de sécurité</dt><dd>Après plusieurs erreurs de mot de passe, la connexion s’arrête quelques minutes pour protéger votre compte.</dd></div>
+          <div><dt>Rappel</dt><dd>Un message qui vous prévient avant un rendez-vous.</dd></div>
+          <div><dt>À la une</dt><dd>Les services les plus utiles, placés en premier.</dd></div>
+        </dl>
+      </section>
     </main>
 
-    <footer class="site-footer"><span>TERRA <strong>NOVA</strong></span><span>Une cité qui grandit avec ses habitants.</span><a href="#haut">Retour en haut ↑</a></footer>
+    <footer class="site-footer"><span>TERRA <strong>NOVA</strong></span><span>Une cité qui grandit avec ses habitants.</span><a href="#mots">Mots simples</a><a href="#haut">Retour en haut ↑</a></footer>
   </body>
 </html>
