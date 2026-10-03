@@ -1,3 +1,6 @@
 html, body, #root { margin: 0; height: 100%; background: #0b0614; color: #fff; font-family: system-ui, sans-serif; }
 .accessible-link { position: fixed; top: 1rem; left: 1rem; padding: 0.5rem 0.75rem; background: #fff; color: #0b0614; border-radius: 0.5rem; font-weight: 600; }
 .accessible-link:focus-visible { outline: 3px solid #ff4fa3; outline-offset: 2px; }
+.district-label { padding: 0.2rem 0.6rem; border-radius: 999px; background: rgb(11 6 20 / 0.7); border: 1px solid #ff4fa3; font-size: 14px; font-weight: 600; white-space: nowrap; pointer-events: none; }
+.labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.labels .district-label { position: absolute; top: 0; left: 0; }

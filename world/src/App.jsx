@@ -1,28 +1,25 @@
-import { useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
+import { Sky } from './Sky.jsx';
+import { City } from './City.jsx';
+import { LabelLayer, LabelProjector } from './Labels.jsx';
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-function Planet() {
-  const mesh = useRef();
-  useFrame((_, delta) => { if (!reducedMotion) mesh.current.rotation.y += delta * 0.1; });
-  return (
-    <mesh ref={mesh}>
-      <sphereGeometry args={[1.5, 64, 64]} />
-      <meshStandardMaterial color="#c4582f" roughness={0.9} />
-    </mesh>
-  );
-}
 
 export function App() {
   return (
     <>
-      <Canvas aria-hidden="true" dpr={[1, 1.5]} camera={{ position: [0, 0, 5] }}>
-        <color attach="background" args={['#0b0614']} />
-        <ambientLight intensity={0.2} />
-        <directionalLight position={[5, 3, 5]} intensity={2} />
-        <Planet />
+      <Canvas aria-hidden="true" dpr={[1, 1.5]} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
+        <fog attach="fog" args={['#5a2238', 70, 230]} />
+        <hemisphereLight args={['#ffb38a', '#3a1424', 0.6]} />
+        <directionalLight position={[60, 40, 50]} intensity={2.2} color="#ffd9b8" />
+        <Sky reducedMotion={reducedMotion} />
+        <City />
+        <LabelProjector />
+        {/* ponytail: orbit camera until the player controller (task 3) lands */}
+        <OrbitControls target={[0, 4, 0]} maxPolarAngle={1.45} minDistance={15} maxDistance={140} autoRotate={!reducedMotion} autoRotateSpeed={0.3} />
       </Canvas>
+      <LabelLayer />
       <a className="accessible-link" href="/">Version accessible</a>
     </>
   );
