@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Sky } from './Sky.jsx';
@@ -6,6 +6,7 @@ import { City, Ground, Rocks } from './City.jsx';
 import { LabelLayer, LabelProjector } from './Labels.jsx';
 import { AvatarEditor } from './AvatarEditor.jsx';
 import { Npcs } from './Npcs.jsx';
+import { Phone, useAnnouncements } from './Phone.jsx';
 import { defaultAvatar } from './Avatar.jsx';
 import { api } from './api.js';
 
@@ -18,6 +19,24 @@ export function App() {
   const [view, setView] = useState('tps');
   const [avatar, setAvatar] = useState(defaultAvatar);
   const [editing, setEditing] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const { announcements, unseen, acknowledge } = useAnnouncements();
+  const viewBeforeAlert = useRef('tps');
+  const alerting = unseen.length > 0;
+
+  // A new urgent broadcast switches to first person and holds the phone up in front of the player.
+  useEffect(() => {
+    if (!alerting) return;
+    setView((current) => {
+      viewBeforeAlert.current = current;
+      return 'fps';
+    });
+  }, [alerting]);
+
+  const acknowledgeAlerts = () => {
+    acknowledge();
+    setView(viewBeforeAlert.current);
+  };
 
   useEffect(() => {
     api('/api/me').then(({ user: me }) => {
@@ -34,7 +53,9 @@ export function App() {
 
   useEffect(() => {
     const toggle = (event) => {
-      if (event.code === 'KeyV' && !event.target.closest('input, textarea, select')) setView((v) => (v === 'tps' ? 'fps' : 'tps'));
+      if (event.target.closest('input, textarea, select')) return;
+      if (event.code === 'KeyV') setView((v) => (v === 'tps' ? 'fps' : 'tps'));
+      if (event.code === 'KeyT') setPhoneOpen((open) => !open);
     };
     addEventListener('keydown', toggle);
     return () => removeEventListener('keydown', toggle);
@@ -61,6 +82,7 @@ export function App() {
       <LabelLayer />
       <nav className="hud" aria-label="Monde">
         <a href="/">Version accessible</a>
+        <button type="button" onClick={() => setPhoneOpen((open) => !open)} aria-expanded={phoneOpen || alerting}>Téléphone (T)</button>
         {user && (
           <>
             <button type="button" onClick={() => setView((v) => (v === 'tps' ? 'fps' : 'tps'))}>
@@ -77,6 +99,7 @@ export function App() {
           <a href="/">Se connecter</a>
         </div>
       )}
+      <Phone open={phoneOpen || alerting} alerts={unseen} announcements={announcements} onAcknowledge={acknowledgeAlerts} onClose={() => setPhoneOpen(false)} />
       {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} />}
       {user && <p className="controls-help">ZQSD / WASD ou flèches pour marcher · Maj pour courir · Espace pour sauter · glisser pour tourner la caméra</p>}
     </>
