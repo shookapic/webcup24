@@ -183,6 +183,19 @@
               <h3 id="privacy-title">Mes données et mes inquiétudes</h3>
               <p>Vous pouvez récupérer tout ce que le portail garde sur vous, ou nous dire ce qui vous inquiète. Pour comprendre à quoi servent vos données, lisez la section « Vos données » en bas de page.</p>
               <p><a id="export-link" class="button-link" href="/api/me/export" download="mes-donnees-terra-nova.json">Télécharger mes données dans un fichier</a></p>
+              <h4>Mes informations en clair</h4>
+              <p>Une page lisible avec tout ce que le portail garde sur vous, à lire, à imprimer ou à enregistrer. Elle ne contient ni votre mot de passe ni les données d’autres habitants.</p>
+              <ul class="link-list">
+                <li><a id="info-open" href="/api/me/export?format=html" target="_blank" rel="noopener">Ouvrir mes informations (nouvel onglet)</a></li>
+                <li><a id="info-save" href="/api/me/export?format=html&amp;download=1" download>Enregistrer mes informations</a></li>
+              </ul>
+              <h4>Récapitulatif de mes demandes</h4>
+              <p>L’historique complet de vos demandes : date, état, issue et message de la mairie pour chacune, avec une phrase de synthèse.</p>
+              <ul class="link-list">
+                <li><a id="recap-open" href="/api/me/recap" target="_blank" rel="noopener">Ouvrir le récapitulatif (nouvel onglet)</a></li>
+                <li><a id="recap-save" href="/api/me/recap?download=1" download>Enregistrer le récapitulatif</a></li>
+                <li><a id="recap-csv" href="/api/me/recap?format=csv" download>Télécharger le récapitulatif pour un tableur</a></li>
+              </ul>
               <form id="concern-form" tabindex="-1">
                 <h4>Faire part d’une inquiétude</h4>
                 <label>Sujet <select name="topic" required><option value="usage">À quoi servent mes données</option><option value="sharing">Qui peut voir mes données</option><option value="storage">Combien de temps elles sont gardées</option><option value="access">Voir, corriger ou effacer mes données</option><option value="other">Autre sujet</option></select></label>

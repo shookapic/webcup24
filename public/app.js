@@ -348,6 +348,7 @@ function renderIdentity() {
   renderDashboard();
   renderStaffConcerns();
   renderPublic();
+  updateDocumentLinks();
   loadConcerns();
   renderPlaces();
   renderEmergency();
@@ -665,6 +666,15 @@ function renderDashboard() {
     return line;
   }));
   $('#dashboard-recent').replaceChildren(...(d.recent.length ? d.recent : [null]).map((row) => element('li', row ? '' : 'list-empty', row ? `${row.at.replace('T', ' ').slice(0, 16)} · ${row.actor_name} ${row.summary}` : t('Aucune action enregistrée.'))));
+}
+
+// F55 / F56: the readable pages and the recap files follow the interface language
+function updateDocumentLinks() {
+  for (const link of document.querySelectorAll('#info-open, #info-save, #recap-open, #recap-save, #recap-csv')) {
+    const url = new URL(link.getAttribute('href'), location.origin);
+    url.searchParams.set('lang', lang);
+    link.setAttribute('href', url.pathname + url.search);
+  }
 }
 
 // ---- F51: concerns about data use (resident writes, staff reads and answers) and the personal export
@@ -2109,6 +2119,7 @@ $('#lang-toggle').addEventListener('click', () => {
   loadFeed();
 });
 applyLanguage();
+updateDocumentLinks();
 
 $('#contrast-toggle').addEventListener('click', () => { preference('highContrast', String(document.documentElement.dataset.contrast !== 'high')); applyContrast(); });
 applyContrast();

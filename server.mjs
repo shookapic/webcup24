@@ -7,6 +7,7 @@ import { dirname, extname, join, sep } from 'node:path';
 import { db } from './store.mjs';
 import { clearSession, createSession, currentUser, hashPassword, publicUser, verifyPassword } from './security.mjs';
 import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from './throttle.mjs';
+import { pickLang, personalHtml, recapCsv, recapHtml } from './recap.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -271,6 +272,34 @@ async function serveWorld(request, path, response) {
 function color(value) {
   if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) fail(400, 'Couleur invalide (format #rrggbb).');
   return value.toLowerCase();
+}
+
+// F51 / F55 / F56: everything the portal holds about one resident, and only that. No password hash, no session value, nobody else's data.
+function ownData(user) {
+  const own = (sql) => db.prepare(sql).all(user.id);
+  const account = db.prepare('SELECT id, name, email, district, avatar, created_at FROM users WHERE id = ?').get(user.id);
+  try { account.avatar = account.avatar ? JSON.parse(account.avatar) : null; } catch { account.avatar = null; }
+  return {
+    generated_at: cityNow(),
+    account,
+    messages: own('SELECT id, subject, body, kind, location, status, service_id, created_at, updated_at FROM messages WHERE user_id = ? ORDER BY id'),
+    appointments: own('SELECT id, starts_at, duration_min, location, reason, status, booked_at FROM appointments WHERE citizen_id = ? ORDER BY starts_at'),
+    concerns: own('SELECT id, topic, body, status, response, created_at, responded_at FROM concerns WHERE user_id = ? ORDER BY id'),
+    notices: own('SELECT id, code, ref_id, label, note, at, seen_at FROM notices WHERE user_id = ? ORDER BY id'),
+    public_requests: own('SELECT pr.id, pr.message_id, pr.public_title, pr.public_summary, pr.district, pr.created_at, (SELECT COUNT(*) FROM supports WHERE public_request_id = pr.id) AS support_count FROM public_requests pr JOIN messages m ON m.id = pr.message_id WHERE m.user_id = ? ORDER BY pr.id'),
+    supports: own('SELECT supports.public_request_id, pr.public_title, supports.at FROM supports JOIN public_requests pr ON pr.id = supports.public_request_id WHERE supports.user_id = ? ORDER BY supports.id'),
+  };
+}
+// A generated document (HTML page or CSV): never cached, never sniffed, no script can run in it; saved as a file when a name is given.
+function sendDocument(response, content, type, filename) {
+  response.writeHead(200, {
+    'Content-Type': type,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    ...(filename ? { 'Content-Disposition': `attachment; filename="${filename}"` } : {}),
+  });
+  response.end(content);
 }
 
 // F52: removing a public record removes its supports and every notice that quotes it, so nothing of it resurfaces.
@@ -853,21 +882,26 @@ async function route(request, response) {
   // F51: what the portal holds about the caller, as a file. Only their own civic data: no password hash, no session value, nobody else's data.
   if (path === '/api/me/export' && method === 'GET') {
     const user = requireUser(request, ['citizen']);
-    const own = (sql) => db.prepare(sql).all(user.id);
-    const account = db.prepare('SELECT id, name, email, district, avatar, created_at FROM users WHERE id = ?').get(user.id);
-    try { account.avatar = account.avatar ? JSON.parse(account.avatar) : null; } catch { account.avatar = null; }
-    const file = {
-      generated_at: cityNow(),
-      account,
-      messages: own('SELECT id, subject, body, kind, location, status, service_id, created_at, updated_at FROM messages WHERE user_id = ? ORDER BY id'),
-      appointments: own('SELECT id, starts_at, duration_min, location, reason, status, booked_at FROM appointments WHERE citizen_id = ? ORDER BY starts_at'),
-      concerns: own('SELECT id, topic, body, status, response, created_at, responded_at FROM concerns WHERE user_id = ? ORDER BY id'),
-      notices: own('SELECT id, code, ref_id, label, note, at, seen_at FROM notices WHERE user_id = ? ORDER BY id'),
-      public_requests: own('SELECT pr.id, pr.message_id, pr.public_title, pr.public_summary, pr.district, pr.created_at, (SELECT COUNT(*) FROM supports WHERE public_request_id = pr.id) AS support_count FROM public_requests pr JOIN messages m ON m.id = pr.message_id WHERE m.user_id = ? ORDER BY pr.id'),
-      supports: own('SELECT supports.public_request_id, pr.public_title, supports.at FROM supports JOIN public_requests pr ON pr.id = supports.public_request_id WHERE supports.user_id = ? ORDER BY supports.id'),
-    };
+    const params = new URL(request.url, 'http://localhost').searchParams;
+    const lang = pickLang(params.get('lang'));
+    const format = params.get('format') || 'json';
+    if (!['json', 'html'].includes(format)) fail(400, 'Format inconnu (json ou html).');
+    const data = ownData(user);
+    // F55: the same data as a readable page (open it, print it, or save it) or as the machine copy
+    if (format === 'html') return sendDocument(response, personalHtml(data, lang), 'text/html; charset=utf-8', params.has('download') ? `mes-informations-terra-nova-${lang}.html` : null);
     response.setHeader('Content-Disposition', 'attachment; filename="mes-donnees-terra-nova.json"');
-    return sendJson(response, 200, file);
+    return sendJson(response, 200, data);
+  }
+  // F56: a readable recap of the resident's requests, to read, print or download (HTML) or to open in a spreadsheet (CSV)
+  if (path === '/api/me/recap' && method === 'GET') {
+    const user = requireUser(request, ['citizen']);
+    const params = new URL(request.url, 'http://localhost').searchParams;
+    const lang = pickLang(params.get('lang'));
+    const format = params.get('format') || 'html';
+    if (!['html', 'csv'].includes(format)) fail(400, 'Format inconnu (html ou csv).');
+    const data = ownData(user);
+    if (format === 'csv') return sendDocument(response, recapCsv(data, lang), 'text/csv; charset=utf-8', `recapitulatif-demandes-terra-nova-${lang}.csv`);
+    return sendDocument(response, recapHtml(data, lang), 'text/html; charset=utf-8', params.has('download') ? `recapitulatif-demandes-terra-nova-${lang}.html` : null);
   }
   // F51: concerns about data use (resident side)
   if (path === '/api/concerns' && method === 'GET') {

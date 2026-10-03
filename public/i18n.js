@@ -677,6 +677,18 @@ const english = {
   'Aucun signalement pour le moment.': 'No report for now.',
   'Quartier non précisé': 'District not specified',
   '{district} : {total} (non résolus : {open})': '{district}: {total} (unresolved: {open})',
+  // Wave 9: readable personal information and request recap (F55, F56)
+  'Mes informations en clair': 'My information in plain words',
+  'Une page lisible avec tout ce que le portail garde sur vous, à lire, à imprimer ou à enregistrer. Elle ne contient ni votre mot de passe ni les données d’autres habitants.': 'A readable page with everything the portal keeps about you, to read, print or save. It contains neither your password nor other residents’ data.',
+  'Ouvrir mes informations (nouvel onglet)': 'Open my information (new tab)',
+  'Enregistrer mes informations': 'Save my information',
+  'Récapitulatif de mes demandes': 'Summary of my requests',
+  'L’historique complet de vos demandes : date, état, issue et message de la mairie pour chacune, avec une phrase de synthèse.': 'The full history of your requests: date, state, outcome and town hall message for each, with a summary sentence.',
+  'Ouvrir le récapitulatif (nouvel onglet)': 'Open the summary (new tab)',
+  'Enregistrer le récapitulatif': 'Save the summary',
+  'Télécharger le récapitulatif pour un tableur': 'Download the summary for a spreadsheet',
+  'Format inconnu (json ou html).': 'Unknown format (json or html).',
+  'Format inconnu (html ou csv).': 'Unknown format (html or csv).',
   // Wave 7: journal filter errors
   'La date de début est invalide (format AAAA-MM-JJ).': 'The start date is invalid (format YYYY-MM-DD).',
   'La date de fin est invalide (format AAAA-MM-JJ).': 'The end date is invalid (format YYYY-MM-DD).',

@@ -205,6 +205,18 @@ try {
   await login(page, 'zoe@a11y.test', 'password-long-1');
   await axTree(page, 'citizen');
   await axeRun(page, 'citizen');
+  // F55 / F56: the readable pages the portal links to, opened as the signed-in resident (same cookie), checked by axe like any page
+  for (const [label, path] of [['personal information page', '/api/me/export?format=html'], ['request recap page', '/api/me/recap'], ['request recap page (English)', '/api/me/recap?lang=en']]) {
+    const doc = await browser.newPage();
+    await doc.setCookie(...(await page.cookies()));
+    await doc.goto(base + path, { waitUntil: 'load' });
+    const facts = await doc.evaluate(() => ({ lang: document.documentElement.lang, h1: document.querySelectorAll('h1').length, tables: [...document.querySelectorAll('table')].every((t) => t.querySelector('caption') && t.querySelector('th[scope=col]')), overflow: document.documentElement.scrollWidth > innerWidth }));
+    check('F55/F56 ' + label + ': language set, one h1, every table has a caption and column headers, no horizontal overflow at 1280', facts.lang.length === 2 && facts.h1 === 1 && facts.tables && !facts.overflow, JSON.stringify(facts));
+    await axeRun(doc, label);
+    await doc.setViewport({ width: 390, height: 844 });
+    check('F55/F56 ' + label + ': at 390 px the page itself does not scroll sideways (wide tables scroll inside their own box)', await doc.evaluate(() => document.documentElement.scrollWidth <= innerWidth), '');
+    await doc.close();
+  }
   const citizenTabs = await tabThrough(page, 'citizen page');
   // Keystrokes (Tab + Enter) a keyboard user needs to reach each action: the header link "Mon espace", then the jump links.
   const keysTo = async (selector, sectionLink) => {

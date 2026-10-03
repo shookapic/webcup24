@@ -466,3 +466,4 @@ html[data-contrast=high] .notice-unread,html[data-contrast=high] .dashboard-todo
 .activity-values{font-size:.875rem;white-space:nowrap}
 .dashboard-tile dd a{color:inherit}
 @media(max-width:620px){.activity-row{grid-template-columns:5.5rem minmax(3rem,1fr)}.activity-values{grid-column:1 / -1;white-space:normal}}
+.link-list{margin:0 0 14px;padding:0;list-style:none;display:grid;gap:6px}

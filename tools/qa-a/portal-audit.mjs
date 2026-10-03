@@ -218,6 +218,13 @@ try {
   check('F31 urgent items are marked as active alerts in the news list too', $$(zoe, '.news-urgent').some((c) => c.textContent.includes('Alerte en cours') && c.textContent.includes('Public concerné : Quartier ouest')));
   // ============ F51: export, concerns, staff handling, notices, in the real pages
   check('F51 the resident has a "Mes données" panel with a download link to their own export, and the deletion text names what happens (erased, released, reduced journal lines)', $(zoe, '#privacy-panel') && $(zoe, '#export-link').getAttribute('href') === '/api/me/export' && $(zoe, '#delete-form').textContent.includes('journal du personnel garde quelques lignes') && $(zoe, '#delete-form').textContent.includes('rendez-vous réservés sont libérés'));
+  const docLinks = () => ['#info-open', '#info-save', '#recap-open', '#recap-save', '#recap-csv'].map((id) => $(zoe, id));
+  check('F55/F56 the personal page, the saved copy, the recap (open, save) and the spreadsheet file are one click away in "Mes données", each saying what it is, with the language in the link', docLinks().every((a) => a && /lang=fr/.test(a.getAttribute('href'))) && $(zoe, '#info-open').textContent.includes('nouvel onglet') && $(zoe, '#info-open').getAttribute('target') === '_blank' && $(zoe, '#info-open').getAttribute('rel') === 'noopener' && $(zoe, '#info-save').hasAttribute('download') && $(zoe, '#recap-csv').getAttribute('href').includes('format=csv') && $(zoe, '#recap-save').getAttribute('href').includes('download=1'), docLinks().map((a) => a?.getAttribute('href')).join(' '));
+  zoe.window.document.querySelector('#lang-toggle').click();
+  await wait(600);
+  check('F55/F56 in English the links, their texts and the requested page language switch together', docLinks().every((a) => /lang=en/.test(a.getAttribute('href'))) && $(zoe, '#info-open').textContent === 'Open my information (new tab)' && $(zoe, '#recap-csv').textContent === 'Download the summary for a spreadsheet');
+  zoe.window.document.querySelector('#lang-toggle').click();
+  await wait(600);
   fill(zoe, '#concern-form', { topic: 'storage', body: 'Pendant combien de temps gardez-vous mes messages ?' });
   submit(zoe, '#concern-form');
   await wait(1500);
