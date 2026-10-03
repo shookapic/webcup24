@@ -1,3 +1,7 @@
+# Our workflow :
+-  GPT6-Astra - High acting as a Project Manager and tasks dispatcher
+-  Claude Opus 5.5 - High x2 - Session A and Session B responsible for Portal / API requests and our 3D world / game building.
+
 # Terra Nova
 
 Portail citoyen pour le 24H By Webcup 2026, construit à partir des demandes actuellement publiées dans l’API officielle.
