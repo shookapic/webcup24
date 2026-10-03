@@ -70,6 +70,7 @@
       <section class="account-section" id="espace" aria-labelledby="account-title">
         <nav class="breadcrumb" aria-label="Fil d’Ariane de l’espace personnel"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Mon espace</span></nav>
         <div class="section-heading"><div><span class="section-kicker">04 / VOTRE ESPACE</span><h2 id="account-title">Un espace pour chacun</h2></div><p>Retrouvez vos échanges et les outils adaptés à votre rôle.</p></div>
+        <p id="account-status" class="form-status account-status" role="status" tabindex="-1"></p>
         <div id="guest-area" class="auth-grid">
           <form id="login-form" class="panel">
             <h3>Se connecter</h3><p>Retrouvez votre espace personnel.</p>
@@ -121,6 +122,12 @@
               <datalist id="districts"><option value="Centre-ville"></option><option value="Quartier nord"></option><option value="Quartier sud"></option><option value="Quartier est"></option><option value="Quartier ouest"></option></datalist>
               <button class="button button-primary" type="submit">Enregistrer mon profil</button>
               <p id="profile-status" class="form-status" role="status" aria-live="polite"></p>
+            </form>
+            <form id="delete-form" class="panel delete-form">
+              <h3>Supprimer mon compte</h3><p>Votre compte, vos messages et vos signalements seront définitivement supprimés. Cette action est irréversible.</p>
+              <label>Confirmez avec votre mot de passe <input name="password" type="password" autocomplete="current-password" required></label>
+              <button class="button danger-button" type="submit">Supprimer définitivement mon compte</button>
+              <p id="delete-status" class="form-status" role="status" aria-live="polite"></p>
             </form>
           </div>
 

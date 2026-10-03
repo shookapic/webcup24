@@ -427,6 +427,7 @@ async function loadFeed() {
 
 async function afterAuthentication(nextUser) {
   user = nextUser;
+  if (user) setFormStatus('#account-status', '');
   renderIdentity();
   if (user?.role === 'admin') { loadNews(); renderServices(); }
   await loadMessages();
@@ -501,6 +502,21 @@ $('#profile-form').addEventListener('submit', async (event) => {
     setFormStatus('#profile-status', t('Profil enregistré.'));
   } catch (error) {
     setFormStatus('#profile-status', error.message, true);
+  }
+});
+
+$('#delete-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    await api('/api/me', 'DELETE', { password: passwordValue(form) });
+    form.reset();
+    setFormStatus('#delete-status', '');
+    clearIdentity();
+    setFormStatus('#account-status', t('Votre compte a été supprimé. Vos données ont été effacées.'));
+    $('#account-status').focus();
+  } catch (error) {
+    setFormStatus('#delete-status', error.message, true);
   }
 });
 

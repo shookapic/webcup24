@@ -199,7 +199,7 @@ async function route(request, response) {
   const path = new URL(request.url, 'http://localhost').pathname;
   const method = request.method;
 
-  if (!['GET', 'POST', 'PUT', 'PATCH'].includes(method)) fail(405, 'Méthode non autorisée.');
+  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) fail(405, 'Méthode non autorisée.');
   if (method !== 'GET' && request.headers.origin) {
     let origin;
     try { origin = new URL(request.headers.origin); } catch { fail(403, 'Origine non autorisée.'); }
@@ -214,6 +214,34 @@ async function route(request, response) {
     const district = body.district ? text(body.district, 2, 80, 'Le quartier') : null;
     db.prepare('UPDATE users SET name = ?, district = ? WHERE id = ?').run(name, district, user.id);
     return sendJson(response, 200, { user: { ...user, name, district } });
+  }
+  if (path === '/api/me' && method === 'DELETE') {
+    // Citizens only: staff accounts are managed by an administrator.
+    const user = requireUser(request, ['citizen']);
+    const body = await readJson(request);
+    const secret = password(body.password, 1);
+    const key = `delete:${user.id}`;
+    const attempt = loginAttempts.get(key);
+    if (attempt?.count >= 5 && attempt.until > Date.now()) fail(429, 'Trop de tentatives. Réessayez dans 15 minutes.');
+    const { password_hash: hash } = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
+    if (!(await verifyPassword(secret, hash))) {
+      loginAttempts.set(key, { count: (attempt?.until > Date.now() ? attempt.count : 0) + 1, until: Date.now() + 15 * 60_000 });
+      fail(403, 'Mot de passe incorrect.');
+    }
+    // Messages go with the account; sessions cascade from users.
+    db.exec('BEGIN');
+    try {
+      db.prepare('DELETE FROM messages WHERE user_id = ?').run(user.id);
+      db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+    loginAttempts.delete(key);
+    presence.delete(user.id);
+    clearSession(request, response);
+    return sendJson(response, 200, { ok: true });
   }
   if (path === '/api/me/avatar' && method === 'PUT') {
     const user = requireUser(request);

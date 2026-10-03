@@ -225,3 +225,9 @@ html[data-contrast=high] .transport-card,html[data-contrast=high] .transport-sto
 html[data-contrast=high] .transport-mine{border-color:#ffeb00}
 html[data-contrast=high] .transport-badge,html[data-contrast=high] .transport-disrupted{background:#ffeb00;color:#000}
 html[data-contrast=high] .transport-next,html[data-contrast=high] .transport-normal,html[data-contrast=high] .transports-hint{color:#fff}
+.delete-form{margin-top:18px;max-width:560px;border-color:#ffb8a166}
+.danger-button{background:#b3261e;color:#fff}
+.danger-button:hover{background:#d0362c}
+.account-status{margin:0 0 18px;font-size:.9375rem}
+.account-status:empty{display:none}
+html[data-contrast=high] .danger-button{background:#000;color:#ffeb00;border:2px solid #ffeb00}
