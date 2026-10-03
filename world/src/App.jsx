@@ -5,6 +5,7 @@ import { Sky } from './Sky.jsx';
 import { City, Ground, Rocks } from './City.jsx';
 import { LabelLayer, LabelProjector } from './Labels.jsx';
 import { AvatarEditor } from './AvatarEditor.jsx';
+import { Npcs } from './Npcs.jsx';
 import { defaultAvatar } from './Avatar.jsx';
 import { api } from './api.js';
 
@@ -48,6 +49,7 @@ export function App() {
         <Sky reducedMotion={reducedMotion} />
         <Ground />
         <Rocks />
+        <Npcs reducedMotion={reducedMotion} />
         {user ? (
           <Suspense fallback={<City />}>
             <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} />
