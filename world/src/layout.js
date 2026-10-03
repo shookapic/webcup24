@@ -21,7 +21,7 @@ export const footprints = [
 ];
 
 export const BOUNDS = 75; // half-size of the playable square; walls stand on it and leaving it respawns
-export const SPAWN = [0, 3, 4];
+export const SPAWN = [0, 3, 1];
 
 // Meshes the camera must not pass through (filled by PlayableCity's Footprints).
 export const cameraBlockers = [];

@@ -9,9 +9,9 @@ export const kitUrl = (name) => `${import.meta.env.BASE_URL}assets/models/kit/${
 // Shared materials: one per kit material name, never mutated per instance.
 const palette = {
   metal: { color: '#e5e0d4', roughness: 0.85, metalness: 0 },        // chalk
-  metalDark: { color: '#4b5a63', roughness: 0.7, metalness: 0.15 },   // slate trim
+  metalDark: { color: '#6c7f89', roughness: 0.7, metalness: 0.1 },   // slate trim
   metalRed: { color: '#a9654a', roughness: 0.8, metalness: 0 },       // terracotta
-  dark: { color: '#27363f', roughness: 0.35, metalness: 0.2 },        // inset windows
+  dark: { color: '#3b5a66', roughness: 0.3, metalness: 0.25 },        // inset windows
   rock: { color: '#8a5a45', roughness: 1, metalness: 0 },
   rockTrack: { color: '#cdb59b', roughness: 1, metalness: 0 },        // paved
   skin: { color: '#e9ba69', roughness: 0.8, metalness: 0 },

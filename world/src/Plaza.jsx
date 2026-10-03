@@ -66,10 +66,10 @@ export function Plaza() {
       <Prop name="platform_large" position={[0, 3.9, -16.5]} scale={[2.6, 3, 2.1]} />
       {pillars.map(([x, z]) => <Prop key={`${x},${z}`} name="supports_high" position={[x, 0, z]} scale={[1.1, 3.9, 1.1]} />)}
       <Prop name="satelliteDish_large" position={[16.5, 4, -27]} scale={4} rotation-y={0.4} />
-      <Prop name="chimney" position={[-7, 0, -14]} scale={[2, 3, 2]} />
-      <mesh material={mats.amber} position={[-7, 6.1, -14]}><sphereGeometry args={[0.35, 12, 8]} /></mesh>
-      <Prop name="chimney" position={[7, 0, -14]} scale={[2, 3, 2]} />
-      <mesh material={mats.amber} position={[7, 6.1, -14]}><sphereGeometry args={[0.35, 12, 8]} /></mesh>
+      <Prop name="chimney" position={[-12, 0, -15]} scale={[2, 3, 2]} />
+      <mesh material={mats.amber} position={[-12, 6.1, -15]}><sphereGeometry args={[0.35, 12, 8]} /></mesh>
+      <Prop name="chimney" position={[12, 0, -15]} scale={[2, 3, 2]} />
+      <mesh material={mats.amber} position={[12, 6.1, -15]}><sphereGeometry args={[0.35, 12, 8]} /></mesh>
       {/* Plaza furniture: benches facing the fountain-less centre, planters, lamps */}
       <Bench position={[-8.5, 0, -2]} rotation={Math.PI / 2} />
       <Bench position={[8.5, 0, -2]} rotation={-Math.PI / 2} />

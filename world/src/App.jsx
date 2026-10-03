@@ -13,6 +13,7 @@ import { getLocale, t } from './ui/i18n.js';
 import { defaultAvatar } from './Avatar.jsx';
 import { SPAWN, nearestStop, playerPos } from './layout.js';
 import { Sun } from './Sun.jsx';
+import { PhoneHost, PhoneRig } from './PhoneRig.jsx';
 import { api } from './api.js';
 import { debug } from './debug.js';
 
@@ -20,6 +21,8 @@ const PlayableCity = lazy(() => import('./PlayableCity.jsx'));
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const PHONE_MS = reducedMotion ? 0 : 300; // raise / lower time; the PhoneRig animates over this
+const flatQuery = new URLSearchParams(location.search).has('flatphone');
+const narrow = matchMedia('(max-width: 720px)');
 
 // ?debug&fps=N: frames are driven by window.__tn.run(seconds, input) at exactly N Hz.
 function SimDriver() {
@@ -59,6 +62,10 @@ export function App() {
 
   const { announcements, unseen: pending, status, error, lastUpdated, acknowledge, retry } = useAnnouncements({ userId: user?.id, ready: user !== undefined });
   const phoneUp = phone.phase !== 'closed';
+  // Physical phone on desktop with a playable avatar; flat accessible dialog on narrow screens, for guests or with ?flatphone.
+  const [isNarrow, setNarrow] = useState(narrow.matches);
+  useEffect(() => { const on = (e) => setNarrow(e.matches); narrow.addEventListener('change', on); return () => narrow.removeEventListener('change', on); }, []);
+  const physical = Boolean(user) && !isNarrow && !flatQuery;
   const services = useServices(phoneUp);
   const transports = useTransports(true);
 
@@ -125,6 +132,7 @@ export function App() {
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable], dialog')) return;
       if (event.code === 'KeyV') toggleView();
       if (event.code === 'KeyT') togglePhone();
+      if (event.code === 'Escape' && phoneRef.current.phase === 'open' && !pendingRef.current.length) closePhone(); // focus may have fallen to the page after a click
     };
     addEventListener('keydown', keys);
     return () => removeEventListener('keydown', keys);
@@ -158,6 +166,7 @@ export function App() {
           </Suspense>
         ) : <City />}
         <LabelProjector />
+        {physical && phoneUp && <PhoneRig phase={phone.phase} reducedMotion={reducedMotion} outfit={avatar.outfit} />}
         {/* Glow materials use toneMapped={false} and intensity > 1, so only they cross the bloom threshold. */}
         {!debug.simFps && <EffectComposer multisampling={4}>
           <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
@@ -185,23 +194,27 @@ export function App() {
         </div>
       )}
       <AlertAnnouncer alerts={pending} locale={locale} active={editing && !phoneUp} />
-      <PhoneFallback
-        open={phoneUp}
-        page={page}
-        onPageChange={setPage}
-        announcements={announcements}
-        pendingAlerts={phone.phase === 'closing' ? [] : pending}
-        services={services}
-        transports={transports}
-        nearestStop={stop?.name}
-        status={status}
-        error={error}
-        lastUpdated={lastUpdated}
-        onRetry={retry}
-        onAcknowledge={acknowledgeAlerts}
-        onClose={closePhone}
-        locale={locale}
-      />
+      {(() => {
+        const screenProps = {
+          page,
+          onPageChange: setPage,
+          announcements,
+          pendingAlerts: phone.phase === 'closing' ? [] : pending,
+          services,
+          transports,
+          nearestStop: stop?.name,
+          status,
+          error,
+          lastUpdated,
+          onRetry: retry,
+          onAcknowledge: acknowledgeAlerts,
+          onClose: closePhone,
+          locale,
+        };
+        return physical
+          ? phoneUp && <PhoneHost screenProps={{ ...screenProps, dialogLabel: t(locale, 'phone.label') }} />
+          : <PhoneFallback open={phoneUp} {...screenProps} />;
+      })()}
       {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} locale={locale} />}
       {user && help && <p className="controls-help">{t(locale, 'help.controls')}</p>}
     </>

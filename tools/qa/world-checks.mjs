@@ -27,6 +27,7 @@ const results = [];
 const check = (name, ok, info) => { results.push(ok); console.log(ok ? 'PASS' : 'FAIL', name, JSON.stringify(info)); };
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
+await tele(62, 1, 45); await run(0.5); // open ground east of everything: forward walks stay clear of footprints
 // 1. real keyboard walks
 let p0 = await pos(); await page.keyboard.down('KeyW'); await run(2); let p1 = await pos();
 check('keyboard W walks', dist(p0, p1) > 5, { moved: dist(p0, p1).toFixed(2) });
@@ -43,7 +44,7 @@ await page.keyboard.down('KeyW'); await run(0.5);
 await page.evaluate(() => dispatchEvent(new Event('blur'))); await run(1.5); p0 = await pos(); await run(1.5); p1 = await pos();
 check('blur stops and stays stopped (key still physically held)', p0.speed < 0.05 && dist(p0, p1) < 0.01, { speed: p0.speed.toFixed(3), drift: dist(p0, p1).toFixed(3) });
 await page.keyboard.up('KeyW'); await page.keyboard.down('KeyW'); await run(1); p1 = await pos();
-check('fresh press resumes', dist(p0, p1) > 2, { moved: dist(p0, p1).toFixed(2) });
+check('fresh press resumes', dist(p0, p1) > 2, { moved: dist(p0, p1).toFixed(2), from: [p0.x, p0.z].map((v) => v.toFixed(2)), to: [p1.x, p1.z].map((v) => v.toFixed(2)) });
 // 3. hidden tab clears
 await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
 await run(1.5); p0 = await pos(); await run(1);
@@ -59,7 +60,7 @@ await page.keyboard.up('KeyW'); await page.keyboard.press('KeyT'); await settle(
 await page.keyboard.down('KeyW'); await run(1); p1 = await pos(); await page.keyboard.up('KeyW');
 check('phone closed, fresh press walks', dist(p0, p1) > 2, { moved: dist(p0, p1).toFixed(2) });
 // 5. jump once per press even with Space held (key repeat)
-await run(1); await tele(0, 1, 4); await run(1);
+await run(1); await tele(0, 1, 1); await run(1);
 await page.keyboard.down('Space'); await page.keyboard.down('Space'); await page.keyboard.down('Space');
 let takeoffs = 0, wasAir = false, maxY = 0;
 for (let i = 0; i < 24; i++) { await run(0.125); const p = await pos(); const air = p.y > 1.15; if (air && !wasAir) takeoffs++; wasAir = air; maxY = Math.max(maxY, p.y); }
@@ -85,9 +86,9 @@ const camDist = Math.hypot(cam.cx - cam.x, cam.cz - cam.z);
 check('camera pulled in at wall (< 7 m of 9)', camDist < 7, { camDist: camDist.toFixed(2) });
 // 8. bounds respawn
 await tele(0, -20, 0); await run(0.2); let r = await pos();
-check('fall below world respawns', r.y > 0 && dist(r, { x: 0, z: 4 }) < 1.5, { x: r.x.toFixed(1), y: r.y.toFixed(1), z: r.z.toFixed(1) });
+check('fall below world respawns', r.y > 0 && dist(r, { x: 0, z: 1 }) < 1.5, { x: r.x.toFixed(1), y: r.y.toFixed(1), z: r.z.toFixed(1) });
 await tele(400, 1, 0); await run(0.2); r = await pos();
-check('outside bounds respawns', dist(r, { x: 0, z: 4 }) < 1.5, { x: r.x.toFixed(1), z: r.z.toFixed(1) });
+check('outside bounds respawns', dist(r, { x: 0, z: 1 }) < 1.5, { x: r.x.toFixed(1), z: r.z.toFixed(1) });
 await tele(74, 1, 0);
 for (const k of ['KeyW', 'KeyA', 'KeyS', 'KeyD']) { await page.keyboard.down(k); await run(3); await page.keyboard.up(k); }
 r = await pos(); check('boundary wall holds', Math.abs(r.x) < 76 && Math.abs(r.z) < 76, { x: r.x.toFixed(1), z: r.z.toFixed(1) });

@@ -89,6 +89,7 @@ export function Player({ avatar, view, reducedMotion, inputEnabled }) {
       <Ecctrl
         ref={ecctrl}
         position={SPAWN}
+        rotation={[0, Math.PI, 0]}
         capsuleHalfHeight={0.4}
         capsuleRadius={0.35}
         maxWalkVel={4}
@@ -115,7 +116,7 @@ export function Player({ avatar, view, reducedMotion, inputEnabled }) {
         smoothTime={reducedMotion ? 0 : 0.1}
         maxPolarAngle={1.55}
         distance={distance[view]}
-        polarAngle={1.1}
+        polarAngle={1.2}
       />
     </>
   );

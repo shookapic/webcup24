@@ -32,6 +32,10 @@ function createBots() {
       pick,
     };
     retarget(bot);
+    // Start part-way along the first segment so the crowd doesn't spawn stacked on the nodes.
+    const f = 0.15 + random() * 0.7;
+    bot.x += (pathNodes[bot.to][0] - bot.x) * f;
+    bot.z += (pathNodes[bot.to][1] - bot.z) * f;
     bot.heading = Math.atan2(bot.tx - bot.x, bot.tz - bot.z);
     return bot;
   });
