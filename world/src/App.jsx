@@ -11,7 +11,8 @@ import { AlertAnnouncer, PhoneFallback, useAnnouncements, useServices, useTransp
 import { WorldHud } from './ui/WorldHud.jsx';
 import { getLocale, t } from './ui/i18n.js';
 import { defaultAvatar } from './Avatar.jsx';
-import { nearestStop, playerPos } from './layout.js';
+import { SPAWN, nearestStop, playerPos } from './layout.js';
+import { Sun } from './Sun.jsx';
 import { api } from './api.js';
 import { debug } from './debug.js';
 
@@ -135,17 +136,17 @@ export function App() {
     const timer = setInterval(() => {
       const next = nearestStop(playerPos);
       setStop((current) => (current === next ? current : next));
-      if (Math.hypot(playerPos.x, playerPos.z - 8) > 4) setHelp(false);
+      if (Math.hypot(playerPos.x - SPAWN[0], playerPos.z - SPAWN[2]) > 4) setHelp(false);
     }, 500);
     return () => clearInterval(timer);
   }, [user]);
 
   return (
     <>
-      <Canvas aria-hidden="true" dpr={[1, 1.5]} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
-        <fog attach="fog" args={['#5a2238', 70, 230]} />
-        <hemisphereLight args={['#ffb38a', '#3a1424', 0.6]} />
-        <directionalLight position={[60, 40, 50]} intensity={2.2} color="#ffd9b8" />
+      <Canvas aria-hidden="true" shadows dpr={[1, 1.5]} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
+        <fog attach="fog" args={['#d3b295', 90, 300]} />
+        <hemisphereLight args={['#a9c4d8', '#6b5446', 0.9]} />
+        <Sun />
         {debug.simFps > 0 && <SimDriver />}
         <Sky reducedMotion={reducedMotion} />
         <Ground />

@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Euler } from 'three';
-import { Avatar } from './Avatar.jsx';
+import { Colonist } from './Colonist.jsx';
 import { api } from './api.js';
 
 const POLL = 2000; // No WebSockets on Hodifly: post our position, read everyone else's.
-const BODY = 0.95; // Ecctrl body centre above the ground (float height + capsule).
 const euler = new Euler();
 const turn = (from, to) => ((((to - from + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) - Math.PI;
 
@@ -13,6 +12,8 @@ export function Multiplayer({ ecctrl }) {
   const [players, setPlayers] = useState([]);
   const targets = useRef(new Map());
   const groups = useRef(new Map());
+  const speeds = useRef(new Map()); // m/s from displacement: drives idle/walk since the API carries no animation state
+  const lastOk = useRef(Date.now());
 
   useEffect(() => {
     let timer;
@@ -25,9 +26,11 @@ export function Multiplayer({ ecctrl }) {
         }
         const { players: list } = await api('/api/presence');
         targets.current = new Map(list.map((player) => [player.id, player]));
+        lastOk.current = Date.now();
         setPlayers(list);
       } catch {
-        // Server restarting or offline: keep the last positions.
+        // Offline or server restarting: keep the last positions, but drop peers once they are older than the server's 15 s window.
+        if (Date.now() - lastOk.current > 15_000) setPlayers((current) => (current.length ? [] : current));
       }
       timer = setTimeout(tick, POLL);
     };
@@ -42,13 +45,15 @@ export function Multiplayer({ ecctrl }) {
       const target = targets.current.get(id);
       if (!target) continue;
       if (!group.userData.placed) {
-        group.position.set(target.x, BODY, target.z);
+        group.position.set(target.x, 0, target.z);
         group.rotation.y = target.ry;
         group.userData.placed = true;
         continue;
       }
+      const [px, pz] = [group.position.x, group.position.z];
       group.position.x += (target.x - group.position.x) * blend;
       group.position.z += (target.z - group.position.z) * blend;
+      speeds.current.set(id, Math.hypot(group.position.x - px, group.position.z - pz) / Math.max(delta, 1e-3));
       group.rotation.y += turn(group.rotation.y, target.ry) * blend;
     }
   });
@@ -61,7 +66,7 @@ export function Multiplayer({ ecctrl }) {
         else groups.current.delete(player.id);
       }}
     >
-      <Avatar avatar={player.avatar || undefined} />
+      <Colonist avatar={player.avatar || undefined} getState={() => ({ speed: speeds.current.get(player.id) ?? 0, air: false })} />
     </group>
   ));
 }

@@ -43,14 +43,14 @@ await page.keyboard.press('KeyT'); await settle();
 check('T cannot dismiss an unacknowledged alert', await dialogOpen(page));
 await page.click('.phone-ack'); await settle(); await run(page, 1.5);
 check('acknowledge closes the alert-raised phone', !(await dialogOpen(page)));
-check('previous (third person) view restored', (await camDist(page)) > 5, { distance: (await camDist(page)).toFixed(2) });
+check('previous (third person) view restored', (await camDist(page)) > 8, { distance: (await camDist(page)).toFixed(2) });
 await page.reload({ waitUntil: 'networkidle0' }); await page.waitForFunction(() => window.__tn && window.__tn.run); await ready(page); await settle();
 check('acknowledged alert does not return after reload', !(await dialogOpen(page)));
 // manual open stays open after acknowledgement handled elsewhere: T opens, Escape/T closes, view restored
 await page.keyboard.press('KeyT'); await settle(); await run(page, 1);
 check('manual T opens phone', await dialogOpen(page));
 await page.keyboard.press('Escape'); await settle(); await run(page, 1.5);
-check('Escape closes manual phone, view restored', !(await dialogOpen(page)) && (await camDist(page)) > 5);
+check('Escape closes manual phone, view restored', !(await dialogOpen(page)) && (await camDist(page)) > 8);
 await page.close();
 
 // B: no avatar yet -> editor opens; alert must wait for the editor to close
