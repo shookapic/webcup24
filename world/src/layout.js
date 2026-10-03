@@ -1,3 +1,5 @@
+import { measure, sample, smoothPath } from './rail.js';
+
 // Single source of truth for the colony: buildings (render + collision), roads, stops, tram route, NPC network, labels.
 // World metres, y up, +z south (towards the spawn), Mairie to the north. Kit pieces are tiny, so every building lists its scale.
 
@@ -43,39 +45,33 @@ export function footprintOf(b) {
 // Extra solid things that are not kit buildings: Mairie canopy pillars.
 const pillars = [[-2.6, -14.2], [2.6, -14.2], [-2.6, -18.8], [2.6, -18.8]].map(([x, z]) => ({ shape: 'box', x, z, w: 0.9, d: 0.9, h: 4 }));
 
-// Elevated tram: two lines share the Mairie trunk. Cosmetic: not synchronised with the timetable API (docs say so).
-export const TRACK_Y = 6;
+// Elevated tram: two lines on separate guideways (T2 rides 3.2 m above T1 where they cross at (-28, -13)). Cosmetic: not
+// synchronised with the timetable API (the phone and QA say so). `points` are the corner points, `path` the rounded rail.
 export const lines = {
-  T1: { color: '#b8336a', stops: ['Habitat', 'Mairie', 'Quartier sud'], points: [[-30, -32], [-30, -13], [7, -13], [14, -13], [14, 32]] },
-  T2: { color: '#1d6fa5', stops: ['Marché', 'Mairie', 'Santé'], points: [[-28, 1.5], [-28, -13], [7, -13], [28, -13], [28, 1.5]] },
+  T1: { color: '#b8336a', y: 6, stops: ['Habitat', 'Mairie', 'Quartier sud'], points: [[-30, -32], [-30, -13], [14, -13], [14, 32]] },
+  T2: { color: '#1d6fa5', y: 9.2, stops: ['Marché', 'Mairie', 'Santé'], points: [[-28, 1.5], [-28, -16], [28, -16], [28, 1.5]] },
 };
-// Stops (API names/districts): `x,z` = ground shelter, `track` = point on the rail above it, `facing` = shelter front.
+for (const line of Object.values(lines)) line.path = smoothPath(line.points);
+// Stops (API names/districts): `x,z` = ground shelter, `track` = point on each serving line's rail, `facing` = shelter front.
 export const stops = [
-  { name: 'Mairie', district: 'Centre-ville', x: 7, z: -10, track: [7, -13], facing: 0 },
-  { name: 'Santé', district: 'Quartier est', x: 28, z: 0.5, track: [28, 1.5], facing: -Math.PI / 2 },
-  { name: 'Marché', district: 'Quartier ouest', x: -28, z: 0.5, track: [-28, 1.5], facing: Math.PI / 2 },
-  { name: 'Habitat', district: 'Quartier nord', x: -30, z: -30, track: [-30, -32], facing: Math.PI / 2 },
-  { name: 'Quartier sud', district: 'Quartier sud', x: 14, z: 30, track: [14, 32], facing: -Math.PI / 2 },
+  { name: 'Mairie', district: 'Centre-ville', x: 7, z: -10, track: { T1: [7, -13], T2: [7, -16] }, facing: 0 },
+  { name: 'Santé', district: 'Quartier est', x: 28, z: 0.5, track: { T2: [28, 1.5] }, facing: -Math.PI / 2 },
+  { name: 'Marché', district: 'Quartier ouest', x: -28, z: 0.5, track: { T2: [-28, 1.5] }, facing: Math.PI / 2 },
+  { name: 'Habitat', district: 'Quartier nord', x: -30, z: -30, track: { T1: [-30, -32] }, facing: Math.PI / 2 },
+  { name: 'Quartier sud', district: 'Quartier sud', x: 14, z: 30, track: { T1: [14, 32] }, facing: -Math.PI / 2 },
 ];
-// Unique support columns along the track (about every 13 m).
-export const supports = (() => {
-  const seen = new Map();
-  for (const { points } of Object.values(lines)) {
-    for (let i = 0; i < points.length - 1; i++) {
-      const [ax, az] = points[i];
-      const [bx, bz] = points[i + 1];
-      const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 13));
-      for (let k = 0; k <= n; k++) {
-        const x = Math.round(ax + ((bx - ax) * k) / n);
-        const z = Math.round(az + ((bz - az) * k) / n);
-        seen.set(`${x},${z}`, [x, z]);
-      }
-    }
-  }
-  return [...seen.values()];
-})();
+// Support columns along each rail (about every 12 m, always at both ends). Each has its own height (the rail's).
+export const supports = Object.entries(lines).flatMap(([code, line]) => {
+  const cum = measure(line.path);
+  const total = cum[cum.length - 1];
+  const n = Math.max(1, Math.round(total / 12));
+  return Array.from({ length: n + 1 }, (_, k) => {
+    const at = sample(line.path, cum, (total * k) / n);
+    return { code, x: Math.round(at.x * 2) / 2, z: Math.round(at.z * 2) / 2, y: line.y };
+  });
+});
 
-export const footprints = [...buildings.map(footprintOf), ...pillars, ...supports.map(([x, z]) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: TRACK_Y }))];
+export const footprints = [...buildings.map(footprintOf), ...pillars, ...supports.map(({ x, z, y }) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: y }))];
 
 // Roads [cx, cz, w, d] (w along x, d along z); drawn as paving and walked by the NPC graph below.
 export const roads = [
