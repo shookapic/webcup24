@@ -58,16 +58,6 @@ function Booth({ b, index }) {
   );
 }
 
-function Garden({ b }) {
-  const [fx, fz] = front(b.ry);
-  return [-1.6, 1.6].map((o) => (
-    <group key={o} position={[b.x + fx * 5.6 + fz * o, 0, b.z + fz * 5.6 - fx * o]}>
-      <mesh material={mats.planter} position-y={0.3} castShadow receiveShadow><cylinderGeometry args={[0.7, 0.6, 0.6, 12]} /></mesh>
-      <mesh material={mats.foliage} position-y={0.9} scale={[1, 0.8, 1]} castShadow><icosahedronGeometry args={[0.65, 1]} /></mesh>
-    </group>
-  ));
-}
-
 function HealthCross({ b }) {
   return (
     <group position={[b.x, 1.5 * b.scale + 0.9, b.z]}>
@@ -160,7 +150,6 @@ export function Districts({ reducedMotion }) {
             <Prop name={b.model} variant={b.variant} position={[b.x, 0, b.z]} rotation-y={b.ry} scale={b.scale} />
           </group>
           {b.booth && <Booth b={b} index={i} />}
-          {b.garden && <Garden b={{ ...b, ry: b.garden > 0 ? 0 : Math.PI }} />}
           {b.cross && <HealthCross b={b} />}
         </group>
       ))}

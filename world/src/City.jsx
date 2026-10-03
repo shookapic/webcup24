@@ -4,7 +4,8 @@ import { Plaza } from './Plaza.jsx';
 import { Districts } from './Districts.jsx';
 import { Tram } from './Tram.jsx';
 import { curved } from './curve.js';
-import { roads } from './layout.js';
+import { Streetscape } from './Streetscape.jsx';
+import { Plantings } from './Plantings.jsx';
 
 const rockMaterial = curved(new MeshStandardMaterial({ color: new Color('#8a5a45'), roughness: 1, flatShading: true }));
 export function Rocks() {
@@ -61,19 +62,14 @@ export function Ground() {
 }
 
 
-const roadMaterial = new MeshStandardMaterial({ color: new Color('#cdb59b'), roughness: 0.95 });
-
 // Visual city: roads, plaza, districts, tram. Collision comes from layout.footprints (PlayableCity), not from these meshes.
 export function City({ reducedMotion }) {
   return (
     <>
-      {roads.map(([x, z, w, d]) => (
-        <mesh key={`${x},${z}`} rotation-x={-Math.PI / 2} position={[x, 0.02, z]} material={roadMaterial} receiveShadow>
-          <planeGeometry args={[w, d]} />
-        </mesh>
-      ))}
       <Suspense fallback={null}>
+        <Streetscape />
         <Plaza />
+        <Plantings />
         <Districts reducedMotion={reducedMotion} />
         <Tram reducedMotion={reducedMotion} />
       </Suspense>

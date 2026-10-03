@@ -24,6 +24,13 @@ const PHONE_MS = reducedMotion ? 0 : 300; // raise / lower time; the PhoneRig an
 const flatQuery = new URLSearchParams(location.search).has('flatphone');
 const narrow = matchMedia('(max-width: 720px)');
 
+// ?debug: exposes the renderer so QA can read draw calls / triangles (tools/qa/perf.mjs).
+function GlProbe() {
+  const gl = useThree((state) => state.gl);
+  useEffect(() => { debug.gl = gl; }, [gl]);
+  return null;
+}
+
 // ?debug&fps=N: frames are driven by window.__tn.run(seconds, input) at exactly N Hz.
 function SimDriver() {
   const advance = useThree((state) => state.advance);
@@ -163,6 +170,7 @@ export function App() {
         <hemisphereLight args={['#b9d0e0', '#8a6c58', 1.6]} />
         <Sun />
         {debug.simFps > 0 && <SimDriver />}
+        {debug.enabled && <GlProbe />}
         <Sky reducedMotion={reducedMotion} />
         <Ground />
         {!debug.floorOnly && <Rocks />}

@@ -43,7 +43,7 @@ export function footprintOf(b) {
 }
 
 // Extra solid things that are not kit buildings: Mairie canopy pillars.
-const pillars = [[-2.6, -14.2], [2.6, -14.2], [-2.6, -18.8], [2.6, -18.8]].map(([x, z]) => ({ shape: 'box', x, z, w: 0.9, d: 0.9, h: 4 }));
+const pillars = [[-2.6, -14.2], [2.6, -14.2], [-2.6, -18.8], [2.6, -18.8]].map(([x, z]) => ({ shape: 'box', x, z, w: 0.9, d: 0.9, h: 4, thin: true }));
 
 // Elevated tram: two lines on separate guideways (T2 rides 3.2 m above T1 where they cross at (-28, -13)). Cosmetic: not
 // synchronised with the timetable API (the phone and QA say so). `points` are the corner points, `path` the rounded rail.
@@ -71,7 +71,45 @@ export const supports = Object.entries(lines).flatMap(([code, line]) => {
   });
 });
 
-export const footprints = [...buildings.map(footprintOf), ...pillars, ...supports.map(({ x, z, y }) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: y }))];
+// Streetscape ---------------------------------------------------------------------------------------------------------
+export const PLAZA = { x: 0, z: -3, r: 16 }; // paved round plaza; roads end at its rim
+export const SIDEWALK = 1.8; // pedestrian strip on each side of a road
+
+// Marked crossings: a strip across a road; stripes run along the road direction (`along`) and repeat across `span`.
+export const crossings = [
+  { x: 18.2, z: -3, along: 'x', span: 5 }, { x: -18.2, z: -3, along: 'x', span: 5 }, { x: 0, z: 15.2, along: 'z', span: 5 },
+  { x: 24, z: -3, along: 'x', span: 5 }, { x: -30, z: -20, along: 'z', span: 4 }, { x: -21, z: -11.5, along: 'x', span: 4 },
+];
+
+// Trees (trunk collision only): kit model, position, scale, yaw. Autumn leaves keep the warm palette.
+const T = (model, x, z, s = 3.4, ry = 0) => ({ model, x, z, s: s * 0.74, ry });
+const ringAngles = [35, 60, 120, 145, 215, 240, 300, 325];
+export const trees = [
+  // plaza ring, skipping the four road arms
+  ...ringAngles.map((deg, i) => T(['tree_oak_fall', 'tree_default_fall'][i % 2], PLAZA.x + 14.6 * Math.cos((deg * Math.PI) / 180), PLAZA.z + 14.6 * Math.sin((deg * Math.PI) / 180), 4.2 + (i % 3) * 0.4, i)),
+  // south avenue, both sidewalks
+  ...[18, 26, 34, 42].flatMap((z, i) => [T(i % 2 ? 'tree_thin' : 'tree_oak_fall', 3.9, z, 4.5, i), T(i % 2 ? 'tree_oak_fall' : 'tree_thin', -3.9, z + 4, 4.5, i + 2)]),
+  // east / west avenues
+  T('tree_default_fall', 21, -6.9, 4.6), T('tree_oak_fall', 26, 0.9, 4.4, 1), T('tree_default_fall', -21, -6.9, 4.6, 2), T('tree_oak_fall', -25, 0.9, 4.4, 3),
+  // Mairie forecourt, Santé shade, Marché ends, Habitat lane, Quartier sud
+  T('tree_fat_fall', -17, -15.5, 4.5), T('tree_fat_fall', 17, -15.5, 4.5, 1),
+  T('tree_oak_fall', 31, -12, 4.6), T('tree_default_fall', 31, 9, 4.6, 2),
+  T('tree_oak_fall', -55, -2, 4.4), T('tree_default_fall', -24, -9, 4.4, 1),
+  T('tree_thin', -34, -29, 4.2),
+  T('tree_fat_fall', -8, 40, 4.6), T('tree_oak_fall', 8, 44, 4.4, 1), T('tree_default_fall', -20, 34, 4.4, 2), T('tree_fat_fall', 21, 42, 4.6, 3), T('tree_oak_fall', 28, 34, 4.4, 1),
+];
+
+// Planting beds (bushes, flowers, grass scattered deterministically inside each, plus a stone border).
+export const beds = [
+  [-11, -8, 1.5], [11, -8, 1.5], [-12, 3, 1.5], [12, 3, 1.5], [-4.5, -12.5, 1.3], [4.5, -12.5, 1.3],
+  [-7, -16, 1.7], [7, -16, 1.7],
+  [-27, 6, 1.4], [34, -14.5, 1.5], [34, 12, 1.5],
+  [-52.5, -6, 1.4], [-52.5, 2.5, 1.4],
+  [-14, 32, 1.4], [14, 36, 1.4], [-6, 46, 1.6], [6, 46, 1.6], [-20, 44, 1.5], [22, 33, 1.4],
+  [-47, -20.5, 1.4], [-40, -20.5, 1.4], [-26, -38, 1.3],
+];
+
+export const footprints = [...buildings.map(footprintOf), ...pillars, ...trees.map(({ x, z }) => ({ shape: 'box', x, z, w: 0.5, d: 0.5, h: 3, thin: true })), ...supports.map(({ x, z, y }) => ({ shape: 'box', x, z, w: 0.7, d: 0.7, h: y, thin: true }))];
 
 // Roads [cx, cz, w, d] (w along x, d along z); drawn as paving and walked by the NPC graph below.
 export const roads = [
@@ -99,8 +137,8 @@ export function nearestStop({ x, z }) {
 export const pathNodes = {
   center: [0, -3],
   mairie: [0, -13],
-  plazaE: [10, -8],
-  plazaW: [-10, -8],
+  plazaE: [8, -8],
+  plazaW: [-8, -8],
   east: [15, -3],
   sante: [28, -3],
   west: [-14, -3],

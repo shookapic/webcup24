@@ -24,15 +24,6 @@ function Lamp({ position }) {
   );
 }
 
-function Planter({ position, r = 0.9 }) {
-  return (
-    <group position={position}>
-      <mesh material={mats.planter} position-y={0.35} castShadow receiveShadow><cylinderGeometry args={[r, r * 0.85, 0.7, 14]} /></mesh>
-      <mesh material={mats.foliage} position-y={1.05} scale={[1, 0.8, 1]} castShadow><icosahedronGeometry args={[r * 0.85, 1]} /></mesh>
-    </group>
-  );
-}
-
 function Bench({ position, rotation = 0 }) {
   return (
     <group position={position} rotation-y={rotation}>
@@ -46,7 +37,7 @@ function Bench({ position, rotation = 0 }) {
 // Round pavement with a darker inner ring, laid just above the ground plane.
 function Paving() {
   return (
-    <group position={[0, 0.04, -3]} rotation-x={-Math.PI / 2}>
+    <group position={[0, 0.07, -3]} rotation-x={-Math.PI / 2}>
       <mesh material={mats.paving} receiveShadow><circleGeometry args={[16, 64]} /></mesh>
       <mesh material={mats.pavingDark} position-z={0.01} receiveShadow><ringGeometry args={[5.2, 5.8, 64]} /></mesh>
       <mesh material={mats.pavingDark} position-z={0.01} receiveShadow><ringGeometry args={[13.6, 14.2, 64]} /></mesh>
@@ -72,7 +63,6 @@ export function Plaza() {
       <Bench position={[8.5, 0, -2]} rotation={-Math.PI / 2} />
       <Bench position={[-5, 0, 4.5]} rotation={Math.PI * 0.85} />
       <Bench position={[5, 0, 4.5]} rotation={-Math.PI * 0.85} />
-      {[[-11, -8], [11, -8], [-12, 3], [12, 3], [-4, -12.5], [4, -12.5]].map(([x, z]) => <Planter key={`${x},${z}`} position={[x, 0, z]} />)}
       {[[-13, -3], [13, -3], [-6, -11], [6, -11], [0, 14]].map(([x, z]) => <Lamp key={`${x},${z}`} position={[x, 0, z]} />)}
       <Prop name="rock_largeA" position={[-9, 0, 9]} scale={2.4} rotation-y={1} />
       <Prop name="rocks_smallA" position={[10, 0, 8]} scale={3} />

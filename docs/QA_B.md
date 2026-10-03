@@ -110,6 +110,27 @@ Fixed on the way: `Texture.clone()` shares its `Source` with the glTF texture, s
 
 Regression on this build: world-checks 15/15 (60 Hz, 30 Hz jitter, 144 Hz), alert-flow 14/14, phone-capture normal + alert, phone-race 12/12, tram-check 22/22, building-check 22/22.
 
+## Streetscape + vegetation checkpoint (2026-10-03 ~19:00)
+
+Roads now have sidewalks (1.8 m), raised curbs (instanced, clipped where roads meet or enter the plaza), dashed centre lines, six marked zebra crossings, a plaza that covers the avenues where they enter it, a fingerpost with district boards (canvas text, no font files), stop shelters with line discs. Vegetation (Kenney Nature Kit, CC0): 36 trees on the plaza ring, avenues and districts (trunks collide; the camera ignores thin colliders so it no longer snaps in behind trees), 23 planting beds with border, soil, bushes, flowers and grass. Data: `layout.js` (`crossings`, `trees`, `beds`, `roads`); components `Streetscape.jsx`, `Plantings.jsx`, `nature.jsx`.
+
+Same-camera before/after: `docs/qa-captures/street-before/` (963b08b) vs `street-after/` (spawn, mairie, sante, marche, habitat, sud).
+
+**Frame cost, named hardware** (`tools/qa/perf.mjs`, headed Edge 154, real rAF, 1440 x 900, DPR 1, NVIDIA GeForce RTX 5070 Ti via ANGLE/D3D11, 32 logical cores; `docs/qa-captures/perf-streetscape-rtx5070ti.json`):
+
+| Stop | frame p50 / p95 / max (ms) | draw calls per frame* | triangles per frame* |
+|---|---|---|---|
+| spawn | 3.6 / 3.7 / 3.7 | 962 | 206k |
+| mairie | 3.6 / 3.7 / 10.7 | 813 | 194k |
+| sante | 3.6 / 3.7 / 7.1 | 571 | 185k |
+| marche | 3.6 / 3.7 / 3.7 | 795 | 192k |
+| habitat | 3.6 / 3.7 / 3.7 | 706 | 189k |
+| sud | 3.6 / 3.7 / 3.7 | 818 | 203k |
+
+*whole frame = shadow pass + scene + post-processing, measured with `info.autoReset` off. The roadmap budget (< 200 visible draw calls, < 500k triangles) is met for triangles but **not for draw calls** (every kit prop, NPC part and shadow-casting mesh is drawn twice). Frame time is excellent on this GPU (uncapped ~277 Hz); a weak device is **UNVERIFIED** and draw-call reduction (merging static props, instancing buildings) is a B4 task, not hidden by bloom.
+
+Regression: world-checks 15/15 (60 Hz), building-check 22/22 on this build.
+
 ## Wave 6 triage (15:25, H+7h) — A, with B support
 
 D13 plain wording (310), D20 inclusive platform (930), F41 keyboard-only (620), F42 assistive-tech forms/errors (930), F43 colour distinction (310), F44 zoom without breaking layout (620). All portal/UI shaped: **Session A**. B support only: world HUD/phone must stay keyboard-operable (movement keys are ignored inside dialogs, T/V/Escape documented), colour must not be the only signal (alert badge has text), world HUD must survive 200% zoom (A's CSS). The world is not a substitute for the portal route; "Version accessible" link stays visible.
