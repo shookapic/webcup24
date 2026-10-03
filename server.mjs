@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, extname, join, sep } from 'node:path';
 import { db } from './store.mjs';
 import { clearSession, createSession, currentUser, hashPassword, verifyPassword } from './security.mjs';
 
@@ -16,6 +16,16 @@ const files = new Map([
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
   ['/favicon.svg', ['favicon.svg', 'image/svg+xml']],
 ]);
+const worldRoot = join(root, 'dist', 'monde');
+const worldTypes = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json', '.wasm': 'application/wasm', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json',
+  '.bin': 'application/octet-stream', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+  '.svg': 'image/svg+xml', '.ktx2': 'image/ktx2', '.hdr': 'application/octet-stream', '.woff': 'font/woff', '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf', '.otf': 'font/otf', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav',
+};
+const worldCsp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' blob: data:; worker-src 'self' blob:; base-uri 'none'; object-src 'none'";
+const presence = new Map();
 const loginAttempts = new Map();
 let cachedFeed;
 let pendingFeed;
@@ -118,11 +128,47 @@ async function serveFile(path, response) {
   response.end(body);
 }
 
+async function serveWorld(path, response) {
+  let relative;
+  try { relative = decodeURIComponent(path.slice('/monde'.length)); } catch { fail(400, 'Adresse invalide.'); }
+  if (relative.includes('\0')) fail(400, 'Adresse invalide.');
+  let file = join(worldRoot, relative);
+  if (file !== worldRoot && !file.startsWith(worldRoot + sep)) fail(404, 'Page introuvable.');
+  let body;
+  try {
+    body = await readFile(file);
+  } catch (error) {
+    if (!['ENOENT', 'EISDIR', 'ENOTDIR'].includes(error.code)) throw error;
+    file = join(worldRoot, 'index.html');
+    try { body = await readFile(file); } catch { fail(404, 'Le monde n’est pas encore disponible.'); }
+  }
+  response.writeHead(200, {
+    'Content-Type': worldTypes[extname(file).toLowerCase()] || 'application/octet-stream',
+    // Vite fingerprints everything under assets/, so those files never change.
+    'Cache-Control': relative.startsWith('/assets/') && file !== join(worldRoot, 'index.html') ? 'public, max-age=31536000, immutable' : 'no-cache',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': worldCsp,
+  });
+  response.end(body);
+}
+
+function color(value) {
+  if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) fail(400, 'Couleur invalide (format #rrggbb).');
+  return value.toLowerCase();
+}
+
+function coordinate(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1e6) fail(400, 'Position invalide.');
+  return value;
+}
+
 async function route(request, response) {
   const path = new URL(request.url, 'http://localhost').pathname;
   const method = request.method;
 
-  if (!['GET', 'POST', 'PATCH'].includes(method)) fail(405, 'Méthode non autorisée.');
+  if (!['GET', 'POST', 'PUT', 'PATCH'].includes(method)) fail(405, 'Méthode non autorisée.');
   if (method !== 'GET' && request.headers.origin) {
     let origin;
     try { origin = new URL(request.headers.origin); } catch { fail(403, 'Origine non autorisée.'); }
@@ -130,6 +176,31 @@ async function route(request, response) {
   }
 
   if (path === '/api/me' && method === 'GET') return sendJson(response, 200, { user: currentUser(request) });
+  if (path === '/api/me/avatar' && method === 'PUT') {
+    const user = requireUser(request);
+    const body = await readJson(request);
+    const avatar = { skin: color(body.skin), outfit: color(body.outfit), accent: color(body.accent) };
+    db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(JSON.stringify(avatar), user.id);
+    return sendJson(response, 200, { avatar });
+  }
+
+  if (path === '/api/presence' && method === 'POST') {
+    const user = requireUser(request);
+    const body = await readJson(request);
+    presence.set(user.id, { id: user.id, name: user.name, avatar: user.avatar, x: coordinate(body.x), z: coordinate(body.z), ry: coordinate(body.ry), at: Date.now() });
+    response.writeHead(204, { 'Cache-Control': 'no-store' });
+    return response.end();
+  }
+  if (path === '/api/presence' && method === 'GET') {
+    // Anonymous visitors see nobody: player names stay behind the login.
+    const user = currentUser(request);
+    const players = [];
+    for (const [id, { at, ...player }] of presence) {
+      if (Date.now() - at > 15_000) presence.delete(id);
+      else if (user && id !== user.id) players.push(player);
+    }
+    return sendJson(response, 200, { players });
+  }
 
   if (path === '/api/auth/register' && method === 'POST') {
     const body = await readJson(request);
@@ -147,7 +218,7 @@ async function route(request, response) {
     }
     clearSession(request, response);
     createSession(response, Number(result.lastInsertRowid));
-    return sendJson(response, 201, { user: { id: Number(result.lastInsertRowid), email: address, name, role: 'citizen' } });
+    return sendJson(response, 201, { user: { id: Number(result.lastInsertRowid), email: address, name, role: 'citizen', avatar: null } });
   }
 
   if (path === '/api/auth/login' && method === 'POST') {
@@ -165,7 +236,7 @@ async function route(request, response) {
     loginAttempts.delete(key);
     clearSession(request, response);
     createSession(response, user.id);
-    return sendJson(response, 200, { user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+    return sendJson(response, 200, { user: { id: user.id, email: user.email, name: user.name, role: user.role, avatar: user.avatar ? JSON.parse(user.avatar) : null } });
   }
 
   if (path === '/api/auth/logout' && method === 'POST') {
@@ -232,6 +303,7 @@ async function route(request, response) {
     return sendJson(response, 200, await loadFeed());
   }
 
+  if (method === 'GET' && (path === '/monde' || path.startsWith('/monde/'))) return serveWorld(path, response);
   if (method === 'GET' && !path.startsWith('/api/')) return serveFile(path, response);
   fail(404, 'Route introuvable.');
 }
