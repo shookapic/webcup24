@@ -118,6 +118,15 @@ const topics = [
   { code: 'autre', fr: 'Autre sujet', en: 'Other subject' },
 ];
 const topicCodes = topics.map((topic) => topic.code);
+// F70: the perimeter of an agent (a list of service ids) or null = everything. Requests with no service are visible to every agent.
+function scopeOf(user) {
+  if (user.role !== 'agent') return null;
+  const rows = db.prepare('SELECT service_id FROM agent_scopes WHERE agent_id = ?').all(user.id);
+  return rows.length ? rows.map((row) => row.service_id) : null;
+}
+const inScope = (user, serviceId) => { const ids = scopeOf(user); return !ids || serviceId === null || ids.includes(serviceId); };
+// the visible requests as a table named "messages", for queries written against it (ids come from the database, never from the client)
+const scopedMessages = (user) => { const ids = scopeOf(user); return ids ? `(SELECT * FROM messages WHERE service_id IS NULL OR service_id IN (${ids.join(',')})) AS messages` : 'messages'; };
 // F80: how soon agents should look at a request. Set only by staff; residents never see it.
 const priorities = { urgent: 'urgente', high: 'prioritaire', normal: 'normale' };
 
@@ -243,7 +252,7 @@ async function readJson(request) {
 function requireUser(request, roles) {
   const user = currentUser(request);
   if (!user) fail(401, 'Connectez-vous pour continuer.');
-  if (roles && !roles.includes(user.role)) fail(403, 'Accès réservé.');
+  if (roles && !roles.includes(user.role)) fail(403, roles.includes('agent') ? 'Accès réservé aux agents autorisés.' : roles.includes('admin') ? 'Accès réservé aux administrateurs.' : 'Accès réservé.');
   return user;
 }
 
@@ -771,22 +780,50 @@ async function route(request, response) {
     return completeLogin(request, response, user, earlierFailures);
   }
 
+  // F70: administrators give each agent a perimeter (the services whose requests they handle). Without one, an agent keeps seeing everything.
+  if (path === '/api/admin/agents' && method === 'GET') {
+    requireUser(request, ['admin']);
+    const agents = db.prepare("SELECT id, name, email FROM users WHERE role = 'agent' AND active = 1 ORDER BY name COLLATE NOCASE, id").all();
+    const scopes = db.prepare('SELECT agent_id, service_id FROM agent_scopes').all();
+    return sendJson(response, 200, { agents: agents.map((agent) => ({ ...agent, services: scopes.filter((row) => row.agent_id === agent.id).map((row) => row.service_id) })) });
+  }
+  const scopeMatch = /^\/api\/admin\/agents\/(\d+)\/scope$/.exec(path);
+  if (scopeMatch && method === 'PUT') {
+    const admin = requireUser(request, ['admin']);
+    const agent = db.prepare("SELECT id, name FROM users WHERE id = ? AND role = 'agent'").get(Number(scopeMatch[1]));
+    if (!agent) fail(404, 'Agent introuvable.');
+    const body = await readJson(request);
+    if (!Array.isArray(body.services) || body.services.length > 100 || !body.services.every((id) => Number.isInteger(id) && id > 0)) fail(400, 'Liste de services invalide.');
+    const ids = [...new Set(body.services)];
+    const known = db.prepare(`SELECT id, title FROM services WHERE id IN (${ids.length ? ids.join(',') : '0'})`).all();
+    if (known.length !== ids.length) fail(400, 'Service inconnu.');
+    tx(() => {
+      db.prepare('DELETE FROM agent_scopes WHERE agent_id = ?').run(agent.id);
+      const insert = db.prepare('INSERT INTO agent_scopes (agent_id, service_id) VALUES (?, ?)');
+      for (const id of ids) insert.run(agent.id, id);
+      audit(admin, { category: 'account', action: 'agent.scope', target: { type: 'user', id: agent.id, label: agent.name }, summary: ids.length ? `a limité l’agent « ${agent.name} » aux demandes des services : ${known.map((row) => row.title).join(', ')} (et celles sans service)` : `a rendu à l’agent « ${agent.name} » l’accès à toutes les demandes`, details: { services: ids } });
+    });
+    return sendJson(response, 200, { ok: true, services: ids });
+  }
+
   // F50: the staff dashboard. Every figure is counted from the database at request time; the payload holds numbers and service/line names only.
   if (path === '/api/admin/dashboard' && method === 'GET') {
     const staff = requireUser(request, ['agent', 'admin']);
-    const one = (sql, ...args) => db.prepare(sql).get(...args);
+    const M = scopedMessages(staff);
+    const q = (sql) => sql.replaceAll('FROM messages', `FROM ${M}`);
+    const one = (sql, ...args) => db.prepare(q(sql)).get(...args);
     const now = cityNow();
     const today = now.slice(0, 10);
     const utc = (local) => new Date(`${local}:00${cityOffset}`).toISOString().slice(0, 19).replace('T', ' ');
     const dayStart = utc(`${today}T00:00`);
     const weekStart = utc(`${addMinutes(`${today}T00:00`, -6 * 1440)}`);
-    const byStatus = Object.fromEntries(db.prepare('SELECT status, COUNT(*) AS n FROM messages GROUP BY status').all().map((row) => [row.status, row.n]));
+    const byStatus = Object.fromEntries(db.prepare(q('SELECT status, COUNT(*) AS n FROM messages GROUP BY status')).all().map((row) => [row.status, row.n]));
     const oldest = one("SELECT MIN(created_at) AS at FROM messages WHERE status = 'new'").at;
     const waitingHours = oldest ? Math.max(0, Math.floor((Date.now() - Date.parse(oldest.replace(' ', 'T') + 'Z')) / 3_600_000)) : null;
     const week = addMinutes(`${today}T00:00`, 7 * 1440);
     // Average time to resolve: from receipt to the last status change of each resolved request (resolved is the end state; reopening removes it from the average).
     const averageHours = one("SELECT AVG((julianday(updated_at) - julianday(created_at)) * 24) AS h FROM messages WHERE status = 'resolved'").h;
-    const incidentsByDistrict = db.prepare("SELECT users.district AS district, COUNT(*) AS total, SUM(CASE WHEN messages.status != 'resolved' THEN 1 ELSE 0 END) AS open FROM messages JOIN users ON users.id = messages.user_id WHERE messages.kind = 'incident' GROUP BY users.district ORDER BY total DESC, users.district").all();
+    const incidentsByDistrict = db.prepare(q("SELECT users.district AS district, COUNT(*) AS total, SUM(CASE WHEN messages.status != 'resolved' THEN 1 ELSE 0 END) AS open FROM messages JOIN users ON users.id = messages.user_id WHERE messages.kind = 'incident' GROUP BY users.district ORDER BY total DESC, users.district")).all();
     // seven city days, oldest first: requests received and requests resolved on that day (city time = UTC+4)
     const activity = Array.from({ length: 7 }, (_, index) => {
       const day = addMinutes(`${today}T00:00`, (index - 6) * 1440).slice(0, 10);
@@ -1410,13 +1447,13 @@ async function route(request, response) {
     const user = requireUser(request);
     const all = ['agent', 'admin'].includes(user.role);
     const messages = all
-      ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, users.district AS citizen_district, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
+      ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, users.district AS citizen_district, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id WHERE ${scopeOf(user) ? `(messages.service_id IS NULL OR messages.service_id IN (${scopeOf(user).join(',')}))` : '1 = 1'} ORDER BY messages.created_at DESC, messages.id DESC`).all()
       : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, topic, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT public_title FROM public_requests WHERE message_id = messages.id) AS public_title, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
     const replies = repliesOf(messages.map((message) => message.id));
     // F75: staff also learn which requests talk about the same problem (residents get nothing of it)
     const similar = all ? groupSimilar(messages) : null;
     return sendJson(response, 200, {
-      ...(similar ? { groups: similar.groups } : {}),
+      ...(similar ? { groups: similar.groups, scope: { limited: Boolean(scopeOf(user)), services: scopeOf(user) ? db.prepare(`SELECT id, title, title_en FROM services WHERE id IN (${scopeOf(user).join(',')}) ORDER BY title`).all() : [] } } : {}),
       messages: messages.map(({ fingerprint, ...message }) => ({
         ...message,
         ...(similar ? { group: similar.of.get(message.id) || null } : {}),
@@ -1458,8 +1495,8 @@ async function route(request, response) {
     const staff = requireUser(request, ['agent', 'admin']);
     const body = await readJson(request);
     const content = text(body.body, 5, 2000, 'La réponse');
-    const item = db.prepare('SELECT id, user_id, subject FROM messages WHERE id = ?').get(Number(replyMatch[1]));
-    if (!item) fail(404, 'Message introuvable.');
+    const item = db.prepare('SELECT id, user_id, subject, service_id FROM messages WHERE id = ?').get(Number(replyMatch[1]));
+    if (!item || !inScope(staff, item.service_id)) fail(404, 'Message introuvable.');
     const same = db.prepare("SELECT id FROM message_replies WHERE message_id = ? AND author_id = ? AND body = ? AND created_at > datetime('now', ?) ORDER BY id DESC LIMIT 1").get(item.id, staff.id, content, DUPLICATE_WINDOW);
     if (same) {
       noteForm('duplicate', 'reply');
@@ -1686,8 +1723,8 @@ async function route(request, response) {
     const staff = requireUser(request, ['agent', 'admin']);
     const { priority } = await readJson(request);
     if (typeof priority !== 'string' || !Object.hasOwn(priorities, priority)) fail(400, 'Priorité invalide : urgent, high ou normal.');
-    const item = db.prepare('SELECT id, subject, priority FROM messages WHERE id = ?').get(Number(priorityMatch[1]));
-    if (!item) fail(404, 'Message introuvable.');
+    const item = db.prepare('SELECT id, subject, priority, service_id FROM messages WHERE id = ?').get(Number(priorityMatch[1]));
+    if (!item || !inScope(staff, item.service_id)) fail(404, 'Message introuvable.');
     // The priority is internal: it does not touch updated_at (the resident's "last update" and the resolution times stay true) and notifies nobody.
     if (priority !== item.priority) {
       tx(() => {
@@ -1703,8 +1740,8 @@ async function route(request, response) {
     const body = await readJson(request);
     if (!['new', 'in_progress', 'resolved'].includes(body.status)) fail(400, 'Statut invalide.');
     const note = body.note ? text(body.note, 5, 300, 'Le message pour l’habitant') : null;
-    const item = db.prepare('SELECT id, user_id, subject, status FROM messages WHERE id = ?').get(Number(messageMatch[1]));
-    if (!item) fail(404, 'Message introuvable.');
+    const item = db.prepare('SELECT id, user_id, subject, status, service_id FROM messages WHERE id = ?').get(Number(messageMatch[1]));
+    if (!item || !inScope(staff, item.service_id)) fail(404, 'Message introuvable.');
     const names = { new: 'à traiter', in_progress: 'en cours', resolved: 'résolu' };
     tx(() => {
       db.prepare('UPDATE messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(body.status, item.id);
@@ -1772,14 +1809,16 @@ async function route(request, response) {
   }
 
   if (path === '/api/admin/audit' && method === 'GET') {
-    requireUser(request, ['agent', 'admin']);
+    const viewer = requireUser(request, ['agent', 'admin']);
     const params = Object.fromEntries(new URL(request.url, 'http://localhost').searchParams);
+    const scope = scopeOf(viewer);
+    const excludeMessages = scope ? db.prepare(`SELECT id FROM messages WHERE service_id IS NOT NULL AND service_id NOT IN (${scope.join(',')})`).all().map((row) => row.id) : [];
     if (params.format === 'csv') {
-      const { entries } = listAudit({ ...params, limit: 5000 }, { limitMax: 5000 });
+      const { entries } = listAudit({ ...params, limit: 5000 }, { limitMax: 5000, excludeMessages });
       response.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="journal-des-actions.csv"', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
       return response.end('﻿' + auditCsv(entries));
     }
-    const page = listAudit(params);
+    const page = listAudit(params, { excludeMessages });
     return sendJson(response, 200, { ...page, ...(params.before ? {} : { facets: auditFacets() }), now: cityNow() });
   }
   if (path === '/api/admin/audit/verify' && method === 'GET') {

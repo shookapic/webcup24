@@ -279,6 +279,7 @@
             </section>
             <div class="workspace-grid">
               <div class="panel" id="staff-messages-panel" tabindex="-1"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p>
+                <p id="scope-note" class="form-status" data-content></p>
                 <section id="similar-panel" class="similar-panel" aria-labelledby="similar-title" hidden>
                   <h4 id="similar-title">Demandes similaires</h4>
                   <p>Ces demandes parlent du même problème : elles utilisent les mêmes mots importants. Rien n’est fusionné ni masqué : chaque demande garde sa réponse. Deux demandes formulées avec des mots tout à fait différents ne sont pas rapprochées.</p>
@@ -384,6 +385,12 @@
 
           <div id="admin-area" class="admin-grid" hidden>
             <form id="service-form" class="panel" tabindex="-1"><h3>Ajouter un service</h3><label>Titre <input name="title" required minlength="3" maxlength="100"></label><label>Résumé <input name="description" required minlength="5" maxlength="180"></label><label>Informations utiles <textarea name="details" required minlength="10" maxlength="2000" rows="4"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="100"></label><label>Résumé en anglais (facultatif) <input name="description_en" minlength="5" maxlength="180"></label><label>Informations utiles en anglais (facultatif) <textarea name="details_en" minlength="10" maxlength="2000" rows="4"></textarea></label><label class="check-field"><input name="featured" type="checkbox"> Mettre en avant (affiché en premier)</label><button class="button button-primary" type="submit">Publier le service</button><p id="service-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <section id="scope-panel" class="panel" aria-labelledby="scope-title" tabindex="-1">
+              <h3 id="scope-title">Périmètre des agents</h3>
+              <p>Par défaut un agent voit toutes les demandes. Cochez des services pour limiter un agent aux demandes de ces services (et à celles qui n’en désignent aucun) : les autres demandes ne lui sont ni montrées, ni comptées, ni accessibles. Ne rien cocher rend tout l’accès.</p>
+              <p id="scope-status" class="form-status" role="status" aria-live="polite"></p>
+              <div id="scope-list" data-content></div>
+            </section>
             <section id="place-admin" class="panel place-admin" aria-labelledby="place-admin-title" tabindex="-1">
               <h3 id="place-admin-title">Lieux de la ville</h3><p>Ajoutez ou corrigez les lieux que les habitants cherchent : hôpitaux, urgences, services. Chaque changement est noté dans le journal des actions.</p>
               <form id="place-form">

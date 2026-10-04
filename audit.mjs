@@ -84,9 +84,11 @@ function wholeNumber(value, label, { min, max = Number.MAX_SAFE_INTEGER, fallbac
 const clean = (value, max = 80) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 
 // Filters: actor (id), category, q (text), from/to (ISO date), target_type + target_id, before (id cursor), limit.
-export function listAudit(query, { cityOffsetHours = 4, limitMax = 200 } = {}) {
+export function listAudit(query, { cityOffsetHours = 4, limitMax = 200, excludeMessages = [] } = {}) {
   const where = [];
   const args = {};
+  // F70: lines about requests outside an agent's perimeter are not shown to that agent (ids are integers read from the database)
+  if (excludeMessages.length) where.push(`NOT (target_type = 'message' AND target_id IN (${excludeMessages.map((id) => `'${Number(id)}'`).join(',')}))`);
   const actor = wholeNumber(query.actor, 'L’agent', { min: 0 });
   if (actor !== null) { where.push('actor_id = :actor'); args.actor = actor; }
   if (clean(query.category, 30)) { where.push('category = :category'); args.category = clean(query.category, 30); }

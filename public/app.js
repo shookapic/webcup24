@@ -1393,8 +1393,9 @@ async function loadMessages() {
   if (!user) return;
   const list = ['agent', 'admin'].includes(user.role) ? $('#staff-messages') : $('#citizen-messages');
   try {
-    const { messages, groups } = await api('/api/messages');
+    const { messages, groups, scope } = await api('/api/messages');
     staffGroups = groups || [];
+    if (scope) $('#scope-note').textContent = scope.limited ? t('Votre périmètre : les demandes des services {names} et celles sans service. Les autres demandes ne vous sont pas montrées.', { names: scope.services.map((item) => (lang === 'en' && item.title_en) || item.title).join(', ') }) : '';
     renderMessages(messages);
     markFresh(list);
     loadDashboard();
@@ -2400,6 +2401,7 @@ async function afterAuthentication(nextUser) {
   loadPublic();
   loadDevices();
   loadFactors();
+  loadScopes();
   await loadFeed();
   loadCitizens();
   loadAppointments();
@@ -2670,6 +2672,41 @@ async function removePasskey(id, values) {
     reportError('#passkeys-status', error);
     if (securityState.has_password) throw error;
   }
+}
+
+// F70: administrators give each agent a perimeter of services.
+async function loadScopes() {
+  if (user?.role !== 'admin') return;
+  try {
+    const { agents } = await api('/api/admin/agents');
+    const list = $('#scope-list');
+    list.replaceChildren(...(agents.length ? agents : [null]).map((agent) => {
+      if (!agent) return element('p', 'list-empty', t('Aucun agent.'));
+      const box = element('fieldset', 'scope-agent');
+      box.append(element('legend', '', `${agent.name} · ${agent.email}`));
+      const checks = services.map((service) => {
+        const label = element('label', 'check-field');
+        const input = element('input');
+        input.type = 'checkbox';
+        input.value = service.id;
+        input.checked = agent.services.includes(service.id);
+        label.append(input, ` ${(lang === 'en' && service.title_en) || service.title}`);
+        return { label, input };
+      });
+      for (const { label } of checks) box.append(label);
+      const save = element('button', 'button', t('Enregistrer le périmètre de {name}', { name: agent.name }));
+      save.type = 'button';
+      save.addEventListener('click', async () => {
+        try {
+          const ids = checks.filter(({ input }) => input.checked).map(({ input }) => Number(input.value));
+          await api(`/api/admin/agents/${agent.id}/scope`, 'PUT', { services: ids });
+          setFormStatus('#scope-status', ids.length ? t('{name} ne voit plus que les demandes de {n} service(s) et celles sans service.', { name: agent.name, n: ids.length }) : t('{name} voit de nouveau toutes les demandes.', { name: agent.name }));
+        } catch (error) { reportError('#scope-status', error); }
+      });
+      box.append(save);
+      return box;
+    }));
+  } catch (error) { if (error.status === 401) clearIdentity(); }
 }
 
 // F83: anyone holding a reference and its code can ask whether the city received the request, and when. The answer never carries the content.

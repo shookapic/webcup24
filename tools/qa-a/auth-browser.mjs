@@ -26,6 +26,7 @@ const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${o
 
 const staffPw = (role) => /conserver : (\S+)/.exec(spawnSync(process.execPath, ['create-staff.mjs', `${role}@auth.test`, `${role} Auth`, role], { cwd: root, env, encoding: 'utf8' }).stdout)[1];
 const agentPw = staffPw('agent');
+const adminPw = staffPw('admin');
 const server = spawn(process.execPath, ['server.mjs'], { cwd: root, env, stdio: 'ignore' });
 await wait(1500);
 let ipCounter = 0;
@@ -335,6 +336,22 @@ plainPage.on('pageerror', (e) => plainErrors.push(e.message));
 await plainPage.goto(base + '/', { waitUntil: 'networkidle0' });
 check('without WebAuthn support the passkey button and the passwordless sign-up are not shown, and the page still works', await plainPage.evaluate(() => document.querySelector('#login-alt').hidden && document.querySelector('#passkey-signup-form').hidden && !document.querySelector('#login-form').hidden) && plainErrors.length === 0, plainErrors.join(' | '));
 await plain.close();
+
+console.log('\n# F70. perimeter of agents in the portal');
+const adminCookie = (await call('/api/auth/login', 'POST', { email: 'admin@auth.test', password: adminPw })).cookie;
+const svc = (await call('/api/services', 'POST', { title: 'Service Santé', description: 'Description du service santé', details: 'Informations détaillées du service santé pour tous.' }, adminCookie)).data.id;
+s = await open(adminCookie);
+await s.page.waitForFunction(() => document.querySelector('#scope-list input[type=checkbox]'), { timeout: 10000 });
+await axe(s.page, 'agents perimeter panel');
+await s.page.evaluate(() => { document.querySelector('#scope-list input[type=checkbox]').click(); [...document.querySelectorAll('#scope-list button')][0].click(); });
+await s.page.waitForFunction(() => /ne voit plus que les demandes de 1 service/.test(document.querySelector('#scope-status')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+check('the administrator ticks a service for the agent and saves: the page says in words what the agent now sees', /^✓ .+ ne voit plus que les demandes de 1 service\(s\)/.test(await textOf(s.page, '#scope-status')), await textOf(s.page, '#scope-status'));
+await s.context.close();
+const agentCookie = (await call('/api/auth/login', 'POST', { email: 'agent@auth.test', password: agentPw })).cookie;
+s = await open(agentCookie);
+await s.page.waitForFunction(() => /Votre périmètre/.test(document.querySelector('#scope-note')?.textContent || ''), { timeout: 10000 }).catch(() => {});
+check('the limited agent is told their perimeter at the top of the request list; the administrator panel is not shown to them', /^Votre périmètre : les demandes des services Centre de santé et celles sans service\./.test(await textOf(s.page, '#scope-note')) && await s.page.$eval('#admin-area', (n) => n.hidden), await textOf(s.page, '#scope-note'));
+await s.context.close();
 
 await browser.close();
 server.kill();

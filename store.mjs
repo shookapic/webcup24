@@ -345,6 +345,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS passkeys (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys(user_id)');
 
+// F70: the perimeter of an agent: the services whose requests they handle. No row = no restriction (every agent that existed before keeps everything).
+db.exec(`CREATE TABLE IF NOT EXISTS agent_scopes (
+  agent_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  PRIMARY KEY (agent_id, service_id)
+)`);
+
 // F82: a durable fingerprint of what a resident sent (messages and concerns), so the same text sent again within minutes (a retry, a script) is recognised
 // even after a restart. Additive: old rows keep an empty fingerprint and are never matched.
 for (const table of ['messages', 'concerns']) {
