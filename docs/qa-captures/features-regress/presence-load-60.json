@@ -1,0 +1,33 @@
+registered 60/60 disposable accounts
+{
+  "base": "http://127.0.0.1:3101",
+  "clients": 60,
+  "seconds": 20,
+  "intervalMs": 2000,
+  "requests": 1779,
+  "rps": 89,
+  "statuses": {
+    "200": 1186,
+    "204": 593
+  },
+  "perRoute": {
+    "presence.post": {
+      "n": 593,
+      "p50": 15.8,
+      "p95": 16.7,
+      "max": 17.8
+    },
+    "presence.get": {
+      "n": 593,
+      "p50": 15.2,
+      "p95": 16,
+      "max": 17
+    },
+    "announcements": {
+      "n": 593,
+      "p50": 15.2,
+      "p95": 16,
+      "max": 16.9
+    }
+  }
+}

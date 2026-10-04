@@ -1,0 +1,33 @@
+registered 200/200 disposable accounts
+{
+  "base": "http://127.0.0.1:3101",
+  "clients": 200,
+  "seconds": 20,
+  "intervalMs": 2000,
+  "requests": 5892,
+  "rps": 294.6,
+  "statuses": {
+    "200": 3928,
+    "204": 1964
+  },
+  "perRoute": {
+    "presence.post": {
+      "n": 1964,
+      "p50": 14.7,
+      "p95": 16.4,
+      "max": 18.2
+    },
+    "presence.get": {
+      "n": 1964,
+      "p50": 15.1,
+      "p95": 16.1,
+      "max": 18.3
+    },
+    "announcements": {
+      "n": 1964,
+      "p50": 15,
+      "p95": 16,
+      "max": 17.6
+    }
+  }
+}
