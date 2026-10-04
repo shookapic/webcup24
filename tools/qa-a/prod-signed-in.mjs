@@ -14,7 +14,11 @@ const { totpAt } = await import(pathToFileURL(join(root, 'factors.mjs')).href);
 const accounts = Object.fromEntries(JSON.parse(readFileSync(credsFile, 'utf8')).map((a) => [a.key, a]));
 let failures = 0;
 const results = [];
-const check = (code, name, ok, detail = '') => { if (!ok) failures++; results.push({ code, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  [${code}] ${name}${ok ? '' : '  -> ' + String(detail).slice(0, 400)}`); };
+// diagnostics never carry secrets: recovery codes, TOTP secrets, passwords, tickets, tokens, cookies and one-time codes are replaced before anything is printed
+const redact = (value) => String(value)
+  .replace(/"(recovery_codes|secret|grouped|otpauth|password|current|next|ticket|form_token|token|access_code|code|cookie)"\s*:\s*(\[[^\]]*\]|"[^"]*"|[^,}\]]+)/gi, '"$1":"[redacted]"')
+  .replace(/[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}/g, '[redacted-code]').replace(/TN-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}/g, '[redacted-access]').replace(/\b[A-Z2-7]{32}\b/g, '[redacted-secret]');
+const check = (code, name, ok, detail = '') => { if (!ok) failures++; results.push({ code, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  [${code}] ${name}${ok ? '' : '  -> ' + redact(typeof detail === 'string' ? detail : JSON.stringify(detail)).slice(0, 400)}`); };
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 class Client {
@@ -49,12 +53,21 @@ check('F50', 'staff dashboard answers with numbers and links', dash.status === 2
 const agentMsgs = await ag.c.call('/api/messages');
 const limMsgs = await lim.c.call('/api/messages');
 check('F70', 'limited agent sees fewer requests than the all-services agent, and says its perimeter; residents/agents are refused on admin routes', agentMsgs.status === 200 && limMsgs.status === 200 && limMsgs.data.scope?.limited === true && limMsgs.data.messages.length <= agentMsgs.data.messages.length && (await ag.c.call('/api/admin/agents')).status === 403 && (await adm.c.call('/api/admin/agents')).status === 200, JSON.stringify([agentMsgs.data.messages?.length, limMsgs.data.messages?.length, limMsgs.data.scope]));
-const outOfScope = agentMsgs.data.messages.find((m) => !limMsgs.data.messages.some((x) => x.id === m.id));
-if (outOfScope) check('F70', 'a request outside the limited agent perimeter is 404 for them (reply and priority)', (await lim.c.call(`/api/messages/${outOfScope.id}/priority`, 'PUT', { priority: outOfScope.priority || 'normal' })).status === 404);
+const fixtureSubject = '[DÉMO JURY] Question sur l’atelier (autre service)';
+const outOfScope = agentMsgs.data.messages.find((m) => m.subject === fixtureSubject);
+check('F70', 'the seeded cross-service request "' + fixtureSubject + '" is visible to the all-services agent and ABSENT for the limited agent', Boolean(outOfScope) && !limMsgs.data.messages.some((m) => m.subject === fixtureSubject), JSON.stringify([Boolean(outOfScope), limMsgs.data.messages.map((m) => m.subject)]));
+if (outOfScope) {
+  const asLimited = await lim.c.call(`/api/messages/${outOfScope.id}/priority`, 'PUT', { priority: outOfScope.priority || 'normal' });
+  const unknown = await lim.c.call('/api/messages/99999999/priority', 'PUT', { priority: 'normal' });
+  check('F70', 'for the limited agent that request is 404 "Message introuvable" (same answer as an unknown id) on priority, reply and status; nothing changed', asLimited.status === 404 && asLimited.data.error === unknown.data.error && (await lim.c.call(`/api/messages/${outOfScope.id}/replies`, 'POST', { body: 'Réponse hors périmètre (test).' })).status === 404 && (await lim.c.call(`/api/messages/${outOfScope.id}`, 'PATCH', { status: outOfScope.status })).status === 404, [asLimited.status, asLimited.data.error]);
+  check('F70', 'the limited agent export and journal do not contain it either', !(await lim.c.call('/api/admin/export?dataset=requests&fields=subject&format=json')).text.includes('atelier') && !(await lim.c.call('/api/admin/audit?limit=200')).text.includes('atelier'));
+}
 const dupe = await adm.c.call('/api/admin/audit/verify');
 check('F47', 'audit journal chain verifies; entries list in order', dupe.data.ok === true && (await adm.c.call('/api/admin/audit')).data.entries?.length > 0, dupe.text);
 check('F48', 'journal filter by category works and CSV export is a download', (await adm.c.call('/api/admin/audit?category=security&limit=5')).status === 200 && (await adm.c.call('/api/admin/audit?format=csv')).headers.get('content-type')?.startsWith('text/csv'));
-check('F85', 'unusual-activity list and consistency check answer; consistency ok or problems listed in words', Array.isArray((await ag.c.call('/api/admin/security')).data.anomalies) && typeof (await ag.c.call('/api/admin/integrity')).data.ok === 'boolean');
+const integrity = (await ag.c.call('/api/admin/integrity')).data;
+check('F85', 'consistency check on the demo database: ok true and NO problems (journal chain, database, links, dates)', integrity.ok === true && integrity.problems?.length === 0 && integrity.journal?.checked > 0, JSON.stringify(integrity.problems));
+check('F85', 'unusual-activity list answers (an array; entries, if any, are said in words)', Array.isArray((await ag.c.call('/api/admin/security')).data.anomalies));
 const opts = await ag.c.call('/api/admin/export/options');
 const csv = await ag.c.call('/api/admin/export?dataset=requests&fields=reference,status,priority,emergency');
 check('F88', 'export options and a CSV with only chosen columns', opts.status === 200 && csv.status === 200 && /^﻿?Référence;État;Priorité;Urgence médicale/.test(csv.text), csv.text.slice(0, 80));
@@ -85,8 +98,13 @@ check('F39', 'free appointment slots are listed with date and place', Array.isAr
 console.log('\n# a fresh TEST QA citizen: every write goes through a disposable account');
 const stamp = Date.now().toString(36);
 const tc = new Client();
+let currentPw = null;
+const cleanup = async () => { if (currentPw) { try { await tc.call('/api/me', 'DELETE', { password: currentPw }); } catch { /* the account may already be gone */ } } };
+process.on('exit', () => {});
+try {
 const email = `test-qa-${stamp}@terra-nova.invalid`;
 const pw = `Qa-${stamp}-${Math.random().toString(36).slice(2)}-password`;
+currentPw = pw;
 const reg = await tc.call('/api/auth/register', 'POST', { name: `TEST QA ${stamp}`, email, password: pw, ...(await tc.form('register')) });
 check('D03/F81', 'registration works with the signed form token (201)', reg.status === 201 && reg.data.user?.role === 'citizen', reg.text);
 const honey = await new Client().call('/api/auth/register', 'POST', { name: 'TEST QA robot', email: `test-qa-bot-${stamp}@terra-nova.invalid`, password: pw, fax_ref: 'robot', form_token: 'x' });
@@ -147,7 +165,9 @@ const wrongs = [];
 for (let i = 0; i < 3; i++) wrongs.push((await stamp37.call('/api/auth/login', 'POST', { email, password: 'wrong-password-123' })).data);
 check('F37', 'wrong passwords answer 401 with the tries left', wrongs.every((w) => Number.isInteger(w.attemptsLeft)) && wrongs[2].attemptsLeft < wrongs[0].attemptsLeft, JSON.stringify(wrongs));
 const newPw = pw + '-2';
+currentPw = pw; // until the change is confirmed
 check('F71', 'password change needs the current one; other sessions end', (await tc.call('/api/me/password', 'POST', { current: pw, next: newPw })).status === 200 && (await new Client().call('/api/auth/login', 'POST', { email, password: newPw })).status === 200);
+currentPw = newPw;
 check('F54', 'the account lists its devices', (await tc.call('/api/me/devices')).data.devices?.length >= 1);
 
 console.log('\n# public information and features');
@@ -156,8 +176,11 @@ check('F45/F46/F74', 'places carry address, hours, phone; at least one emergency
 const news = (await anon.call('/api/announcements')).data.announcements;
 check('D18/F29/F73', 'announcements: audience, urgent flag, and an official sender message is first', news.length > 0 && news.every((a) => 'audience' in a && 'urgent' in a) && (news.some((a) => a.sender) ? Boolean(news[0].sender) : true), JSON.stringify(news.map((a) => [a.sender, a.urgent, a.audience])));
 check('F36', 'transport lines with stops and next departures', (await anon.call('/api/transports')).data.lines?.every((l) => l.stops?.every((s) => Array.isArray(s.next))));
-check('F28/F38/F32', 'services: featured first, availability fields, search data', (await anon.call('/api/services')).data.services?.every((s) => 'featured' in s && 'availability' in s));
-check('F72/F62/F93-F96', 'the portal serves the guide, the essentials toggle and the service worker', /id="debuter"/.test((await anon.call('/')).text) && /id="light-toggle"/.test((await anon.call('/')).text) && (await anon.call('/sw.js')).status === 200);
+const svcAll = (await anon.call('/api/services')).data.services;
+const translated = svcAll.filter((x) => x.title_en && x.description_en && x.details_en && x.title_en !== x.title && !/JURY DEMO|Fictional jury/.test(x.title_en + x.description_en));
+check('F27', 'at least 3 services carry a genuinely translated English title, description and details (not the jury demo disclaimer records)', translated.length >= 3, translated.length);
+check('F28/F38/F32', 'services API shape: featured first, availability fields (the sorting and the search are asserted in the browser suites: portal-browser / civic-browser)', (await anon.call('/api/services')).data.services?.every((s) => 'featured' in s && 'availability' in s));
+check('F72/F62/F93-F96', 'API/static shape only: the page serves the guide, the essentials toggle and the service worker (behaviour is asserted in essentials-browser)', /id="debuter"/.test((await anon.call('/')).text) && /id="light-toggle"/.test((await anon.call('/')).text) && (await anon.call('/sw.js')).status === 200);
 
 console.log('\n# cleanup: the TEST account deletes itself (messages, replies, notices, devices go with it)');
 const del = await tc.call('/api/me', 'DELETE', { password: newPw });
@@ -166,6 +189,10 @@ const leftover = (await ag.c.call('/api/messages')).data.messages.filter((m) => 
 check('F33', 'its requests are gone from staff lists after deletion (no residue)', leftover.length === 0, leftover.length);
 const pubAfter = (await alice.c.call('/api/public-requests')).data.requests.some((r) => r.public_title === `TEST QA signalement ${stamp}`);
 check('F52', 'its published report and supports are gone too', !pubAfter);
-for (const c of [adm, ag, lim, alice]) await c.c.call('/api/auth/logout', 'POST', {});
+currentPw = null; // deleted above
+} finally {
+  await cleanup(); // a crash or a failed assertion never leaves the TEST account behind
+  for (const c of [adm, ag, lim, alice]) await c.c.call('/api/auth/logout', 'POST', {}).catch(() => {});
+}
 console.log(failures ? `\n${failures} FAILED of ${results.length}` : `\nall ${results.length} signed-in checks passed`);
 process.exit(failures ? 1 : 0);
