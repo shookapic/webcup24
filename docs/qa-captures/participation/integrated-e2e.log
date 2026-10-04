@@ -1,0 +1,19 @@
+PASS portal CSP forbids inline script and still serves the module (same-origin external script) 
+PASS guest in the real portal: login prompt, demo badges, no console errors 
+PASS real citizen session part1791073001827@example.org
+PASS vote through the real portal: receipt shown, history lists it 
+PASS second vote refused by the real server (409) 
+PASS 6 concurrent submissions with one key through the real server: one record 
+PASS service feedback with a real service id Centre de santé
+PASS citizen cannot reach staff routes in the real server (403) 
+PASS portal language switch remounts the module in English 
+PASS no page error / 5xx while using the participation UI 
+PASS admin publishes a decision through the real server {"id":4}
+PASS staff action is in the hash-chained audit journal (category participation) status 200, 5 entries
+PASS audit hash chain still verifies after participation entries {"ok":true,"checked":12,"brokenAt":null}
+PASS admin closes it 
+PASS agent: admin overview allowed, delete refused (403) 
+PASS staff cannot vote (403) 
+PASS real account deletion (F33 endpoint) removes the citizen voter, idea and feedback rows and keeps the anonymous counter rows 1,0,1,1->0,0,0,0, counter 5->5
+PASS A's own tables untouched and 8 part_ tables present 
+ALL PASS
