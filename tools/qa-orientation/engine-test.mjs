@@ -96,6 +96,32 @@ check('a service added by staff gets NO invented explanation (plain = null, orig
 check('the explanation is tied to the title, the original always travels with it (details unchanged by buildIndex)', staffIndex.services.find((s) => s.id === 4).details.endsWith('Nouvelle condition ajoutée par un agent.'));
 check('every FR explanation of a service mentions nothing that its facts do not support (no digit absent from the original)', index.services.every((s) => !s.plain || (s.plain.fr.match(/\d+/g) ?? []).every((d) => `${s.title} ${s.description} ${s.details}`.includes(d))));
 
+// ---- F89/F90 correction (PM review): explanations are tied to the CURRENT source text, verbatim and per language, not just the title
+{
+  const unchanged = buildIndex(seededDb()).services.find((s) => s.title === 'Centre de santé');
+  check('unreviewed-change case: unchanged service keeps both FR and EN reviewed explanations', unchanged.plain?.fr && unchanged.plain?.en);
+
+  const changedDetailsDb = seededDb();
+  changedDetailsDb.prepare("UPDATE services SET details = details || ' Nouvelle condition ajoutée par un agent.' WHERE title = 'Centre de santé'").run();
+  const changedDetails = buildIndex(changedDetailsDb).services.find((s) => s.title === 'Centre de santé');
+  check('same title, FR details changed (new condition added): FR explanation dropped, EN (untouched) kept, original FR text intact and still searchable', changedDetails.plain?.fr == null && changedDetails.plain?.en && changedDetails.details.includes('Nouvelle condition ajoutée') && createEngine(buildIndex(changedDetailsDb), 'fr').rank('centre de sante').results[0]?.key === `service:${changedDetails.id}`);
+
+  const changedDescDb = seededDb();
+  changedDescDb.prepare("UPDATE services SET description = 'Consultations, vaccinations, soins de proximité et désormais sur rendez-vous uniquement.' WHERE title = 'Centre de santé'").run();
+  const changedDesc = buildIndex(changedDescDb).services.find((s) => s.title === 'Centre de santé');
+  check('same title, FR description changed only (details untouched): FR explanation still dropped (either field changing invalidates it)', changedDesc.plain?.fr == null && changedDesc.plain?.en);
+
+  const changedEnDb = seededDb();
+  changedEnDb.prepare("UPDATE services SET details_en = 'The city health centre now requires an appointment booked in advance.' WHERE title = 'Centre de santé'").run();
+  const changedEn = buildIndex(changedEnDb).services.find((s) => s.title === 'Centre de santé');
+  check('same title, EN details changed only: EN explanation dropped, FR (untouched) kept', changedEn.plain?.en == null && changedEn.plain?.fr && changedEn.details_en.includes('requires an appointment'));
+
+  const unknownTitleDb = seededDb();
+  unknownTitleDb.prepare("UPDATE services SET title = 'Centre de santé et de prévention' WHERE title = 'Centre de santé'").run();
+  const renamed = buildIndex(unknownTitleDb).services.find((s) => s.title === 'Centre de santé et de prévention');
+  check('title itself changed (no longer a known key): no explanation in either language, original text intact', renamed.plain === null && renamed.description && renamed.details);
+}
+
 // ---- actions and index shape
 let portalIds = null;
 const portalFile = process.argv[2];

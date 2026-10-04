@@ -529,3 +529,20 @@ html[data-contrast=high] #participation .tp-secondary,html[data-contrast=high] #
 
 .news-official{border:3px double #0b4f4a}
 .news-badge-official{background:#0b4f4a;color:#fff}
+
+.start-section .start-choice{border:0;padding:0;margin:0 0 16px;display:flex;flex-wrap:wrap;gap:10px}
+.start-section legend{font-weight:700;margin-bottom:8px}
+.start-steps{margin:0;padding-left:26px;display:grid;gap:12px;max-width:62rem}
+.start-step{line-height:1.6}
+
+/* F62 / F96: the essential mode. Optional sections, decoration and motion go; emergency, alerts, services, places, transport, news and the personal space stay. */
+html[data-light=true] .hero,html[data-light=true] #orientation,html[data-light=true] #participation,html[data-light=true] #mots,html[data-light=true] #debuter{display:none}
+html[data-light=true] body{background:#07152c}
+html[data-light=true] *,html[data-light=true] *::before,html[data-light=true] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;box-shadow:none!important}
+
+.panel .check-field input[type=checkbox],.check-field input[type=checkbox]{width:24px;height:24px;min-width:24px}
+
+
+.lazy-card{border:1px solid #ffffff33;padding:20px;max-width:62rem}
+.requests-section .lazy-card{border-color:#10253933}
+.lazy-card h2{margin:0 0 8px}

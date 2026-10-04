@@ -159,6 +159,27 @@ async function guardedSend(name, form, send) {
   }
 }
 
+// F93 / F94: an answer served from the copy the service worker saved earlier (the network failed or was too slow) is shown with the day and time it was saved.
+// one marker per saved route: a route that answers fresh clears only its own marker
+const savedRoutes = new Map();
+let savedCopyAt = null;
+function noteSavedCopy(response) {
+  const key = new URL(response.url, location.href).pathname;
+  if (response.headers.get('X-Terra-Cache') === 'stale') savedRoutes.set(key, Number(response.headers.get('X-Terra-Stored-At')) || Date.now());
+  else if (!savedRoutes.delete(key)) return;
+  savedCopyAt = savedRoutes.size ? Math.min(...savedRoutes.values()) : null;
+  showSavedCopy();
+}
+function showSavedCopy() {
+  const banner = $('#saved-banner');
+  banner.hidden = savedCopyAt === null;
+  if (savedCopyAt === null) return banner.replaceChildren();
+  const when = new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(savedCopyAt));
+  const retry = element('button', '', t('Réessayer maintenant'));
+  retry.type = 'button';
+  retry.addEventListener('click', () => refreshAll());
+  banner.replaceChildren(element('strong', '', `${t('Hors connexion ou serveur injoignable')} · `), `${t('Vous voyez les informations enregistrées le {when}. Elles peuvent ne plus être à jour. Les urgences, alertes, services, lieux et transports restent lisibles ; écrire à la ville, réserver ou vous connecter demandent une connexion.', { when })} `, retry);
+}
 async function api(path, method = 'GET', body) {
   let response;
   try {
@@ -174,6 +195,7 @@ async function api(path, method = 'GET', body) {
     throw Object.assign(new Error(t('Connexion lente ou coupée. Réessayez dans un instant.')), { status: 0, network: true });
   }
   setConnection(false);
+  noteSavedCopy(response);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw Object.assign(new Error(translateError(data.error || 'Une erreur est survenue.')), { status: response.status, retryAfter: data.retryAfter, retryAfterMs: data.retryAfterMs, code: data.code, attemptsLeft: data.attemptsLeft, field: fieldsOf(data.error || '') });
   if (method !== 'GET') auditSoon();
@@ -2495,16 +2517,56 @@ function renderCitizens() {
 // F65-F68 / F76: the civic participation module (participation.js, owned by B), mounted once and updated when the user or the language changes.
 let participationHandle = null;
 // D10, F89-F92: the orientation helper (orientation.js, owned by B): find the right service from a free description, mounted once and updated when the user or the language changes.
+// F95: neither module is downloaded (nor does it fetch its data) until its section is about to be seen, and never in the essential mode.
+const loadedModules = new Map();
+function ensureModule(name) {
+  if (document.documentElement.dataset.light === 'true') return Promise.resolve(false);
+  if (loadedModules.has(name)) return loadedModules.get(name);
+  const done = new Promise((resolve) => {
+    const link = element('link');
+    link.rel = 'stylesheet';
+    link.href = `/${name}.css`;
+    document.head.append(link);
+    const script = element('script');
+    script.src = `/${name}.js`;
+    script.onload = () => resolve(true);
+    script.onerror = () => { loadedModules.delete(name); resolve(false); };
+    document.head.append(script);
+  });
+  loadedModules.set(name, done);
+  return done;
+}
 let orientationHandle = null;
 function mountOrientation() {
   const root = document.getElementById('orientation-root');
-  if (!root || !window.TerraOrientation) return;
+  if (!root) return;
+  if (!window.TerraOrientation) { if (openedModules.has('orientation')) ensureModule('orientation').then(() => window.TerraOrientation && mountOrientation()); return; }
   if (orientationHandle) orientationHandle.update({ user, lang });
   else orientationHandle = window.TerraOrientation.mount(root, { user, lang, api });
 }
+// A section is opened by its button, or by an anchor that targets it (#orientation, #participation): it is then downloaded, mounted and the focus moves into it.
+const openedModules = new Set();
+function openModule(name, { focus = true } = {}) {
+  if (document.documentElement.dataset.light === 'true') return;
+  openedModules.add(name);
+  $(`#${name}-card`).hidden = true;
+  $(`#${name}-root`).hidden = false;
+  (name === 'orientation' ? mountOrientation : mountParticipation)();
+  ensureModule(name).then((ok) => {
+    if (!ok) { $(`#${name}-card`).hidden = false; $(`#${name}-root`).hidden = true; openedModules.delete(name); return; }
+    if (focus) setTimeout(() => $(`#${name}-root input, #${name}-root button, #${name}-root select`)?.focus(), 50);
+  });
+}
+for (const button of document.querySelectorAll('[data-open-module]')) button.addEventListener('click', () => openModule(button.dataset.openModule));
+{
+  const fromHash = () => { const id = location.hash.slice(1); if (id === 'orientation' || id === 'participation') openModule(id, { focus: false }); };
+  window.addEventListener('hashchange', fromHash);
+  fromHash();
+}
 function mountParticipation() {
   const root = document.getElementById('participation-root');
-  if (!root || !window.TerraParticipation) return;
+  if (!root) return;
+  if (!window.TerraParticipation) { if (openedModules.has('participation')) ensureModule('participation').then(() => window.TerraParticipation && mountParticipation()); return; }
   if (participationHandle) participationHandle.update({ user, lang });
   // the module shows server error messages as they come: they are translated here with the portal's dictionary; it reads /api/services itself when it needs them
   else participationHandle = window.TerraParticipation.mount(root, { user, lang, api: async (...args) => { try { return await api(...args); } catch (error) { error.message = t(error.message); throw error; } } });
@@ -2513,6 +2575,7 @@ function mountParticipation() {
 async function afterAuthentication(nextUser) {
   formTokens.clear();
   user = nextUser;
+  if (user && !topics.length) loadTopics();
   mountParticipation();
   mountOrientation();
   if (user) setFormStatus('#account-status', '');
@@ -2834,6 +2897,47 @@ async function loadScopes() {
     }));
   } catch (error) { if (error.status === 401) clearIdentity(); }
 }
+
+// F72: first steps by situation. Every step is a real destination of this page; the account is only suggested where something really needs one, and it is short (name + password, e-mail optional).
+const startSteps = {
+  arrive: [
+    ['En cas d’urgence : appelez le 112. Les urgences et hôpitaux proches sont en haut de la page.', '#urgences', 'Voir les urgences'],
+    ['Repérez les services de la ville et ce qu’ils font.', '#services', 'Voir les services'],
+    ['Repérez votre arrêt de tram le plus proche et les prochains passages.', '#transports', 'Voir les transports'],
+    ['Lisez les actualités : alertes et messages officiels.', '#actualites', 'Voir les actualités'],
+    ['Seulement si vous voulez écrire à la ville ou prendre rendez-vous : créez un compte (un nom et un mot de passe suffisent, l’adresse e-mail est facultative).', '#espace', 'Créer mon espace'],
+  ],
+  famille: [
+    ['Cherchez le service utile en décrivant votre besoin avec vos mots.', '#orientation', 'Décrire mon besoin'],
+    ['Repérez les services et les lieux proches de chez vous (écoles, santé, aide).', '#lieux', 'Voir les lieux'],
+    ['Repérez l’arrêt de tram le plus proche.', '#transports', 'Voir les transports'],
+    ['Pour un rendez-vous avec un agent : créez un compte (un nom et un mot de passe suffisent).', '#espace', 'Créer mon espace'],
+  ],
+  sante: [
+    ['Urgence médicale : appelez le 112 tout de suite, n’écrivez pas à la ville.', '#urgences', 'Voir les urgences'],
+    ['Trouvez l’hôpital ou le centre de santé le plus proche, avec ses horaires.', '#lieux', 'Voir les lieux de soins'],
+    ['Décrivez votre besoin pour trouver le bon service de santé.', '#orientation', 'Décrire mon besoin'],
+    ['Pour un rendez-vous au centre de santé : créez un compte (un nom et un mot de passe suffisent).', '#espace', 'Créer mon espace'],
+  ],
+  ville: [
+    ['Décrivez votre besoin pour savoir quel service est compétent.', '#orientation', 'Décrire mon besoin'],
+    ['Posez une question ou signalez un problème : un compte est nécessaire pour recevoir la réponse et suivre votre demande (un nom et un mot de passe suffisent).', '#espace', 'Créer mon espace'],
+    ['Vous avez déjà une référence de demande ? Vérifiez qu’elle a bien été reçue.', '#verifier', 'Vérifier un accusé'],
+  ],
+};
+function renderStart() {
+  const chosen = document.querySelector('input[name=situation]:checked')?.value || 'arrive';
+  $('#start-steps').replaceChildren(...startSteps[chosen].map(([text, target, label]) => {
+    const item = element('li', 'start-step');
+    item.append(element('span', '', t(text)), ' ');
+    const link = element('a', 'button-link', t(label));
+    link.href = target;
+    item.append(link);
+    return item;
+  }));
+}
+for (const radio of document.querySelectorAll('input[name=situation]')) radio.addEventListener('change', renderStart);
+renderStart();
 
 // F83: anyone holding a reference and its code can ask whether the city received the request, and when. The answer never carries the content.
 const requestKinds = { incident: 'Signalement de problème', contact: 'Question aux services' };
@@ -3187,7 +3291,10 @@ $('#lang-toggle').addEventListener('click', async () => {
   applyLanguage();
   mountParticipation();
   mountOrientation();
+  showSavedCopy();
+  applyLight();
   loadExportOptions();
+  renderStart();
   renderIdentity();
   renderServices();
   renderTransports();
@@ -3220,6 +3327,34 @@ ensureEnglish().then((ready) => {
 $('#contrast-toggle').addEventListener('click', () => { preference('highContrast', String(document.documentElement.dataset.contrast !== 'high')); applyContrast(); });
 applyContrast();
 
+// F62 / F96: the essential mode: only what a person needs first (emergency numbers, alerts and official messages, services, places, transport, news, their space), no decoration,
+// no optional module downloaded. It follows the choice made here; without a choice, a connection that asks to save data or is very slow switches it on, and says so.
+function lightWanted() {
+  const stored = preference('light');
+  if (stored !== null) return { on: stored === 'true', automatic: false };
+  const connection = navigator.connection;
+  const limited = Boolean(connection?.saveData) || ['slow-2g', '2g'].includes(connection?.effectiveType);
+  return { on: limited, automatic: limited };
+}
+function applyLight() {
+  const { on, automatic } = lightWanted();
+  document.documentElement.dataset.light = String(on);
+  $('#light-toggle').setAttribute('aria-pressed', String(on));
+  const banner = $('#light-banner');
+  banner.hidden = !(on && automatic);
+  if (on && automatic) {
+    const off = element('button', '', t('Afficher la page complète'));
+    off.type = 'button';
+    off.addEventListener('click', () => { preference('light', 'false'); applyLight(); mountParticipation(); mountOrientation(); });
+    banner.replaceChildren(element('strong', '', `${t('Mode essentiel activé')} · `), `${t('Votre connexion est limitée : seul l’essentiel est affiché pour aller plus vite.')} `, off);
+  } else banner.replaceChildren();
+}
+$('#light-toggle').addEventListener('click', () => { preference('light', String(document.documentElement.dataset.light !== 'true')); applyLight(); mountParticipation(); mountOrientation(); });
+applyLight();
+
+// F93 / F94: the service worker keeps the public essentials; an answer it gives from its saved copy is marked, and the page says when it was saved.
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { /* the portal works without it */ });
+
 // Polling (nothing live exists on this host). While the tab is hidden nothing is fetched, except what exists to alert someone who opted into browser
 // notifications (urgent alerts, notices, appointment reminders). When the tab is visible again, or the network is back, stale data refreshes at once.
 // With the browser's "data saver" on, every other tick is skipped.
@@ -3251,4 +3386,4 @@ setInterval(() => {
 document.addEventListener('visibilitychange', () => { if (!tabHidden() && Date.now() - lastFullRefresh > 15_000) refreshAll(); });
 window.addEventListener('online', () => refreshAll());
 window.addEventListener('offline', () => setConnection(true));
-ensureEnglish().then(() => Promise.allSettled([loadTopics(), loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]));
+ensureEnglish().then(() => Promise.allSettled([loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]));

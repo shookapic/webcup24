@@ -39,6 +39,7 @@ const files = new Map([
   ['/orientation.css', ['orientation.css', 'text/css; charset=utf-8']],
   ['/participation.js', ['participation.js', 'text/javascript; charset=utf-8']],
   ['/participation.css', ['participation.css', 'text/css; charset=utf-8']],
+  ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
   ['/favicon.svg', ['favicon.svg', 'image/svg+xml']],
 ]);
 const worldRoot = join(root, 'dist', 'monde');
@@ -993,7 +994,8 @@ async function route(request, response) {
   if (path === '/api/admin/export' && method === 'GET') {
     const viewer = requireUser(request, ['agent', 'admin']);
     const params = new URL(request.url, 'http://localhost').searchParams;
-    const set = exportSets[params.get('dataset')];
+    const dataset = params.get('dataset');
+    const set = Object.hasOwn(exportSets, dataset) ? exportSets[dataset] : null;
     if (!set) fail(400, 'Jeu de données inconnu.');
     const wanted = (params.get('fields') || set.defaults.join(',')).split(',').map((item) => item.trim()).filter(Boolean);
     if (!wanted.length || wanted.length > 30 || !wanted.every((field) => Object.hasOwn(set.columns, field)) || new Set(wanted).size !== wanted.length) fail(400, 'Colonne inconnue.');
