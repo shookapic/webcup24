@@ -1,0 +1,13 @@
+spawn {"dist":9,"cam":["0.0","9.4"],"player":["0.0","1.0"]}
+shot spawn
+mairie {"dist":11,"cam":["0.0","2.4"],"player":["0.0","-8.0"]}
+shot mairie
+sud {"dist":10,"cam":["4.0","49.5"],"player":["4.0","40.0"]}
+shot sud
+failed requests: [
+  [32m'404 http://127.0.0.1:3100/api/places'[39m,
+  [32m'http://127.0.0.1:3100/api/presence'[39m,
+  [32m'http://127.0.0.1:3100/api/presence'[39m,
+  [32m'http://127.0.0.1:3100/api/presence'[39m,
+  [32m'http://127.0.0.1:3100/api/presence'[39m
+]

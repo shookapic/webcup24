@@ -1,0 +1,7 @@
+PASS host visible and on screen {"x":653,"y":160,"w":287.280029296875,"h":611.2680053710938,"opacity":"1"}
+PASS exactly one focusable screen {}
+PASS focus is inside the screen {}
+PASS click on nav button (4th) selected it {"current":"Services","expected":"Services"}
+PASS click on the last tab (right edge of the quad) selects it {}
+PASS Escape closes and lowers the phone {}
+ALL PASS

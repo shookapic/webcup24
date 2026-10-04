@@ -1,0 +1,24 @@
+PASS T1 covers its whole rail {"min":"5.3","max":"98.9","span":"93.6"}
+PASS T1 dwells at all 3 stops {"stopped":[0,1,2]}
+PASS T1 reverses at both ends {}
+PASS T1 cars stay on the rail polyline (<= 0.05 m) {"max":"0.000"}
+PASS T1 car underside rests on the rail top (<= 0.03 m) {"max":"0.000"}
+PASS T1 cars never stack (min chord spacing >= 2.9 m) {"min":"3.32"}
+PASS T1 mesh bounds centred on the car position (<= 0.1 m) {"max":"0.083"}
+PASS T2 covers its whole rail {"min":"5.3","max":"81.9","span":"76.6"}
+PASS T2 dwells at all 3 stops {"stopped":[0,1,2]}
+PASS T2 reverses at both ends {}
+PASS T2 cars stay on the rail polyline (<= 0.05 m) {"max":"0.000"}
+PASS T2 car underside rests on the rail top (<= 0.03 m) {"max":"0.000"}
+PASS T2 cars never stack (min chord spacing >= 2.9 m) {"min":"3.32"}
+PASS T2 mesh bounds centred on the car position (<= 0.1 m) {"max":"0.083"}
+PASS T1 start: no body or nose beyond the rail end (<= 0.05 m) {"overhang":"-0.035"}
+PASS T1 start: outer cab nose points outward, inner cab inward {"outer":"0.083","inner":"-0.083"}
+PASS T1 end: no body or nose beyond the rail end (<= 0.05 m) {"overhang":"-0.035"}
+PASS T1 end: outer cab nose points outward, inner cab inward {"outer":"0.083","inner":"-0.083"}
+PASS T2 start: no body or nose beyond the rail end (<= 0.05 m) {"overhang":"-0.035"}
+PASS T2 start: outer cab nose points outward, inner cab inward {"outer":"0.082","inner":"-0.082"}
+PASS T2 end: no body or nose beyond the rail end (<= 0.05 m) {"overhang":"-0.035"}
+PASS T2 end: outer cab nose points outward, inner cab inward {"outer":"0.083","inner":"-0.082"}
+PASS no 4xx/5xx for models/textures during the run {"missing":[]}
+ALL PASS

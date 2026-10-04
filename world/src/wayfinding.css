@@ -14,3 +14,8 @@
 .way-ui :focus-visible, .way-button:focus-visible { outline: 3px solid #ffd26a; outline-offset: 2px; }
 @media (max-width: 40rem) { .way-ui { left: .5rem; right: .5rem; bottom: 4.75rem; max-width: none; } .place-label { font-size: .7rem; } }
 @media (prefers-reduced-motion: reduce) { .way-button { transition: none; } }
+/* physical-phone recovery control */
+.recovery { position: fixed; z-index: 30; }
+.recovery-top { top: 5rem; right: 1rem; }
+.recovery-bottom { right: 1rem; bottom: 1rem; }
+.recovery .way-button { background: #1b2a33; color: #f4efe6; border-color: #e9ba69; }

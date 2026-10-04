@@ -5,6 +5,7 @@ import { Sky } from './Sky.jsx';
 import { City, Ground, Rocks } from './City.jsx';
 import { LabelLayer, LabelProjector } from './Labels.jsx';
 import { WayfindingScene, WayfindingUi, useWayfinding } from './Wayfinding.jsx';
+import { PhoneRecovery, readFlatPreference, writeFlatPreference } from './PhoneRecovery.jsx';
 import { AvatarEditor } from './AvatarEditor.jsx';
 import { Npcs } from './Npcs.jsx';
 import { AlertAnnouncer, PhoneFallback, useAnnouncements, useServices, useTransports } from './Phone.jsx';
@@ -85,7 +86,8 @@ export function App() {
   // Physical phone on desktop with a playable avatar; flat accessible dialog on narrow screens, for guests or with ?flatphone.
   const [isNarrow, setNarrow] = useState(narrow.matches);
   useEffect(() => { const on = (e) => setNarrow(e.matches); narrow.addEventListener('change', on); return () => narrow.removeEventListener('change', on); }, []);
-  const physical = Boolean(user) && !isNarrow && !flatQuery;
+  const [flatPreferred, setFlatPreferred] = useState(readFlatPreference);
+  const physical = Boolean(user) && !isNarrow && !flatQuery && !flatPreferred;
   const services = useServices(phoneUp);
   const transports = useTransports(true);
   const way = useWayfinding({ locale, enabled: true });
@@ -239,6 +241,16 @@ export function App() {
           <p>Connectez-vous pour entrer dans le monde et créer votre colon.</p>
           <a href="/">Se connecter</a>
         </div>
+      )}
+      {user && !isNarrow && !flatQuery && (
+        <PhoneRecovery
+          locale={locale}
+          physicalOpen={physical && phoneUp}
+          flatPreferred={flatPreferred}
+          phoneClosed={!phoneUp}
+          onFlat={() => { writeFlatPreference(true); setFlatPreferred(true); }}
+          onPhysical={() => { writeFlatPreference(false); setFlatPreferred(false); }}
+        />
       )}
       <AlertAnnouncer alerts={pending} locale={locale} active={editing && !phoneUp} />
       {(() => {
