@@ -136,7 +136,7 @@ async function open(cookie, lang = 'fr') {
   page.on('dialog', (d) => { log.dialogs.push(d.message()); d.dismiss().catch(() => {}); });
   page.on('pageerror', (e) => log.errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/status of (4\d\d)|favicon/.test(m.text())) log.errors.push(m.text()); });
-  await page.goto(base + '/', { waitUntil: 'networkidle0' });
+  await page.goto(base + '/#participation', { waitUntil: 'networkidle0' }); // the module is loaded when its section is near or targeted
   return { context, page, log };
 }
 let s = await open(null);

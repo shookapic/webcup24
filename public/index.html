@@ -7,11 +7,7 @@
     <meta name="description" content="Terra Nova, les services numériques de la cité.">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
-    <link rel="stylesheet" href="/participation.css">
-    <link rel="stylesheet" href="/orientation.css">
     <script src="/i18n.js" defer></script>
-    <script src="/participation.js" defer></script>
-    <script src="/orientation.js" defer></script>
     <script src="/app.js" defer></script>
     <title>Terra Nova — Le portail de la cité</title>
   </head>
@@ -20,6 +16,8 @@
     <div id="alert-banner" class="alert-banner" role="alert" data-content></div>
     <div id="reminder-banner" class="reminder-banner" role="status" data-content hidden></div>
     <div id="notice-banner" class="notice-banner" role="status" data-content hidden></div>
+    <div id="light-banner" class="notice-banner" role="status" data-content hidden></div>
+    <div id="saved-banner" class="notice-banner connection-banner" role="status" data-content hidden></div>
     <div id="connection-banner" class="notice-banner connection-banner" role="status" data-content hidden></div>
     <header class="site-header" id="haut">
       <a class="brand" href="#haut" aria-label="Terra Nova, accueil">
@@ -34,6 +32,7 @@
           <button id="font-down" type="button" aria-label="Réduire la taille du texte">A−</button>
           <button id="font-up" type="button" aria-label="Agrandir la taille du texte">A+</button>
           <button id="contrast-toggle" type="button" aria-pressed="false">Contraste</button>
+          <button id="light-toggle" type="button" aria-pressed="false" aria-describedby="light-help">Mode essentiel</button><span id="light-help" class="visually-hidden">Affiche seulement l’essentiel : urgences, alertes, services, lieux, transports, actualités et votre espace. Page plus légère.</span>
         </div>
         <a class="account-link" href="#espace">Mon espace</a>
       </div>
@@ -56,8 +55,20 @@
         <div class="hero-art" aria-hidden="true"><div class="orbit orbit-outer"></div><div class="orbit orbit-inner"></div><div class="planet"><div class="planet-sheen"></div></div><div class="moon"></div><div class="art-label label-top">TERRA NOVA <span>PORTAIL</span></div><div class="art-label label-bottom">NOUVEL HORIZON <span>◎ EN DIRECT</span></div></div>
       </section>
 
-      <section class="overview orientation-section" id="orientation" aria-labelledby="to-title" tabindex="-1">
-        <div id="orientation-root" data-content></div>
+      <section class="overview start-section" id="debuter" aria-labelledby="start-title" tabindex="-1">
+        <div class="section-heading"><div><span class="section-kicker">PAR OÙ COMMENCER ?</span><h2 id="start-title">Je viens d’arriver</h2></div><p>Choisissez votre situation : vous voyez tout de suite les premières étapes utiles. Aucun compte n’est nécessaire pour les suivre.</p></div>
+        <fieldset class="start-choice"><legend>Ma situation</legend>
+          <label class="chip"><input type="radio" name="situation" value="arrive" checked><span>Je viens d’arriver en ville</span></label>
+          <label class="chip"><input type="radio" name="situation" value="famille"><span>J’ai des enfants ou des proches à charge</span></label>
+          <label class="chip"><input type="radio" name="situation" value="sante"><span>J’ai un souci de santé</span></label>
+          <label class="chip"><input type="radio" name="situation" value="ville"><span>Je veux contacter la ville</span></label>
+        </fieldset>
+        <ol id="start-steps" class="start-steps" data-content></ol>
+      </section>
+
+      <section class="overview orientation-section" id="orientation" aria-labelledby="orientation-card-title" tabindex="-1">
+        <div id="orientation-card" class="lazy-card"><h2 id="orientation-card-title">Trouver le bon service</h2><p>Décrivez votre besoin avec vos mots : l’aide vous oriente vers le service ou la démarche qui convient. Elle n’est chargée que si vous l’ouvrez.</p><button class="button" type="button" data-open-module="orientation" aria-controls="orientation-root">Ouvrir l’aide à l’orientation</button></div>
+        <div id="orientation-root" data-content hidden></div>
       </section>
 
       <section class="overview" id="services" aria-labelledby="services-title">
@@ -99,8 +110,9 @@
         <p id="news-status" class="section-status" role="status"></p>
       </section>
 
-      <section class="requests-section" id="participation" aria-labelledby="tp-title" tabindex="-1">
-        <div id="participation-root" data-content></div>
+      <section class="requests-section" id="participation" aria-labelledby="participation-card-title" tabindex="-1">
+        <div id="participation-card" class="lazy-card"><h2 id="participation-card-title">Participation citoyenne</h2><p>Votes officiels, consultations, projets de la ville, idées et avis sur les services. Cette partie n’est chargée que si vous l’ouvrez.</p><button class="button" type="button" data-open-module="participation" aria-controls="participation-root">Ouvrir la participation</button></div>
+        <div id="participation-root" data-content hidden></div>
       </section>
 
       <section class="account-section" id="espace" aria-labelledby="account-title">
