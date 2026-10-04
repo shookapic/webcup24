@@ -1,6 +1,6 @@
 // F83 (receipt with a reference) and F84 (agents answer directly) in real Chrome on a disposable server: the resident's confirmation, card, receipt page and
 // the public check; the staff reply box with a draft that survives list refreshes, the answered / not answered filter, and what the resident then sees.
-// F79 (themes: form, cards, filters for residents, reports and staff), F80 (priorities for agents: selector, badge, order, filter, dashboard). Later sections of this file cover the other triage features. A ports 3200-3209. Usage: node tools/qa-a/civic-browser.mjs
+// F79 (themes: form, cards, filters for residents, reports and staff), F80 (priorities for agents: selector, badge, order, filter, dashboard), F75 (similar requests grouped for agents). Later sections of this file cover the other triage features. A ports 3200-3209. Usage: node tools/qa-a/civic-browser.mjs
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -243,6 +243,48 @@ s = await open(zoe);
 await s.page.waitForSelector('#citizen-messages .message-card');
 const residentSees = await s.page.evaluate(() => document.querySelector('#citizen-area').textContent);
 check('the resident never sees the priority their request was given (it is internal)', !/Urgente|Prioritaire|Priorité/.test(residentSees), residentSees.match(/.{20}(Urgente|Prioritaire|Priorité).{20}/)?.[0]);
+await s.context.close();
+
+console.log('\n# F75. similar requests grouped for agents');
+const lampSubjects = ['Lampadaire éteint rue de la Gare', 'Plus d’éclairage, lampadaire de la Gare', 'Lampadaires éteints près de la gare'];
+const lampBodies = ['Le lampadaire devant le numéro 12 de la rue de la Gare est éteint depuis lundi soir.', 'Depuis mardi le lampadaire de la rue de la Gare ne s’allume plus, c’est dangereux le soir.', 'Deux lampadaires éteints près de la gare, rue de la Gare, la nuit on ne voit rien du tout.'];
+for (let i = 0; i < 3; i++) await call('/api/messages', 'POST', { subject: lampSubjects[i], body: lampBodies[i], kind: 'incident', location: 'Rue de la Gare, Quartier est', topic: 'voirie' }, i === 1 ? yan : zoe);
+s = await open(agent);
+await s.page.waitForSelector('#staff-messages .message-card');
+await s.page.waitForFunction(() => !document.querySelector('#similar-panel').hidden, { timeout: 10000 }).catch(() => {});
+const panel = await s.page.evaluate(() => { const items = [...document.querySelectorAll('#similar-list li')]; const item = items.find((li) => /rue de la Gare/.test(li.textContent)); return { hidden: document.querySelector('#similar-panel').hidden, count: items.length, text: item?.textContent, button: item?.querySelector('button')?.getAttribute('aria-label'), heading: document.querySelector('#similar-title').textContent }; });
+check('a "Demandes similaires" block lists the groups with 2 or more unresolved requests: how many, from how many residents, theme, an example and the words in common', !panel.hidden && /3 demandes similaires/.test(panel.text) && /envoyées par 2 habitants/.test(panel.text) && /Thème : Voirie, éclairage et propreté/.test(panel.text) && /Exemple : « Lampadaire éteint rue de la Gare »/.test(panel.text) && /Mots communs : .*gare/i.test(panel.text) && /^Voir les 3 demandes similaires/.test(panel.button), JSON.stringify(panel));
+const cardLine = await s.page.evaluate(() => [...document.querySelectorAll('#staff-messages .message-card')].filter((c) => /lampadaire/i.test(c.querySelector('h4').textContent) && /gare/i.test(c.querySelector('h4').textContent)).map((c) => c.querySelector('.message-similar')?.textContent));
+check('each of those cards says it has similar requests and offers to see them; unrelated cards say nothing', cardLine.length === 3 && cardLine.every((t) => /3 demandes similaires/.test(t) && /Voir ces demandes/.test(t)) && await s.page.evaluate(() => [...document.querySelectorAll('#staff-messages .message-card')].filter((c) => /Poubelle/.test(c.querySelector('h4').textContent)).every((c) => !c.querySelector('.message-similar'))), JSON.stringify(cardLine));
+await s.page.evaluate(() => [...document.querySelectorAll('#similar-list li')].find((li) => /rue de la Gare/.test(li.textContent)).querySelector('button').click());
+await wait(400);
+const narrowed = await s.page.evaluate(() => ({ titles: [...document.querySelectorAll('#staff-messages .message-card h4')].map((h) => h.textContent), note: document.querySelector('#similar-note').textContent, focus: document.activeElement?.id }));
+check('"Voir ces demandes" narrows the list to exactly that group, says so, and moves the focus to the list', narrowed.titles.length === 3 && lampSubjects.every((subject) => narrowed.titles.includes(subject)) && /Affichage du groupe « Lampadaire éteint rue de la Gare » : 3 demandes similaires\./.test(narrowed.note) && narrowed.focus === 'staff-messages-panel', JSON.stringify(narrowed));
+await s.page.screenshot({ path: join(shots, 'staff-similar.png') });
+await s.page.evaluate(() => document.querySelector('#similar-note button').click());
+await wait(400);
+const widened = await s.page.evaluate(() => ({ count: document.querySelectorAll('#staff-messages .message-card').length, note: document.querySelector('#similar-note').textContent, focus: document.activeElement?.dataset?.showGroup !== undefined }));
+check('"Afficher toutes les demandes" brings the full list back, clears the note and returns the focus to the block', widened.count >= 8 && widened.note === '' && widened.focus, JSON.stringify(widened));
+await s.page.select('#staff-filter-similar', 'some');
+await wait(300);
+const onlySimilar = await s.page.$$eval('#staff-messages .message-card h4', (h) => h.map((x) => x.textContent));
+await s.page.select('#staff-filter-similar', '');
+await s.page.select('#staff-sort', 'group');
+await wait(300);
+const ordered = await s.page.$$eval('#staff-messages .message-card h4', (h) => h.map((x) => x.textContent));
+const positions = lampSubjects.map((subject) => ordered.indexOf(subject)).sort((a, b) => a - b);
+await s.page.select('#staff-sort', '');
+check('the filter keeps only requests that have similar ones, and the "côte à côte" sort puts the three lamp requests next to each other', onlySimilar.length >= 3 && onlySimilar.every((title) => !/Poubelle/.test(title)) && positions[2] - positions[0] === 2, JSON.stringify([onlySimilar, ordered, positions]));
+await s.page.focus('#similar-list button');
+const focusedBefore = await s.page.evaluate(() => document.activeElement.dataset.showGroup);
+await s.page.evaluate('refreshAll()');
+await wait(1500);
+const focusedAfter = await s.page.evaluate(() => document.activeElement.dataset.showGroup);
+check('the 30-second refresh does not steal the keyboard focus from the block', focusedBefore && focusedBefore === focusedAfter, JSON.stringify([focusedBefore, focusedAfter]));
+await s.page.click('#lang-toggle');
+await s.page.waitForFunction(() => document.querySelector('#similar-title').textContent === 'Similar requests' && /similar requests/.test(document.querySelector('#similar-list')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+const similarEnglish = await s.page.evaluate(() => ({ heading: document.querySelector('#similar-title').textContent, text: [...document.querySelectorAll('#similar-list li')].find((li) => /rue de la Gare/.test(li.textContent))?.textContent, button: document.querySelector('#similar-list button')?.textContent, filter: document.querySelector('label:has(#staff-filter-similar)')?.firstChild?.textContent.trim() }));
+check('in English the block, its details, the button and the filter read in English', similarEnglish.heading === 'Similar requests' && /3 similar requests/.test(similarEnglish.text) && /sent by 2 residents/.test(similarEnglish.text) && /Words in common:/.test(similarEnglish.text) && similarEnglish.button === 'See these requests' && similarEnglish.filter === 'Similar requests', JSON.stringify(similarEnglish));
 await s.context.close();
 
 await browser.close();

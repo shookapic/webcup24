@@ -9,6 +9,7 @@ import { clearSession, createSession, currentDeviceId, currentUser, hashPassword
 import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from './throttle.mjs';
 import { begin, charge, formSummary, guarded, issue, minAgeMs, note as noteForm } from './guard.mjs';
 import { cityStamp, pickLang, personalHtml, receiptHtml, recapCsv, recapHtml } from './recap.mjs';
+import { groupSimilar } from './similar.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -1013,9 +1014,13 @@ async function route(request, response) {
       ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, users.district AS citizen_district, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
       : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, topic, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT public_title FROM public_requests WHERE message_id = messages.id) AS public_title, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
     const replies = repliesOf(messages.map((message) => message.id));
+    // F75: staff also learn which requests talk about the same problem (residents get nothing of it)
+    const similar = all ? groupSimilar(messages) : null;
     return sendJson(response, 200, {
+      ...(similar ? { groups: similar.groups } : {}),
       messages: messages.map(({ fingerprint, ...message }) => ({
         ...message,
+        ...(similar ? { group: similar.of.get(message.id) || null } : {}),
         reference: referenceOf(message.id),
         replies: (replies.get(message.id) || []).map((reply) => ({ id: reply.id, body: reply.body, created_at: reply.created_at, author: all ? reply.author_name || 'Agent' : 'Un agent de la ville' })),
       })),

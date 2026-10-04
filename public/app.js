@@ -578,15 +578,69 @@ async function loadTopics() {
 // F80: agents classify requests by priority (internal: residents never see it). A badge says it in words and with a symbol, never by colour alone.
 const priorityLabels = { urgent: 'Urgente', high: 'Prioritaire', normal: 'Normale' };
 const priorityRank = { urgent: 0, high: 1, normal: 2 };
+// F75: groups of requests that talk about the same problem (computed by the server for staff). `groupFilter` is the group the list is narrowed to, if any.
+let staffGroups = [];
+let groupFilter = null;
+let groupSignature = '';
+const groupWords = (group) => group.shared.length ? t('Mots communs : {words}', { words: group.shared.join(', ') }) : '';
+const groupSummary = (group) => t(group.open === group.size ? '{n} demandes similaires' : '{n} demandes similaires, dont {open} non résolues', { n: group.size, open: group.open });
+function showGroup(group) {
+  groupFilter = group.id;
+  $('#staff-filter-status').value = '';
+  $('#staff-filter-priority').value = '';
+  $('#staff-filter-topic').value = '';
+  $('#staff-filter-similar').value = '';
+  renderMessages(staffMessages);
+  $('#staff-messages-panel').focus();
+}
+function clearGroup() {
+  groupFilter = null;
+  renderMessages(staffMessages);
+  $('#similar-panel button')?.focus();
+}
+function renderSimilar() {
+  const focusedGroup = document.activeElement?.dataset?.showGroup;
+  const note = $('#similar-note');
+  const current = groupFilter && staffGroups.find((group) => group.id === groupFilter);
+  if (groupFilter && !current) groupFilter = null;
+  note.replaceChildren();
+  if (current) {
+    note.append(document.createTextNode(`${t('Affichage du groupe « {subject} » : {n} demandes similaires.', { subject: current.subject, n: current.size })} `));
+    const clear = element('button', 'link-button', t('Afficher toutes les demandes'));
+    clear.type = 'button';
+    clear.addEventListener('click', clearGroup);
+    note.append(clear);
+  }
+  const open = staffGroups.filter((group) => group.open >= 2).slice(0, 8);
+  const signature = JSON.stringify(open.map((group) => [group.id, group.size, group.open, group.shared, group.topic]).concat([lang]));
+  $('#similar-panel').hidden = !open.length;
+  if (signature === groupSignature) return; // the block is only rebuilt when its content changed, so keyboard focus is not lost every 30 seconds
+  groupSignature = signature;
+  $('#similar-list').replaceChildren(...open.map((group) => {
+    const line = element('li', 'notice-item similar-item');
+    line.append(element('strong', '', groupSummary(group)));
+    const detail = [group.topic ? t('Thème : {topic}', { topic: topicLabel(group.topic) }) : null, t(group.residents === 1 ? 'envoyées par 1 habitant' : 'envoyées par {n} habitants', { n: group.residents }), t('Exemple : « {subject} »', { subject: group.subject }), groupWords(group)].filter(Boolean).join(' · ');
+    line.append(element('span', '', detail));
+    const button = element('button', 'button', t('Voir ces demandes'));
+    button.type = 'button';
+    button.dataset.showGroup = group.id;
+    button.setAttribute('aria-label', t('Voir les {n} demandes similaires : « {subject} »', { n: group.size, subject: group.subject }));
+    button.addEventListener('click', () => showGroup(group));
+    line.append(button);
+    return line;
+  }));
+  if (focusedGroup) $(`[data-show-group="${focusedGroup}"]`)?.focus();
+}
+
 const priorityBadge = (priority) => element('span', `message-priority priority-${priority}`, `${priority === 'urgent' ? '⚠' : '▲'} ${t(priorityLabels[priority])}`);
 
 // F50: the staff list can be narrowed by state, type and the resident's profile district; the dashboard numbers open it already filtered.
 let staffMessages = [];
 let citizenMessages = [];
-const staffFilter = () => ({ status: $('#staff-filter-status').value, kind: $('#staff-filter-kind').value, district: $('#staff-filter-district').value, reply: $('#staff-filter-reply').value, topic: $('#staff-filter-topic').value, priority: $('#staff-filter-priority').value });
-const staffMatches = (item, { status, kind, district, reply, topic, priority }) => (!status || (status === 'open' ? item.status !== 'resolved' : item.status === status)) && (!priority || item.priority === priority) && (!kind || item.kind === kind) && (!district || (district === 'none' ? !item.citizen_district : item.citizen_district === district))
+const staffFilter = () => ({ status: $('#staff-filter-status').value, kind: $('#staff-filter-kind').value, district: $('#staff-filter-district').value, reply: $('#staff-filter-reply').value, topic: $('#staff-filter-topic').value, priority: $('#staff-filter-priority').value, similar: $('#staff-filter-similar').value });
+const staffMatches = (item, { status, kind, district, reply, topic, priority, similar }) => (!groupFilter || item.group === groupFilter) && (!similar || item.group) && (!status || (status === 'open' ? item.status !== 'resolved' : item.status === status)) && (!priority || item.priority === priority) && (!kind || item.kind === kind) && (!district || (district === 'none' ? !item.citizen_district : item.citizen_district === district))
   && (!reply || (reply === 'none' ? !(item.replies || []).length : (item.replies || []).length > 0)) && topicMatches(item, topic);
-for (const id of ['#staff-filter-status', '#staff-filter-kind', '#staff-filter-district', '#staff-filter-reply', '#staff-filter-topic', '#staff-filter-priority', '#staff-sort']) $(id).addEventListener('change', () => renderMessages(staffMessages));
+for (const id of ['#staff-filter-status', '#staff-filter-kind', '#staff-filter-district', '#staff-filter-reply', '#staff-filter-topic', '#staff-filter-priority', '#staff-sort', '#staff-filter-similar']) $(id).addEventListener('change', () => renderMessages(staffMessages));
 for (const id of ['#mine-filter-topic', '#mine-filter-status']) $(id).addEventListener('change', () => renderMessages(citizenMessages));
 $('#public-filter-topic').addEventListener('change', renderPublic);
 $('#public-sort').addEventListener('change', renderPublic);
@@ -644,7 +698,7 @@ function renderMessages(messages) {
   messageCount = messages.length;
   renderGuide();
   if (staff) $('#pending-count').textContent = t('{n} à traiter', { n: messages.filter((item) => item.status === 'new').length });
-  if (staff) staffMessages = messages; else citizenMessages = messages;
+  if (staff) { staffMessages = messages; renderSimilar(); } else citizenMessages = messages;
   const shown = staff ? messages.filter((item) => staffMatches(item, staffFilter()))
     : messages.filter((item) => topicMatches(item, $('#mine-filter-topic').value) && (!$('#mine-filter-status').value || item.status === $('#mine-filter-status').value));
   if (!messages.length) {
@@ -659,7 +713,9 @@ function renderMessages(messages) {
   const order = staff ? $('#staff-sort').value : '';
   // Staff: by default what is not resolved comes first, most urgent first, then by state and the newest; "recent" and "oldest" sort by date only.
   const byPriority = (a, b) => (a.status === 'resolved') - (b.status === 'resolved') || priorityRank[a.priority || 'normal'] - priorityRank[b.priority || 'normal'] || priority[a.status] - priority[b.status] || b.id - a.id;
-  const sorter = !staff ? (a, b) => priority[a.status] - priority[b.status] || b.id - a.id : order === 'recent' ? (a, b) => b.id - a.id : order === 'oldest' ? (a, b) => a.id - b.id : byPriority;
+  const groupSize = (item) => (item.group ? staffGroups.find((group) => group.id === item.group)?.size || 1 : 1);
+  const byGroup = (a, b) => groupSize(b) - groupSize(a) || (a.group || a.id) - (b.group || b.id) || b.id - a.id;
+  const sorter = !staff ? (a, b) => priority[a.status] - priority[b.status] || b.id - a.id : order === 'group' ? byGroup : order === 'recent' ? (a, b) => b.id - a.id : order === 'oldest' ? (a, b) => a.id - b.id : byPriority;
   for (const item of [...shown].sort(sorter)) {
     const card = element('article', 'message-card');
     const heading = element('div', 'message-heading');
@@ -672,6 +728,18 @@ function renderMessages(messages) {
     card.append(element('p', 'message-kind', t(item.kind === 'incident' ? 'Signalement de problème' : 'Message aux services')));
     card.append(element('p', 'message-topic', t('Thème : {topic}', { topic: topicLabel(item.topic) })));
     if (item.service_title) card.append(element('p', 'message-service', t('Service concerné : {title}', { title: (lang === 'en' && item.service_title_en) || item.service_title })));
+    const ownGroup = staff && item.group ? staffGroups.find((group) => group.id === item.group) : null;
+    if (ownGroup) {
+      const row = element('p', 'message-similar', `${groupSummary(ownGroup)}. `);
+      if (groupFilter !== ownGroup.id) {
+        const see = element('button', 'link-button', t('Voir ces demandes'));
+        see.type = 'button';
+        see.setAttribute('aria-label', t('Voir les {n} demandes similaires : « {subject} »', { n: ownGroup.size, subject: ownGroup.subject }));
+        see.addEventListener('click', () => showGroup(ownGroup));
+        row.append(see);
+      }
+      card.append(row);
+    }
     if (staff) card.append(element('p', 'message-author', `${item.citizen_name} · ${item.citizen_email}`));
     if (item.location) card.append(element('p', 'message-location', t('Lieu : {location}', { location: item.location })));
     card.append(element('p', 'message-body', item.body));
@@ -897,6 +965,8 @@ $('#dashboard-panel').addEventListener('click', (event) => {
   $('#staff-filter-reply').value = filter.reply || '';
   $('#staff-filter-topic').value = filter.topic || '';
   $('#staff-filter-priority').value = filter.priority || '';
+  $('#staff-filter-similar').value = '';
+  groupFilter = null;
   $('#staff-sort').value = '';
   renderMessages(staffMessages);
   $('#staff-messages-panel').focus();
@@ -1308,7 +1378,8 @@ async function loadMessages() {
   if (!user) return;
   const list = ['agent', 'admin'].includes(user.role) ? $('#staff-messages') : $('#citizen-messages');
   try {
-    const { messages } = await api('/api/messages');
+    const { messages, groups } = await api('/api/messages');
+    staffGroups = groups || [];
     renderMessages(messages);
     markFresh(list);
     loadDashboard();

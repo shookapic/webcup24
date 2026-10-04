@@ -140,6 +140,11 @@ button,a,input,select{-webkit-tap-highlight-color:transparent}
 .message-heading h4{font-size:.9375rem;margin:0;line-height:1.4;overflow-wrap:anywhere}
 .message-status{font-size:.6875rem;white-space:nowrap;padding:5px 7px;border-radius:3px;background:#e3a185;color:#102539;font-weight:800}
 .status-in_progress{background:#ffda87}.status-resolved{background:#8be7d1}
+.similar-panel{border:1px solid #ffffff27;padding:14px 17px;margin:0 0 16px;background:#091d31}
+.similar-panel h4{margin:0 0 6px}.similar-panel p{font-size:.8125rem;margin:0 0 10px}
+.similar-item{display:grid;gap:6px}
+.message-similar{font-size:.75rem;color:#ffe4dc;margin:4px 0}
+.link-button{background:none;border:0;padding:0;color:#7fe2cf;text-decoration:underline;font:inherit;cursor:pointer;min-height:24px}
 .message-badges{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
 .message-priority{font-size:.6875rem;white-space:nowrap;padding:5px 7px;border-radius:3px;font-weight:800;background:#102539;color:#ffe4dc;border:2px solid #ffe4dc}
 .priority-urgent{background:#8a1f11;color:#fff;border-color:#fff}
