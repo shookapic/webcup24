@@ -1,0 +1,17 @@
+PASS malformed CBOR (5-byte array header, length 4294967295, no payload): rejected promptly, not accepted rejected: Error: array is not supported or well formed (1 ms)
+PASS malformed CBOR (declared length 10000, 5-byte body (the PM proof)): rejected promptly, not accepted rejected: Error: array is not supported or well formed (0 ms)
+PASS malformed CBOR (truncated map header, no content): rejected promptly, not accepted rejected: Error: Length not supported or not well formed (0 ms)
+PASS malformed CBOR (nested array header only, no content): rejected promptly, not accepted rejected: Error: Length not supported or not well formed (0 ms)
+PASS malformed CBOR (empty buffer): rejected promptly, not accepted rejected: Error: No data (0 ms)
+PASS malformed CBOR (huge byte-string header, 100-byte tarpit): rejected promptly, not accepted rejected: TypeError: decodedAttestationObject.get is not a function (0 ms)
+PASS registration ceremony (software ES256 key, UP+UV set) is accepted by the maintained verifier {"alg":"present"}
+PASS valid authentication (right challenge/origin/RPID, UV set) is accepted 
+PASS a client-side challenge that does not match what the server issued is rejected Unexpected authentication response challenge "a-different-challenge", expected "y49iRNU46V5IIhXfHXiKg-QhryXJwFoo7rcTuzzClSg"
+PASS wrong origin is rejected Unexpected authentication response origin "https://evil.example", expected "https://example.org"
+PASS wrong RP ID is rejected Unexpected RP ID hash
+PASS missing user-verification flag is rejected when requireUserVerification is true User verification required, but user could not be verified
+PASS missing user-presence flag is rejected User not present during authentication
+PASS a signature counter that does not advance is rejected (clone detection) Response counter value 0 was lower than expected 5
+PASS a genuine signature with one bit flipped is rejected verified: false
+PASS the verifier alone does not block a literal replay (confirms the server MUST keep single-use challenge tracking, as A already does) both calls returned the same verdict, as expected for a pure verifier
+ALL PASS

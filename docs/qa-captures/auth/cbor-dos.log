@@ -1,0 +1,1 @@
+FAIL: still running after 4 s (killed): a 5-byte item blocks the event loop
