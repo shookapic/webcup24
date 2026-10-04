@@ -140,6 +140,17 @@ await act(async () => { qa('fieldset input[type=radio]')[1].click(); });
 check('F46 phone: the "Urgences et soins" filter hides city services', cardNames().length === 3 && !cardNames().includes('Mairie'));
 await act(async () => { qa('fieldset input[type=radio]')[2].click(); });
 check('F45 phone: the "Services" filter shows only city services', cardNames().join('|') === 'Mairie');
+// phone place guidance (the host's onLocate / guidedPlaceCode contract): the button exists only when the host supplies the callback
+await render(h(Screen, { page: 'places', places: placeFixtures, nearestStop: 'Quartier sud' }));
+check('phone guidance: without onLocate (portal fallback, no 3D world) no guide button is shown', qa('.phone-guide').length === 0);
+const located = [];
+await render(h(Screen, { page: 'places', places: placeFixtures, nearestStop: 'Quartier sud', onLocate: (place) => located.push(place.code), guidedPlaceCode: 'hopital' }));
+const guideButtons = qa('.phone-guide');
+check('phone guidance: with onLocate every place card has a real button, labelled for its place, "Me guider"; the guided place says "Guidage en cours" and is aria-pressed', guideButtons.length === 4 && guideButtons.every((b) => b.tagName === 'BUTTON' && b.type === 'button' && /^Me guider vers .+ dans le monde 3D$/.test(b.getAttribute('aria-label'))) && qa('.phone-guide[aria-pressed="true"]').length === 1 && qa('.phone-guide[aria-pressed="true"]')[0].textContent === 'Guidage en cours' && qa('.phone-guide[aria-pressed="false"]').every((b) => b.textContent === 'Me guider'));
+await clickEl(qa('.phone-guide')[1]);
+check('phone guidance: activating the button calls onLocate with that place only (one call)', located.length === 1 && located[0] === 'urgences', JSON.stringify(located));
+await render(h(Screen, { page: 'places', places: placeFixtures, nearestStop: 'Mairie', locale: 'en', onLocate: () => {} }));
+check('phone guidance: English labels', qa('.phone-guide')[0].textContent === 'Guide me' && /^Guide me to .+ in the 3D world$/.test(qa('.phone-guide')[0].getAttribute('aria-label')));
 await render(h(Screen, { page: 'places', places: placeFixtures, nearestStop: 'Mairie', locale: 'en' }));
 check('F45 phone English: translated names, hours and stop; untranslated places marked FR', text().includes('Town hall') && text().includes('Monday to Friday') && text().includes('Tram stop: Mairie') && qa('.phone-place [role=img]').length === 3 && text().includes('Places'), text().slice(0, 200));
 await render(h(Screen, { page: 'places', places: { data: { places: [] }, status: 'error', retry: () => {} } }));

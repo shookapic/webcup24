@@ -281,7 +281,7 @@ function sortPlaces(items, nearest) {
 }
 const careFor = (items, nearest) => sortPlaces(items.filter((place) => place && place.kind !== 'service'), nearest);
 
-function PlaceCard({ item, nearest, locale }) {
+function PlaceCard({ item, nearest, locale, onLocate, guidedPlaceCode }) {
   const name = localized(item, 'name', locale);
   const address = localized(item, 'address', locale);
   const hours = localized(item, 'hours', locale);
@@ -297,11 +297,18 @@ function PlaceCard({ item, nearest, locale }) {
       <p lang={address.lang}>{address.text}</p>
       <p lang={hours.lang}>{item.open_24h ? t(locale, 'places.open24') : hours.text}</p>
       {phone && <a className="phone-call" href={`tel:${phone}`}>{t(locale, 'places.call', { phone: item.phone })}</a>}
+      {/* the 3D world draws the route (B's App.jsx closes the phone and starts it); only offered when the host supplies the callback, so the portal/fallback phone never shows a dead button */}
+      {typeof onLocate === 'function' && (
+        <button type="button" className="phone-guide" aria-pressed={guidedPlaceCode != null && guidedPlaceCode === item.code}
+          aria-label={t(locale, 'places.guideAria', { name: name.text })} onClick={() => onLocate(item)}>
+          {guidedPlaceCode != null && guidedPlaceCode === item.code ? t(locale, 'places.guideOn') : t(locale, 'places.guide')}
+        </button>
+      )}
     </article>
   );
 }
 
-function PlacesPage({ items, feed, nearest, locale }) {
+function PlacesPage({ items, feed, nearest, locale, onLocate, guidedPlaceCode }) {
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState('all');
   const valid = items.filter((item) => item && item.id != null);
@@ -329,7 +336,7 @@ function PlacesPage({ items, feed, nearest, locale }) {
         {!settled(feed.status, valid.length > 0) ? '' : !valid.length ? t(locale, 'places.none') : !shown.length ? t(locale, 'places.noMatch')
           : t(locale, shown.length > 1 ? 'places.countMany' : 'places.countOne', { n: shown.length })}
       </p>
-      {shown.map((item) => <PlaceCard key={item.id} item={item} nearest={nearest} locale={locale} />)}
+      {shown.map((item) => <PlaceCard key={item.id} item={item} nearest={nearest} locale={locale} onLocate={onLocate} guidedPlaceCode={guidedPlaceCode} />)}
       <p className="phone-links"><a href="/#lieux" target="_blank" rel="noopener">{t(locale, 'places.portal')} <span className="sr-only">{t(locale, 'services.newTab')}</span></a></p>
     </>
   );
@@ -410,7 +417,7 @@ function HomePage({ urgent, news, status, lastUpdated, onRetry, transportFeed, l
 
 export function PhoneScreen({
   page = 'home', onPageChange, announcements = [], pendingAlerts = [], services, transports, places, nearestStop,
-  status = 'ready', error, lastUpdated, onAcknowledge, onClose, onRetry, locale,
+  status = 'ready', error, lastUpdated, onAcknowledge, onClose, onRetry, locale, onLocate, guidedPlaceCode,
 }) {
   const loc = normalizeLocale(locale ?? getLocale());
   // Opt-in experiment for GPUs where the physical phone's text is sliced or missing (not reproduced on an RTX 5070 Ti in Chrome/Edge):
@@ -505,7 +512,7 @@ export function PhoneScreen({
         ) : current === 'services' ? (
           <ServicesPage items={serviceFeed.items} feed={serviceFeed} locale={loc} />
         ) : current === 'places' ? (
-          <PlacesPage items={placeFeed.items} feed={placeFeed} nearest={nearest} locale={loc} />
+          <PlacesPage items={placeFeed.items} feed={placeFeed} nearest={nearest} locale={loc} onLocate={onLocate} guidedPlaceCode={guidedPlaceCode} />
         ) : current === 'transports' ? (
           <TransportsPage lines={transportFeed.items} feed={transportFeed} nearest={nearest} locale={loc} />
         ) : (

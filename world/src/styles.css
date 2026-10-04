@@ -130,6 +130,8 @@ html, body, #root { margin: 0; height: 100%; background: #0b0614; color: #fff; f
 .phone-place-emergency { border-color: var(--ph-alert); background: var(--ph-alert-bg); }
 .phone-tag-kind { margin-left: 0; margin-right: 0.35rem; }
 .phone-place-emergency .phone-tag-kind { background: var(--ph-alert); border-color: var(--ph-alert); color: #2a0f08; }
+.phone-guide { display: inline-flex; align-items: center; min-height: 2.75rem; margin-left: 0.5rem; padding: 0.4rem 1rem; background: transparent; color: inherit; border: 2px solid currentColor; border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer; }
+.phone-guide[aria-pressed="true"] { background: var(--ph-amber); color: #1d1208; border-color: var(--ph-amber); }
 .phone-call { display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0.4rem 1rem; background: var(--ph-amber); color: #1d1208; border-radius: 999px; font-weight: 700; text-decoration: none; }
 .phone-filter { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.6rem; padding: 0; border: 0; }
 .phone-chip { position: relative; display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0.3rem 0.85rem; border: 1px solid var(--ph-line); border-radius: 999px; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
