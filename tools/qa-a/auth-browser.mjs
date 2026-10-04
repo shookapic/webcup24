@@ -179,6 +179,29 @@ await s.page.waitForFunction(() => /Vérification en deux étapes retirée pour 
 check('staff must give a reason; afterwards the status says it is done and the resident can sign in with the password alone again', /Vérification en deux étapes retirée pour Yan Perdu\. Ses sessions sont fermées\./.test(await textOf(s.page, '#citizens-status')) && (await call('/api/auth/login', 'POST', { email: 'yan@auth.test', password: PW })).data.user?.email === 'yan@auth.test', await textOf(s.page, '#citizens-status'));
 await s.context.close();
 
+console.log('\n# F71. the counter: an agent opens an account, the resident changes the password');
+s = await open(agent);
+await s.page.waitForSelector('#counter-form');
+await type(s.page, '#counter-form [name=name]', 'Noa Guichet');
+await s.page.select('#counter-form [name=district]', 'Quartier sud');
+await s.page.click('#counter-form button[type=submit]');
+await s.page.waitForFunction(() => !document.querySelector('#citizens-secret').hidden, { timeout: 10000 }).catch(() => {});
+const desk = await s.page.evaluate(() => ({ codes: [...document.querySelectorAll('#citizens-secret code')].map((c) => c.textContent), text: document.querySelector('#citizens-secret').textContent, focus: document.activeElement?.id, status: document.querySelector('#citizens-status').textContent.trim() }));
+check('the agent opens an account from the form: the access code and the one-time password appear once, focused, with what to tell the resident', /^TN-/.test(desk.codes[0]) && desk.codes[1]?.length >= 16 && /Affichés une seule fois/.test(desk.text) && desk.focus === 'citizens-secret' && /^✓ Compte ouvert pour Noa Guichet\./.test(desk.status), JSON.stringify(desk));
+await axe(s.page, 'counter account created');
+await s.context.close();
+const noa = await call('/api/auth/login', 'POST', { email: desk.codes[0], password: desk.codes[1] });
+s = await open(noa.cookie);
+await s.page.evaluate(() => document.querySelector('#password-title').scrollIntoView());
+await s.page.waitForSelector('#password-body input[name=next]');
+await type(s.page, '#password-body input[name=current]', desk.codes[1]);
+await type(s.page, '#password-body input[name=next]', 'my-own-new-password-1');
+await s.page.keyboard.press('Enter');
+await s.page.waitForFunction(() => /Mot de passe changé/.test(document.querySelector('#factors-status')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+check('the resident chooses their own password in "Sécurité de mon compte": confirmed on the page, the one-time password stops working, the new one works', /^✓ Mot de passe changé\./.test(await textOf(s.page, '#factors-status')) && (await call('/api/auth/login', 'POST', { email: desk.codes[0], password: desk.codes[1] })).status === 401 && (await call('/api/auth/login', 'POST', { email: desk.codes[0], password: 'my-own-new-password-1' })).status === 200, await textOf(s.page, '#factors-status'));
+await axe(s.page, 'password section');
+await s.context.close();
+
 console.log('\n# D02. passkeys in real Chrome (a virtual authenticator answers the real WebAuthn ceremony)');
 async function openWithAuthenticator(cookie, locale = 'fr') {
   const session = await open(cookie, locale);

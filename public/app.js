@@ -895,6 +895,7 @@ const noticeLines = {
   'device.new': ['Connexion à votre compte depuis un nouvel appareil : {label}.', 'Si c’était vous, il n’y a rien à faire. Sinon, retirez cet appareil dans « Mes appareils » : ses connexions sont fermées. Les services municipaux peuvent aussi changer votre mot de passe.'],
   'security.recovery_used': ['Un code de secours a servi à vous connecter. Il vous en reste {label}.', 'Si ce n’était pas vous, changez votre mot de passe et générez de nouveaux codes dans « Sécurité de mon compte ».'],
   'security.2fa_off': ['La vérification en deux étapes de votre compte a été désactivée.', 'Si ce n’était pas vous, changez votre mot de passe et réactivez-la dans « Sécurité de mon compte ».'],
+  'security.password_changed': ['Le mot de passe de votre compte a été changé.', 'Si ce n’était pas vous, contactez les services municipaux.'],
   'security.passkey_added': ['Une clé d’accès a été ajoutée à votre compte : {label}.', 'Si ce n’était pas vous, retirez-la dans « Sécurité de mon compte » et changez votre mot de passe.'],
   'security.passkey_removed': ['Une clé d’accès a été retirée de votre compte : {label}.', 'Si ce n’était pas vous, changez votre mot de passe.'],
   'security.2fa_reset': ['Un agent de la ville a retiré la vérification en deux étapes de votre compte après une demande de récupération.', 'Vous pouvez la réactiver dans « Sécurité de mon compte ».'],
@@ -1505,6 +1506,30 @@ $('#service-search').addEventListener('focus', () => showTip('search'));
 $('#message-form').addEventListener('focusin', () => showTip('message'));
 for (const [selector, name] of [['#register-form', 'register'], ['#message-form', 'message'], ['#concern-form', 'concern']]) $(selector).addEventListener('focusin', () => warmFormToken(name));
 $('#message-kind').addEventListener('change', () => { if ($('#message-kind').value === 'incident') showTip('report'); });
+
+// F71: an account opened at the counter: the code and the one-time password are shown once to the agent.
+$('#counter-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    const data = await api('/api/admin/citizens', 'POST', { name: formValue(form, 'name'), district: formValue(form, 'district') });
+    const box = $('#citizens-secret');
+    box.replaceChildren(
+      element('p', '', t('Compte ouvert pour {name}. À remettre à l’habitant :', { name: data.citizen.name })),
+      element('p', '', `${t('Code d’accès')} : `), element('code', 'citizen-password', data.access_code),
+      element('p', '', `${t('Mot de passe à usage unique')} : `), element('code', 'citizen-password', data.password),
+      element('p', '', t('Affichés une seule fois. L’habitant se connecte avec le code d’accès à la place de l’adresse e-mail, puis choisit son mot de passe dans « Sécurité de mon compte ».')),
+    );
+    box.hidden = false;
+    form.reset();
+    setFormStatus('#citizens-status', t('Compte ouvert pour {name}.', { name: data.citizen.name }));
+    box.focus();
+    loadCitizens();
+  } catch (error) {
+    if (error.status === 401) return clearIdentity();
+    reportError('#citizens-status', error);
+  }
+});
 
 // F34: staff administer citizen accounts (the server enforces the role and protects staff accounts).
 let citizens = [];
@@ -2460,6 +2485,7 @@ function renderFactors() {
     ? t('Vérification en deux étapes : activée depuis le {date}. Codes de secours restants : {n}.', { date: cityTime(since).split(' ')[0] || '', n: left })
     : t(staff ? 'Vérification en deux étapes : désactivée. Elle est fortement conseillée pour un compte d’agent ou d’administrateur.' : 'Vérification en deux étapes : désactivée.');
   renderPasskeys();
+  renderPassword();
   const needPassword = securityState.has_password;
   const passwordField = () => factorField('Mot de passe', 'password', { type: 'password', autocomplete: 'current-password' });
   const mode = factorsView.mode;
@@ -2558,6 +2584,21 @@ async function startFactorSetup(values) {
     reportError('#factors-status', error);
     throw error;
   }
+}
+
+// F71: change the password (or set one on a password-less account).
+function renderPassword() {
+  const body = $('#password-body');
+  body.replaceChildren();
+  const has = securityState.has_password;
+  const current = factorField('Mot de passe actuel', 'current', { type: 'password', autocomplete: 'current-password' });
+  const next = factorField('Nouveau mot de passe', 'next', { type: 'password', autocomplete: 'new-password', hint: '12 caractères minimum.', maxlength: 128 });
+  next.input.minLength = 12;
+  body.append(factorForm([...(has ? [current] : []), next], has ? 'Changer mon mot de passe' : 'Définir un mot de passe', async (values) => {
+    await api('/api/me/password', 'POST', has ? values : { next: values.next, proof: await reauthProof() });
+    await loadFactors();
+    setFormStatus('#factors-status', t(has ? 'Mot de passe changé. Vos autres connexions ont été fermées.' : 'Mot de passe défini. Il vous permet de vous reconnecter si vous perdez vos appareils.'));
+  }));
 }
 
 // ---- D02: the passkeys of the account, in "Sécurité de mon compte".

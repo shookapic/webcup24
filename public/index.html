@@ -367,6 +367,13 @@
             </section>
             <section id="citizens-panel" class="panel citizens-panel" aria-labelledby="citizens-title" tabindex="-1">
               <h3 id="citizens-title">Comptes des habitants</h3><p>Désactivez, réactivez, réinitialisez le mot de passe ou supprimez le compte d’un habitant. Les comptes du personnel ne sont pas modifiables ici.</p>
+              <form id="counter-form" class="counter-form">
+                <h4>Ouvrir un compte pour un habitant</h4>
+                <p>Pour une personne sans adresse e-mail ou sans ordinateur : le compte reçoit un code d’accès et un mot de passe à usage unique, affichés une seule fois.</p>
+                <label>Nom de l’habitant <input name="name" required minlength="2" maxlength="80" autocomplete="off"></label>
+                <label>Quartier (facultatif) <select name="district"><option value="">Non précisé</option><option>Centre-ville</option><option>Quartier nord</option><option>Quartier est</option><option>Quartier ouest</option><option>Quartier sud</option></select></label>
+                <button class="button" type="submit">Créer le compte</button>
+              </form>
               <label>Rechercher un habitant <input id="citizen-search" type="search" maxlength="80" placeholder="Nom ou adresse e-mail" autocomplete="off"></label>
               <p id="citizens-status" class="form-status" role="status" aria-live="polite"></p>
               <div id="citizens-secret" class="citizen-secret" role="status" tabindex="-1" hidden></div>
@@ -405,6 +412,8 @@
             <p id="factors-state" class="factors-state" role="status" data-content></p>
             <div id="factors-body" data-content></div>
             <p id="factors-status" class="form-status" role="status" aria-live="polite"></p>
+            <h4 id="password-title">Mot de passe</h4>
+            <div id="password-body" data-content></div>
             <h4 id="passkeys-title">Clés d’accès</h4>
             <p>Une clé d’accès vous permet de vous connecter sans mot de passe, avec l’empreinte, le visage ou le code de verrouillage de votre appareil. Elle ne quitte jamais votre appareil.</p>
             <p id="identity-line" class="identity-line" data-content></p>

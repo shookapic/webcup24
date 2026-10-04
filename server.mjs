@@ -5,7 +5,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, sep } from 'node:path';
 import { db } from './store.mjs';
-import { clearSession, createSession, currentDeviceId, currentUser, hashPassword, publicUser, recognizeDevice, verifyPassword } from './security.mjs';
+import { clearSession, createSession, currentDeviceId, currentUser, hashPassword, publicUser, recognizeDevice, sessionHashOf, verifyPassword } from './security.mjs';
 import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from './throttle.mjs';
 import { begin, charge, formSummary, guarded, issue, minAgeMs, note as noteForm } from './guard.mjs';
 import { cityStamp, pickLang, personalHtml, receiptHtml, recapCsv, recapHtml } from './recap.mjs';
@@ -144,6 +144,7 @@ const ISSUER = 'Terra Nova';
 const challenges = new Map(); // challenge -> { purpose, userId, name, email, handle, origin, expires }
 const passkeyFailures = new Limiter(30, 15 * 60_000); // per address: unknown or invalid passkey answers
 const signups = new Limiter(30, 10 * 60_000); // per address: passkey sign-up attempts
+const counterAccounts = new Limiter(60, 60 * 60_000); // per agent: accounts opened at the counter
 setInterval(() => { const now = Date.now(); for (const [key, value] of challenges) if (value.expires < now) challenges.delete(key); }, 60_000).unref();
 function putChallenge(entry) {
   if (challenges.size > 5000) fail(503, 'Le service est très sollicité. Réessayez dans un instant.');
@@ -850,6 +851,26 @@ async function route(request, response) {
       WHERE role = 'citizen' AND (name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\') ORDER BY name COLLATE NOCASE, id LIMIT 200`).all(pattern, pattern);
     return sendJson(response, 200, { citizens });
   }
+  // F71: at the counter, an agent opens an account for a resident who has no e-mail address (or no computer): an access code and a one-time password, shown once.
+  if (path === '/api/admin/citizens' && method === 'POST') {
+    const actor = requireUser(request, ['agent', 'admin']);
+    const wait = counterAccounts.waitMs(String(actor.id));
+    if (wait) fail(429, 'Trop de comptes créés en peu de temps. Réessayez plus tard.', { retryAfter: Math.ceil(wait / 1000) });
+    const body = await readJson(request);
+    const name = text(body.name, 2, 80, 'Le nom');
+    const district = body.district ? text(body.district, 2, 80, 'Le quartier') : null;
+    if (district && !placeDistricts.includes(district)) fail(400, 'Quartier invalide.');
+    counterAccounts.add(String(actor.id));
+    const temporary = randomBytes(12).toString('base64url');
+    const hash = await hashPassword(temporary);
+    const identity = newAccessCode();
+    const created = tx(() => {
+      const row = db.prepare('INSERT INTO users (email, name, password_hash, role, district) VALUES (?, ?, ?, ?, ?)').run(identity, name, hash, 'citizen', district);
+      audit(actor, { category: 'account', action: 'account.create', target: { type: 'user', id: Number(row.lastInsertRowid), label: name }, summary: `a ouvert un compte au guichet pour « ${name} » (code d’accès ${identity})`, details: {} });
+      return Number(row.lastInsertRowid);
+    });
+    return sendJson(response, 201, { citizen: { id: created, name, email: identity, district }, access_code: identity, password: temporary });
+  }
   const citizenMatch = /^\/api\/admin\/citizens\/(\d+)(\/password)?$/.exec(path);
   if (citizenMatch) {
     const actor = requireUser(request, ['agent', 'admin']);
@@ -890,6 +911,28 @@ async function route(request, response) {
       });
       return sendJson(response, 200, { ok: true });
     }
+  }
+
+  // A resident changes the password (the one-time password of a counter account, or a forgotten habit), or sets one on a password-less account (a way back in if every
+  // device is lost). The current password (or a passkey proof) is asked; every other session of the account ends.
+  if (path === '/api/me/password' && method === 'POST') {
+    const me = requireUser(request);
+    const wait = factorLimit.waitMs(String(me.id));
+    if (wait) fail(429, `Trop de tentatives. Réessayez dans ${Math.ceil(wait / 60_000)} min.`, { retryAfter: Math.ceil(wait / 1000) });
+    factorLimit.add(String(me.id));
+    const body = await readJson(request);
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id);
+    const next = password(body.next, 12);
+    await requireProof(request, row, { ...body, password: body.current }, me);
+    const hash = await hashPassword(next);
+    const keep = sessionHashOf(request);
+    tx(() => {
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, me.id);
+      db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').run(me.id, keep);
+      if (me.role === 'citizen') db.prepare('INSERT INTO notices (user_id, code, ref_id, label) VALUES (?, ?, ?, ?)').run(me.id, 'security.password_changed', me.id, '');
+      else audit(me, { category: 'security', action: 'auth.password_changed', summary: 'a changé le mot de passe de son compte' });
+    });
+    return sendJson(response, 200, { ok: true });
   }
 
   // ---- D02: passkeys. The device keeps the private key and proves it holds it (with a fingerprint, face or device code: user verification is required); the server only

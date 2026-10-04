@@ -1,4 +1,4 @@
-// D02 (sign in without a password, with a passkey / WebAuthn) and the F71 access code, protocol level on a disposable server and database, with a software authenticator that can
+// D02 (sign in without a password, with a passkey / WebAuthn) and the F71 access code, counter-opened accounts and password change, protocol level on a disposable server and database, with a software authenticator that can
 // also send every kind of WRONG answer: bad signature, wrong site, wrong challenge, missing user verification, copied credential, replay. A ports 3200-3209.
 // Usage: node tools/qa-a/passkeys.mjs
 import { spawn, spawnSync } from 'node:child_process';
@@ -232,11 +232,42 @@ await call(`/api/admin/citizens/${tessId}`, 'PATCH', { active: true }, agent);
 const resumed = await signIn(tessKey);
 check('a deactivated account cannot sign in with its passkey (403, no session); once reactivated the same passkey works again', stopped.done.status === 403 && stopped.done.setCookie === '' && resumed.done.status === 200, [stopped.done.text, resumed.done.text]);
 
+console.log('\n# F71. an agent opens an account at the desk; password change');
+const anonCreate = await call('/api/admin/citizens', 'POST', { name: 'Habitant du guichet' });
+const residentCreate = await call('/api/admin/citizens', 'POST', { name: 'Habitant du guichet' }, mia);
+const shortName = await call('/api/admin/citizens', 'POST', { name: 'x' }, agent);
+const badDistrict = await call('/api/admin/citizens', 'POST', { name: 'Habitant du guichet', district: 'Lune' }, agent);
+check('only staff open accounts (anonymous 401, resident 403); a too short name or an unknown district is 400', anonCreate.status === 401 && residentCreate.status === 403 && shortName.status === 400 && badDistrict.status === 400, [anonCreate.status, residentCreate.status, shortName.status, badDistrict.status]);
+const desk = await call('/api/admin/citizens', 'POST', { name: 'Habitant du guichet', district: 'Quartier sud' }, agent);
+check('an agent opens the account (201): an access code and a one-time password come back once, with the district', desk.status === 201 && /^TN-/.test(desk.data.access_code) && desk.data.password.length >= 16 && desk.data.citizen.district === 'Quartier sud' && desk.data.citizen.email === desk.data.access_code, desk.text);
+const counterIn = await call('/api/auth/login', 'POST', { email: desk.data.access_code, password: desk.data.password });
+check('the resident signs in with the code and the one-time password; the password is stored only hashed', counterIn.status === 200 && counterIn.data.user.name === 'Habitant du guichet' && query('SELECT password_hash FROM users WHERE email = ?', desk.data.access_code)[0].password_hash.includes(':') && !query('SELECT password_hash FROM users WHERE email = ?', desk.data.access_code)[0].password_hash.includes(desk.data.password), counterIn.text);
+const entries = ((await call('/api/admin/audit', 'GET', null, admin)).data.entries || []).filter((e) => e.action === 'account.create');
+check('the journal records who opened the account and for whom, and never the one-time password', entries.length === 1 && /Habitant du guichet/.test(JSON.stringify(entries[0])) && !JSON.stringify(entries).includes(desk.data.password), JSON.stringify(entries).slice(0, 300));
+const tooShort = await call('/api/me/password', 'POST', { current: desk.data.password, next: 'short' }, counterIn.cookie);
+const wrongCurrent = await call('/api/me/password', 'POST', { current: 'not-the-password', next: 'a-brand-new-password-1' }, counterIn.cookie);
+const noAuth = await call('/api/me/password', 'POST', { current: desk.data.password, next: 'a-brand-new-password-1' });
+check('changing the password needs a session, the current password and 12+ characters (401 / 403 / 400), nothing changes', noAuth.status === 401 && wrongCurrent.status === 403 && tooShort.status === 400 && (await call('/api/auth/login', 'POST', { email: desk.data.access_code, password: desk.data.password })).status === 200, [noAuth.status, wrongCurrent.status, tooShort.status]);
+const otherSession = (await call('/api/auth/login', 'POST', { email: desk.data.access_code, password: desk.data.password })).cookie;
+const changed = await call('/api/me/password', 'POST', { current: desk.data.password, next: 'a-brand-new-password-1' }, counterIn.cookie);
+check('with the current password it changes (200): this session stays, every other session of the account ends, the old password stops working, the new one works', changed.status === 200 && (await call('/api/me', 'GET', null, counterIn.cookie)).data.user !== null && (await call('/api/me', 'GET', null, otherSession)).data.user === null
+  && (await call('/api/auth/login', 'POST', { email: desk.data.access_code, password: desk.data.password })).status === 401 && (await call('/api/auth/login', 'POST', { email: desk.data.access_code, password: 'a-brand-new-password-1' })).status === 200, changed.text);
+check('and the resident finds a notice that the password was changed', (await call('/api/me/notices', 'GET', null, counterIn.cookie)).data.notices.some((n) => n.code === 'security.password_changed'));
+const keyOnly = new SoftwareAuthenticator();
+const keyOnlyAccount = await signUp(keyOnly, { name: 'Zed Sans Mot de Passe' });
+const noProofPw = await call('/api/me/password', 'POST', { next: 'a-brand-new-password-1' }, keyOnlyAccount.done.cookie);
+const reauth = await call('/api/me/reauth-options', 'POST', {}, keyOnlyAccount.done.cookie);
+const setPw = await call('/api/me/password', 'POST', { next: 'a-brand-new-password-1', proof: keyOnly.get(reauth.data, base) }, keyOnlyAccount.done.cookie);
+check('a password-less account can set a password (a way back in if every device is lost) only with a passkey proof; then the code and that password sign in', noProofPw.status === 403 && setPw.status === 200 && (await call('/api/auth/login', 'POST', { email: keyOnlyAccount.done.data.access_code, password: 'a-brand-new-password-1' })).status === 200 && (await call('/api/me/security', 'GET', null, keyOnlyAccount.done.cookie)).data.has_password === true, [noProofPw.text, setPw.text]);
+let lastCreate;
+for (let i = 0; i < 61; i++) lastCreate = await call('/api/admin/citizens', 'POST', { name: `Habitant numéro ${i}` }, agent);
+check('an agent cannot open more than 60 accounts an hour (429)', lastCreate.status === 429 && lastCreate.data.retryAfter > 0, lastCreate.text);
+
 console.log('\n# restart, deletion');
 await stop();
 await start();
 const afterRestartRsa = await signIn(addSecond, {});
-check('the remaining (RS256) passkey signs in after a restart, and the counter keeps increasing', afterRestartRsa.done.status === 200 && query("SELECT sign_count FROM passkeys WHERE label = 'Clé de sécurité'")[0].sign_count >= 2, afterRestartRsa.done.text);
+check('the remaining (RS256) passkey signs in after a restart, and the desk keeps increasing', afterRestartRsa.done.status === 200 && query("SELECT sign_count FROM passkeys WHERE label = 'Clé de sécurité'")[0].sign_count >= 2, afterRestartRsa.done.text);
 const reauth4 = await call('/api/me/reauth-options', 'POST', {}, afterRestartRsa.done.cookie);
 const samId = query('SELECT user_id FROM passkeys WHERE label = ?', 'Clé de sécurité')[0].user_id;
 const noProofDelete = await call('/api/me', 'DELETE', {}, afterRestartRsa.done.cookie);
