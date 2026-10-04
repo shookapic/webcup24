@@ -509,6 +509,7 @@ $('#guide-dismiss').addEventListener('click', () => {
 function clearIdentity() {
   user = null;
   mountParticipation();
+  mountOrientation();
   messageCount = 0;
   feed = null;
   knownCodes = null;
@@ -722,7 +723,7 @@ function renderMessages(messages) {
   const priority = { new: 0, in_progress: 1, resolved: 2 };
   const order = staff ? $('#staff-sort').value : '';
   // Staff: by default what is not resolved comes first, most urgent first, then by state and the newest; "recent" and "oldest" sort by date only.
-  const byPriority = (a, b) => (a.status === 'resolved') - (b.status === 'resolved') || priorityRank[a.priority || 'normal'] - priorityRank[b.priority || 'normal'] || priority[a.status] - priority[b.status] || b.id - a.id;
+  const byPriority = (a, b) => (a.status === 'resolved') - (b.status === 'resolved') || (b.emergency || 0) - (a.emergency || 0) || priorityRank[a.priority || 'normal'] - priorityRank[b.priority || 'normal'] || priority[a.status] - priority[b.status] || b.id - a.id;
   const groupSize = (item) => (item.group ? staffGroups.find((group) => group.id === item.group)?.size || 1 : 1);
   const byGroup = (a, b) => groupSize(b) - groupSize(a) || (a.group || a.id) - (b.group || b.id) || b.id - a.id;
   const sorter = !staff ? (a, b) => priority[a.status] - priority[b.status] || b.id - a.id : order === 'group' ? byGroup : order === 'recent' ? (a, b) => b.id - a.id : order === 'oldest' ? (a, b) => a.id - b.id : byPriority;
@@ -731,7 +732,8 @@ function renderMessages(messages) {
     const heading = element('div', 'message-heading');
     heading.append(element('h4', '', item.subject));
     const badges = element('span', 'message-badges');
-    if (staff && item.priority && item.priority !== 'normal' && item.status !== 'resolved') badges.append(priorityBadge(item.priority));
+    if (item.emergency && item.status !== 'resolved') badges.append(element('span', 'message-priority priority-urgent', `🚑 ${t('Urgence médicale')}`));
+    if (staff && item.priority && item.priority !== 'normal' && item.status !== 'resolved' && !(item.emergency && item.priority === 'urgent')) badges.append(priorityBadge(item.priority));
     badges.append(element('span', `message-status status-${item.status}`, t(statusLabels[item.status] || item.status)));
     heading.append(badges);
     card.append(heading);
@@ -1007,6 +1009,7 @@ function renderDashboard() {
   $('#dashboard-time').textContent = t('Mis à jour à {time} (heure de la cité)', { time: when.slice(11) });
   const todo = [];
   const plural = (n, one, many, params = {}) => t(n === 1 ? one : many, { n, ...params });
+  if (d.messages.emergency_open) todo.push(plural(d.messages.emergency_open, '1 urgence médicale n’est pas traitée : à faire en premier.', '{n} urgences médicales ne sont pas traitées : à faire en premier.'));
   if (d.messages.urgent_open) todo.push(plural(d.messages.urgent_open, '1 demande urgente n’est pas résolue.', '{n} demandes urgentes ne sont pas résolues.'));
   if (d.messages.new) todo.push(plural(d.messages.new, '1 message attend une réponse.', '{n} messages attendent une réponse.') + (d.messages.waiting_hours ? ` ${t('Le plus ancien attend depuis {h} h.', { h: d.messages.waiting_hours })}` : ''));
   if (d.messages.incidents_open) todo.push(plural(d.messages.incidents_open, '1 signalement de problème n’est pas résolu.', '{n} signalements de problèmes ne sont pas résolus.'));
@@ -1019,7 +1022,7 @@ function renderDashboard() {
   $('#dashboard-todo').replaceChildren(...(todo.length ? todo : [t('Rien d’urgent : aucune demande n’attend et rien n’est perturbé.')]).map((line) => element('li', '', line)));
   // Every number opens what it counts: the message ones open the staff list already filtered, the others jump to their panel.
   const tiles = [
-    ['Demandes urgentes non résolues', d.messages.urgent_open, { status: 'open', priority: 'urgent' }], ['Demandes prioritaires non résolues', d.messages.high_open, { status: 'open', priority: 'high' }],
+    ['Urgences médicales non traitées', d.messages.emergency_open, { status: 'open', priority: 'urgent' }], ['Demandes urgentes non résolues', d.messages.urgent_open, { status: 'open', priority: 'urgent' }], ['Demandes prioritaires non résolues', d.messages.high_open, { status: 'open', priority: 'high' }],
     ['Messages à traiter', d.messages.new, { status: 'new' }], ['Messages en cours', d.messages.in_progress, { status: 'in_progress' }], ['Messages résolus', d.messages.resolved, { status: 'resolved' }],
     ['Inquiétudes à lire', d.concerns.received, '#concerns-panel'], ['Signalements publiés', d.public.requests], ['Soutiens donnés', d.public.supports],
     ['Messages reçus aujourd’hui', d.messages.received_today, {}], ['Messages reçus sur 7 jours', d.messages.received_week, {}],
@@ -1660,12 +1663,108 @@ function renderSecurity() {
   if (!security) return;
   const forms = security.forms || { automated: 0, tooFast: 0, rateLimited: 0, duplicates: 0 };
   const unusual = security.blockedAttempts > 0 || security.failedLogins >= 10 || security.targeted.length > 0 || forms.automated >= 3 || forms.rateLimited >= 3;
-  $('#security-panel').classList.toggle('security-alert', unusual);
+  $('#security-panel').classList.toggle('security-alert', unusual || (security.anomalies || []).some((item) => item.level === 'high'));
   $('#security-summary').textContent = `${t('{failed} échecs de connexion et {blocked} tentatives bloquées sur les {m} dernières minutes.', { failed: security.failedLogins, blocked: security.blockedAttempts, m: security.windowMinutes })} ${t(unusual ? 'Activité inhabituelle : la protection est active.' : 'Aucune activité inhabituelle.')} ${t('Formulaires (dernière heure) : {automated} envois refusés comme automatiques, {fast} envois trop rapides, {quota} refus pour quota, {dup} doublons évités.', { automated: forms.automated, fast: forms.tooFast, quota: forms.rateLimited, dup: forms.duplicates })}`;
+  const templates = {
+    logins: ['{n} compte(s) subissent beaucoup de tentatives de connexion échouées (10 ou plus en 15 minutes).'], logins2: ['{n} connexions échouées en 15 minutes sur l’ensemble du portail.'], blocked: ['{n} tentatives de connexion ont été bloquées par la pause de sécurité.'],
+    forms: ['{n} envois de formulaire ressemblent à des robots (champ caché rempli, envoi trop rapide ou jeton refusé) sur la dernière heure.'], signups: ['{n} comptes habitants ont été créés dans la dernière heure.'],
+  };
+  const found = security.anomalies || [];
+  $('#security-anomalies').replaceChildren(...(found.length ? found : [null]).map((item) => (item
+    ? element('li', 'anomaly', `${item.level === 'high' ? '⚠ ' : '▲ '}${templates[item.code] ? t(templates[item.code][0], { n: item.n }) : item.text}`)
+    : element('li', 'list-empty', t('Rien d’inhabituel pour le moment.')))));
   const list = $('#security-targets');
   list.replaceChildren(...security.targeted.map((item) => element('li', '', t('Compte visé : {account} ({n} échecs)', { account: item.account, n: item.failures }))));
   if (security.unknownAddresses) list.append(element('li', '', t('Adresses inexistantes visées : {n}', { n: security.unknownAddresses })));
 }
+
+// F85: a plain verdict on the consistency of the stored data.
+$('#integrity-check').addEventListener('click', async () => {
+  const button = $('#integrity-check');
+  button.disabled = true;
+  try {
+    const data = await api('/api/admin/integrity');
+    const status = $('#integrity-status');
+    status.dataset.error = String(!data.ok);
+    status.textContent = data.ok
+      ? `✓ ${t('Les données sont cohérentes : journal vérifié ({n} lignes), base de données saine, aucun lien cassé.', { n: data.journal.checked })}`
+      : `⚠ ${t('Incohérences trouvées :')} ${data.problems.map((problem) => t(problem.text)).join(' ')}`;
+    status.focus();
+  } catch (error) { if (error.status === 401) return clearIdentity(); reportError('#integrity-status', error); } finally { button.disabled = false; }
+});
+
+// F88: choose what to take away. F87: verify the backup (administrators).
+let exportOptions = null;
+async function loadExportOptions() {
+  if (!['agent', 'admin'].includes(user?.role)) return;
+  $('#backup-box').hidden = user.role !== 'admin';
+  try {
+    exportOptions = (await api('/api/admin/export/options')).datasets;
+    const select = $('#export-dataset');
+    select.replaceChildren(...exportOptions.map((set) => new Option(t(set.label), set.key)));
+    renderExportFields();
+  } catch (error) { if (error.status === 401) clearIdentity(); }
+  if (user.role === 'admin') {
+    try { renderBackupLast((await api('/api/admin/backup/status')).last); } catch { /* shown on the next visit */ }
+  }
+}
+function renderExportFields() {
+  if (!exportOptions) return;
+  const set = exportOptions.find((item) => item.key === $('#export-dataset').value) || exportOptions[0];
+  $('#export-status').replaceChildren(new Option(t('Tous'), ''), ...set.statuses.map((status) => new Option(t({ new: 'À traiter', in_progress: 'En cours', resolved: 'Résolu', open: 'Libre', booked: 'Réservé' }[status] || status), status)));
+  const box = $('#export-fields');
+  box.replaceChildren(element('legend', '', t('Colonnes à inclure')), ...set.columns.map((column) => {
+    const label = element('label', 'check-field');
+    const input = element('input');
+    input.type = 'checkbox';
+    input.name = 'field';
+    input.value = column.key;
+    input.checked = set.defaults.includes(column.key);
+    label.append(input, ` ${t(column.label)}`);
+    return label;
+  }));
+}
+$('#export-dataset').addEventListener('change', renderExportFields);
+$('#export-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const fields = [...form.querySelectorAll('[name=field]:checked')].map((input) => input.value);
+  if (!fields.length) { setFormStatus('#export-status-line', t('Cochez au moins une colonne.'), true); return; }
+  const params = new URLSearchParams({ dataset: form.elements.dataset.value, fields: fields.join(','), format: form.elements.format.value });
+  for (const name of ['status', 'from', 'to']) if (form.elements[name].value) params.set(name, form.elements[name].value);
+  const link = element('a');
+  link.href = `/api/admin/export?${params}`;
+  link.download = '';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setFormStatus('#export-status-line', t('Export lancé : le fichier se télécharge. Il est noté dans le journal.'));
+});
+function renderBackupLast(last) {
+  $('#backup-last').textContent = last ? t(last.ok ? 'Dernière vérification : {date}, réussie ({tables} tables, {rows} lignes).' : 'Dernière vérification : {date}, des écarts ont été trouvés.', { date: last.checked_at.replace('T', ' '), tables: last.tables, rows: last.rows }) : t('Aucune vérification n’a encore été faite.');
+}
+$('#backup-verify').addEventListener('click', async () => {
+  const button = $('#backup-verify');
+  const status = $('#backup-status');
+  button.disabled = true;
+  status.dataset.error = 'false';
+  status.textContent = t('Vérification en cours…');
+  try {
+    const data = await api('/api/admin/backup/verify', 'POST', {});
+    const lines = data.important.map((item) => `${t(item.label)} : ${item.rows}${item.same ? '' : ` ⚠ ${t('différent dans la copie')}`}`).join(' · ');
+    status.dataset.error = String(!data.ok);
+    status.textContent = data.ok
+      ? `✓ ${t('Sauvegarde vérifiée : la copie complète est lisible, saine et identique aux données réelles ({tables} tables, {rows} lignes, {size} ko, {ms} ms).', { tables: data.tables, rows: data.rows, size: Math.ceil(data.size_bytes / 1024), ms: data.took_ms })} ${lines}`
+      : `⚠ ${t('La copie présente des écarts avec les données réelles.')} ${lines}`;
+    renderBackupLast({ ok: data.ok, checked_at: data.checked_at, tables: data.tables, rows: data.rows });
+    status.focus();
+  } catch (error) {
+    if (error.status === 401) return clearIdentity();
+    status.dataset.error = 'true';
+    status.textContent = `⚠ ${t('Erreur :')} ${error.message}`;
+    status.focus();
+  } finally { button.disabled = false; }
+});
 
 // ---- F38: availability of a service, shown before anyone starts a procedure.
 const pickText = (service, field) => {
@@ -2390,6 +2489,14 @@ function renderCitizens() {
 
 // F65-F68 / F76: the civic participation module (participation.js, owned by B), mounted once and updated when the user or the language changes.
 let participationHandle = null;
+// D10, F89-F92: the orientation helper (orientation.js, owned by B): find the right service from a free description, mounted once and updated when the user or the language changes.
+let orientationHandle = null;
+function mountOrientation() {
+  const root = document.getElementById('orientation-root');
+  if (!root || !window.TerraOrientation) return;
+  if (orientationHandle) orientationHandle.update({ user, lang });
+  else orientationHandle = window.TerraOrientation.mount(root, { user, lang, api });
+}
 function mountParticipation() {
   const root = document.getElementById('participation-root');
   if (!root || !window.TerraParticipation) return;
@@ -2402,6 +2509,7 @@ async function afterAuthentication(nextUser) {
   formTokens.clear();
   user = nextUser;
   mountParticipation();
+  mountOrientation();
   if (user) setFormStatus('#account-status', '');
   renderIdentity();
   if (user?.role === 'admin') loadNews();
@@ -2414,6 +2522,7 @@ async function afterAuthentication(nextUser) {
   loadDevices();
   loadFactors();
   loadScopes();
+  loadExportOptions();
   await loadFeed();
   loadCitizens();
   loadAppointments();
@@ -2915,13 +3024,14 @@ $('#message-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    const data = await guardedSend('message', form, (guard) => api('/api/messages', 'POST', { kind: formValue(form, 'kind'), topic: formValue(form, 'topic'), subject: formValue(form, 'subject'), location: formValue(form, 'location'), body: formValue(form, 'body'), service_id: formValue(form, 'service_id'), ...guard }));
+    const data = await guardedSend('message', form, (guard) => api('/api/messages', 'POST', { kind: formValue(form, 'kind'), topic: formValue(form, 'topic'), subject: formValue(form, 'subject'), location: formValue(form, 'location'), body: formValue(form, 'body'), service_id: formValue(form, 'service_id'), emergency: form.elements.emergency.checked, ...guard }));
     form.reset();
     renderServiceNotice();
     updateLocationField();
+    updateEmergencyWarning();
     dismissTip('message');
     dismissTip('report');
-    setFormStatus('#message-status', t('{confirmation} Référence {reference}.', { confirmation: t(data.confirmation), reference: `M-${data.id}` }));
+    setFormStatus('#message-status', t('{confirmation} Référence {reference}.', { confirmation: t(data.confirmation), reference: `M-${data.id}` }) + (data.emergency ? ` ${t('Votre demande est marquée urgence médicale et passe en tête de la liste des agents, mais elle ne remplace pas un appel : appelez le 112 maintenant.')}` : ''));
     $('#message-status').append(' ', receiptLink(data.id));
     await loadMessages();
   } catch (error) {
@@ -2935,6 +3045,14 @@ function updateLocationField() {
   $('#location-field input').required = incident;
 }
 $('#message-kind').addEventListener('change', updateLocationField);
+// F86: the warning is there before anything is sent (ticked box or wording that reports an emergency), not only afterwards.
+const emergencyText = /(urgence m[ée]dicale|inconscient|ne respire (plus|pas)|arr[êe]t cardiaque|crise cardiaque|infarctus|h[ée]morragie|empoisonn|overdose|medical emergency|unconscious|not breathing|can'?t breathe|heart attack|cardiac arrest)/i;
+function updateEmergencyWarning() {
+  const form = $('#message-form');
+  $('#emergency-warning').hidden = !(form.elements.emergency.checked || emergencyText.test(`${form.elements.subject.value} ${form.elements.body.value}`));
+}
+for (const name of ['subject', 'body']) $('#message-form').elements[name].addEventListener('input', updateEmergencyWarning);
+$('#message-form').elements.emergency.addEventListener('change', updateEmergencyWarning);
 updateLocationField();
 
 $('#profile-form').addEventListener('submit', async (event) => {
@@ -3063,6 +3181,8 @@ $('#lang-toggle').addEventListener('click', async () => {
   $('#lang-status').hidden = true;
   applyLanguage();
   mountParticipation();
+  mountOrientation();
+  loadExportOptions();
   renderIdentity();
   renderServices();
   renderTransports();

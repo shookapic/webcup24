@@ -1,16 +1,18 @@
 import { createServer } from 'node:http';
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, rm, stat } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, sep } from 'node:path';
-import { db } from './store.mjs';
+import { db, dbFile } from './store.mjs';
 import { clearSession, createSession, currentDeviceId, currentUser, hashPassword, publicUser, recognizeDevice, sessionHashOf, verifyPassword } from './security.mjs';
 import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from './throttle.mjs';
 import { begin, charge, formSummary, guarded, issue, minAgeMs, note as noteForm } from './guard.mjs';
-import { cityStamp, pickLang, personalHtml, receiptHtml, recapCsv, recapHtml } from './recap.mjs';
+import { cityStamp, csvCell, pickLang, personalHtml, receiptHtml, recapCsv, recapHtml } from './recap.mjs';
 import { groupSimilar } from './similar.mjs';
 import { eraseParticipationUser, handleParticipation, initParticipation } from './participation.mjs';
+import { handleOrientation } from './orientation.mjs';
 import { checkTotp, groupSecret, hashRecovery, looksLikeRecovery, newChallenge, newRecoveryCodes, newSecret, otpauthUri, legacyToCose, rpIdOf, verifyAssertion, verifyRegistration } from './factors.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
 
@@ -33,6 +35,8 @@ const files = new Map([
   ['/i18n.js', ['i18n.js', 'text/javascript; charset=utf-8']],
   ['/i18n-en.js', ['i18n-en.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
+  ['/orientation.js', ['orientation.js', 'text/javascript; charset=utf-8']],
+  ['/orientation.css', ['orientation.css', 'text/css; charset=utf-8']],
   ['/participation.js', ['participation.js', 'text/javascript; charset=utf-8']],
   ['/participation.css', ['participation.css', 'text/css; charset=utf-8']],
   ['/favicon.svg', ['favicon.svg', 'image/svg+xml']],
@@ -138,6 +142,8 @@ function scopeOf(user) {
 const inScope = (user, serviceId) => { const ids = scopeOf(user); return !ids || serviceId === null || ids.includes(serviceId); };
 // the visible requests as a table named "messages", for queries written against it (ids come from the database, never from the client)
 const scopedMessages = (user) => { const ids = scopeOf(user); return ids ? `(SELECT * FROM messages WHERE service_id IS NULL OR service_id IN (${ids.join(',')})) AS messages` : 'messages'; };
+// F86: wording that reports a medical emergency (FR / EN), checked on the subject and the text. It only raises the flag: the platform never judges a state of health.
+const emergencyWords = /(urgence m[ée]dicale|inconscient|ne respire (plus|pas)|respire plus|arr[êe]t cardiaque|crise cardiaque|infarctus|h[ée]morragie|saigne beaucoup|empoisonn|overdose|convulsion|malaise grave|accident grave|medical emergency|unconscious|not breathing|can'?t breathe|cannot breathe|heart attack|cardiac arrest|bleeding (heavily|badly)|poisoned|seizure|stroke|avc\b)/i;
 // F80: how soon agents should look at a request. Set only by staff; residents never see it.
 const priorities = { urgent: 'urgente', high: 'prioritaire', normal: 'normale' };
 
@@ -165,6 +171,7 @@ const challenges = new Map(); // challenge -> { purpose, userId, name, email, ha
 const passkeyFailures = new Limiter(30, 15 * 60_000); // per address: unknown or invalid passkey answers
 const signups = new Limiter(30, 10 * 60_000); // per address: passkey sign-up attempts
 const counterAccounts = new Limiter(60, 60 * 60_000); // per agent: accounts opened at the counter
+const backupChecks = new Limiter(3, 10 * 60_000); // per administrator: backup verifications
 setInterval(() => { const now = Date.now(); for (const [key, value] of challenges) if (value.expires < now) challenges.delete(key); }, 60_000).unref();
 function putChallenge(entry) {
   if (challenges.size > 5000) fail(503, 'Le service est très sollicité. Réessayez dans un instant.');
@@ -858,6 +865,7 @@ async function route(request, response) {
       messages: {
         new: byStatus.new || 0, in_progress: byStatus.in_progress || 0, resolved: byStatus.resolved || 0,
         waiting_hours: waitingHours,
+        emergency_open: one("SELECT COUNT(*) AS n FROM messages WHERE emergency = 1 AND status != 'resolved'").n,
         urgent_open: one("SELECT COUNT(*) AS n FROM messages WHERE priority = 'urgent' AND status != 'resolved'").n,
         high_open: one("SELECT COUNT(*) AS n FROM messages WHERE priority = 'high' AND status != 'resolved'").n,
         avg_resolution_hours: averageHours === null ? null : Math.round(averageHours * 10) / 10,
@@ -885,6 +893,130 @@ async function route(request, response) {
     if (staff.role === 'admin') dashboard.residents.deactivated = one("SELECT COUNT(*) AS n FROM users WHERE role = 'citizen' AND active = 0").n;
     return sendJson(response, 200, dashboard);
   }
+  // F85: what looks unusual right now, in plain words, from the counters the platform already keeps and from a consistency check of the stored data. Nothing here blocks anyone.
+  function consistency() {
+    const one = (sql) => db.prepare(sql).get().n;
+    const problems = [];
+    const chain = verifyChain();
+    if (!chain.ok) problems.push({ code: 'journal', text: `Le journal des actions ne se vérifie plus à partir de la ligne ${chain.brokenAt} : une ligne a été modifiée ou retirée.` });
+    const quick = db.prepare('PRAGMA quick_check').all().map((row) => Object.values(row)[0]);
+    if (quick.length !== 1 || quick[0] !== 'ok') problems.push({ code: 'database', text: 'La base de données signale une incohérence interne.' });
+    const foreign = db.prepare('PRAGMA foreign_key_check').all().length;
+    if (foreign) problems.push({ code: 'links', text: `${foreign} élément(s) pointent vers quelque chose qui n’existe plus.` });
+    const checks = [
+      ['Des demandes publiées n’ont plus de demande d’origine.', "SELECT COUNT(*) AS n FROM public_requests WHERE message_id NOT IN (SELECT id FROM messages)"],
+      ['Des demandes ont un état inconnu.', "SELECT COUNT(*) AS n FROM messages WHERE status NOT IN ('new', 'in_progress', 'resolved')"],
+      ['Des rendez-vous réservés n’ont pas d’habitant.', "SELECT COUNT(*) AS n FROM appointments WHERE status = 'booked' AND citizen_id IS NULL"],
+      ['Des demandes ont une date de mise à jour antérieure à leur réception.', "SELECT COUNT(*) AS n FROM messages WHERE updated_at < created_at"],
+    ];
+    for (const [text, sql] of checks) { const n = one(sql); if (n) problems.push({ code: 'data', text: `${text} (${n})` }); }
+    return { ok: problems.length === 0, problems, journal: chain };
+  }
+  function anomalies() {
+    const { failedLogins, blockedAttempts, failures } = summary();
+    const forms = formSummary();
+    const found = [];
+    const strong = [...failures].filter(([, count]) => count >= 10).length;
+    if (strong) found.push({ code: 'logins', level: 'high', n: strong, text: `${strong} compte(s) subissent beaucoup de tentatives de connexion échouées (10 ou plus en 15 minutes).` });
+    else if (failedLogins >= 20) found.push({ code: 'logins2', level: 'medium', n: failedLogins, text: `${failedLogins} connexions échouées en 15 minutes sur l’ensemble du portail.` });
+    if (blockedAttempts >= 5) found.push({ code: 'blocked', level: 'medium', n: blockedAttempts, text: `${blockedAttempts} tentatives de connexion ont été bloquées par la pause de sécurité.` });
+    const automated = (forms.automated || 0) + (forms.tooFast || 0);
+    if (automated >= 5) found.push({ code: 'forms', level: 'medium', n: automated, text: `${automated} envois de formulaire ressemblent à des robots (champ caché rempli, envoi trop rapide ou jeton refusé) sur la dernière heure.` });
+    const signups = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'citizen' AND created_at > datetime('now', '-1 hour')").get().n;
+    if (signups >= 15) found.push({ code: 'signups', level: 'medium', n: signups, text: `${signups} comptes habitants ont été créés dans la dernière heure.` });
+    const consistent = consistency();
+    for (const problem of consistent.problems) found.push({ code: problem.code, level: 'high', text: problem.text });
+    return found;
+  }
+  if (path === '/api/admin/integrity' && method === 'GET') {
+    requireUser(request, ['agent', 'admin']);
+    return sendJson(response, 200, { ...consistency(), checked_at: cityNow() });
+  }
+
+  // F87: can the important data really be backed up? A consistent copy is made in the data folder, opened, checked, compared table by table with the live data and deleted;
+  // the answer is a plain report (and the date and result are kept for the next visit). The copy itself is never offered for download: it would hold password hashes.
+  if (path === '/api/admin/backup/verify' && method === 'POST') {
+    const admin = requireUser(request, ['admin']);
+    const wait = backupChecks.waitMs(String(admin.id));
+    if (wait) fail(429, 'Une vérification vient d’être faite. Réessayez dans quelques minutes.', { retryAfter: Math.ceil(wait / 1000) });
+    backupChecks.add(String(admin.id));
+    const target = join(dirname(dbFile), `.verif-sauvegarde-${randomBytes(6).toString('hex')}.sqlite`);
+    const started = Date.now();
+    let report;
+    try {
+      db.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`);
+      const copy = new DatabaseSync(target, { readOnly: true });
+      try {
+        const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name);
+        const rows = tables.map((name) => ({ table: name, live: db.prepare(`SELECT COUNT(*) AS n FROM "${name}"`).get().n, copy: copy.prepare(`SELECT COUNT(*) AS n FROM "${name}"`).get().n }));
+        const integrity = copy.prepare('PRAGMA integrity_check').all().map((row) => Object.values(row)[0]);
+        const mismatched = rows.filter((row) => row.live !== row.copy);
+        const important = { comptes: 'users', demandes: 'messages', services: 'services', 'rendez-vous': 'appointments', 'journal des actions': 'audit_log' };
+        const summaryRows = Object.entries(important).map(([label, table]) => ({ label, rows: rows.find((row) => row.table === table)?.copy ?? 0, same: !mismatched.some((row) => row.table === table) }));
+        const bytes = (await stat(target)).size;
+        report = { ok: integrity.length === 1 && integrity[0] === 'ok' && mismatched.length === 0, integrity: integrity[0] === 'ok' ? 'ok' : integrity.slice(0, 3), tables: tables.length, rows: rows.reduce((sum, row) => sum + row.copy, 0), mismatched: mismatched.map((row) => row.table), important: summaryRows, size_bytes: bytes, took_ms: Date.now() - started, checked_at: cityNow() };
+      } finally { copy.close(); }
+    } finally {
+      await rm(target, { force: true });
+    }
+    db.prepare("INSERT INTO settings (key, value) VALUES ('backup_check', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify({ ok: report.ok, checked_at: report.checked_at, rows: report.rows, tables: report.tables }));
+    audit(admin, { category: 'security', action: 'backup.verify', summary: report.ok ? 'a vérifié qu’une copie complète des données peut être faite et relue' : 'a lancé une vérification de sauvegarde : des écarts ont été trouvés', details: { ok: report.ok, tables: report.tables, rows: report.rows } });
+    return sendJson(response, 200, report);
+  }
+  if (path === '/api/admin/backup/status' && method === 'GET') {
+    requireUser(request, ['admin']);
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'backup_check'").get();
+    return sendJson(response, 200, { last: row ? JSON.parse(row.value) : null });
+  }
+
+  // F88: select the follow-up information that is useful and take it away in a simple format (CSV or JSON): which dataset, which columns, which period and state.
+  // Requests respect an agent's perimeter (F70); only whitelisted columns exist, so nothing else (password hashes, sessions) can be asked for.
+  const exportSets = {
+    requests: { label: 'Demandes', date: 'created_at', columns: {
+      reference: ['Référence', "'M-' || messages.id"], received: ['Reçue le (heure de la cité)', "datetime(messages.created_at, '+4 hours')"], updated: ['Mise à jour le (heure de la cité)', "datetime(messages.updated_at, '+4 hours')"],
+      kind: ['Type', "CASE messages.kind WHEN 'incident' THEN 'signalement' ELSE 'question' END"], topic: ['Thème', 'COALESCE(messages.topic, \'\')'], status: ['État', 'messages.status'], priority: ['Priorité', 'messages.priority'], emergency: ['Urgence médicale', "CASE messages.emergency WHEN 1 THEN 'oui' ELSE 'non' END"],
+      service: ['Service', "COALESCE((SELECT title FROM services WHERE id = messages.service_id), '')"], district: ['Quartier de l’habitant', "COALESCE((SELECT district FROM users WHERE id = messages.user_id), '')"], location: ['Lieu', "COALESCE(messages.location, '')"],
+      subject: ['Sujet', 'messages.subject'], replies: ['Réponses des agents', '(SELECT COUNT(*) FROM message_replies WHERE message_id = messages.id)'], resident: ['Habitant', "(SELECT name FROM users WHERE id = messages.user_id)"],
+    }, from: 'messages', defaults: ['reference', 'received', 'kind', 'topic', 'status', 'priority', 'service', 'district'], statuses: ['new', 'in_progress', 'resolved'], statusColumn: 'messages.status' },
+    appointments: { label: 'Rendez-vous', date: 'starts_at', columns: {
+      when: ['Date et heure (heure de la cité)', 'appointments.starts_at'], length: ['Durée (minutes)', 'appointments.duration_min'], place: ['Lieu', 'appointments.location'], status: ['État', 'appointments.status'],
+      booked: ['Réservé le', "COALESCE(appointments.booked_at, '')"],
+    }, from: 'appointments', defaults: ['when', 'length', 'place', 'status'], statuses: ['open', 'booked'], statusColumn: 'appointments.status' },
+  };
+  if (path === '/api/admin/export/options' && method === 'GET') {
+    requireUser(request, ['agent', 'admin']);
+    return sendJson(response, 200, { datasets: Object.entries(exportSets).map(([key, set]) => ({ key, label: set.label, statuses: set.statuses, defaults: set.defaults, columns: Object.entries(set.columns).map(([column, [label]]) => ({ key: column, label })) })) });
+  }
+  if (path === '/api/admin/export' && method === 'GET') {
+    const viewer = requireUser(request, ['agent', 'admin']);
+    const params = new URL(request.url, 'http://localhost').searchParams;
+    const set = exportSets[params.get('dataset')];
+    if (!set) fail(400, 'Jeu de données inconnu.');
+    const wanted = (params.get('fields') || set.defaults.join(',')).split(',').map((item) => item.trim()).filter(Boolean);
+    if (!wanted.length || wanted.length > 30 || !wanted.every((field) => Object.hasOwn(set.columns, field)) || new Set(wanted).size !== wanted.length) fail(400, 'Colonne inconnue.');
+    const format = params.get('format') || 'csv';
+    if (!['csv', 'json'].includes(format)) fail(400, 'Format inconnu (csv ou json).');
+    const where = [];
+    const args = [];
+    const status = params.get('status');
+    if (status) { if (!set.statuses.includes(status)) fail(400, 'État inconnu.'); where.push(`${set.statusColumn} = ?`); args.push(status); }
+    for (const [name, op] of [['from', '>='], ['to', '<']]) {
+      const value = params.get(name);
+      if (!value) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) fail(400, 'Date invalide (AAAA-MM-JJ).');
+      const day = name === 'to' ? new Date(Date.parse(value) + 86_400_000).toISOString().slice(0, 10) : value;
+      where.push(set.from === 'messages' ? `datetime(messages.created_at, '+4 hours') ${op} ?` : `substr(appointments.starts_at, 1, 10) ${op} ?`);
+      args.push(set.from === 'messages' ? `${day} 00:00:00` : day);
+    }
+    if (set.from === 'messages') { const ids = scopeOf(viewer); if (ids) where.push(`(messages.service_id IS NULL OR messages.service_id IN (${ids.join(',')}))`); }
+    const rows = db.prepare(`SELECT ${wanted.map((field, index) => `${set.columns[field][1]} AS c${index}`).join(', ')} FROM ${set.from} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ${set.from}.id LIMIT 20000`).all(...args);
+    audit(viewer, { category: 'export', action: 'export.data', summary: `a exporté « ${set.label} » (${rows.length} ligne(s), colonnes : ${wanted.join(', ')})`, details: { dataset: params.get('dataset'), fields: wanted, rows: rows.length, format } });
+    const stamp = cityNow().slice(0, 10);
+    if (format === 'json') return sendDocument(response, JSON.stringify({ dataset: params.get('dataset'), generated_at: cityNow(), columns: wanted.map((field) => ({ key: field, label: set.columns[field][0] })), rows: rows.map((row) => Object.fromEntries(wanted.map((field, index) => [field, row[`c${index}`]]))) }, null, 2), 'application/json; charset=utf-8', `export-${params.get('dataset')}-${stamp}.json`);
+    const lines = [wanted.map((field) => csvCell(set.columns[field][0])).join(';'), ...rows.map((row) => wanted.map((_, index) => csvCell(row[`c${index}`])).join(';'))];
+    return sendDocument(response, '\ufeff' + lines.join('\r\n') + '\r\n', 'text/csv; charset=utf-8', `export-${params.get('dataset')}-${stamp}.csv`);
+  }
+
   if (path === '/api/admin/security' && method === 'GET') {
     requireUser(request, ['agent', 'admin']);
     const { windowMinutes, failedLogins, blockedAttempts, failures } = summary();
@@ -896,7 +1028,7 @@ async function route(request, response) {
       if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(account)) targeted.push({ account: account.replace(/^(.).*(@.*)$/, '$1***$2'), failures: count });
       else unknown += 1;
     }
-    return sendJson(response, 200, { forms: formSummary(), windowMinutes, failedLogins, blockedAttempts, targeted: targeted.sort((a, b) => b.failures - a.failures).slice(0, 20), unknownAddresses: unknown });
+    return sendJson(response, 200, { anomalies: anomalies(), forms: formSummary(), windowMinutes, failedLogins, blockedAttempts, targeted: targeted.sort((a, b) => b.failures - a.failures).slice(0, 20), unknownAddresses: unknown });
   }
 
   if (path === '/api/admin/citizens' && method === 'GET') {
@@ -1467,7 +1599,7 @@ async function route(request, response) {
     const all = ['agent', 'admin'].includes(user.role);
     const messages = all
       ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, users.district AS citizen_district, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id WHERE ${scopeOf(user) ? `(messages.service_id IS NULL OR messages.service_id IN (${scopeOf(user).join(',')}))` : '1 = 1'} ORDER BY messages.created_at DESC, messages.id DESC`).all()
-      : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, topic, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT public_title FROM public_requests WHERE message_id = messages.id) AS public_title, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
+      : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, topic, emergency, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT public_title FROM public_requests WHERE message_id = messages.id) AS public_title, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
     const replies = repliesOf(messages.map((message) => message.id));
     // F75: staff also learn which requests talk about the same problem (residents get nothing of it)
     const similar = all ? groupSimilar(messages) : null;
@@ -1548,6 +1680,7 @@ async function route(request, response) {
       serviceId = Number(body.service_id);
       if (!Number.isInteger(serviceId) || !db.prepare('SELECT 1 FROM services WHERE id = ?').get(serviceId)) fail(400, 'Service inconnu.');
     }
+    const emergency = body.emergency === true || emergencyWords.test(`${subject} ${content}`);
     const fingerprint = fingerprintOf(kind, subject, content, location, serviceId);
     const same = db.prepare("SELECT id, status FROM messages WHERE user_id = ? AND fingerprint = ? AND created_at > datetime('now', ?) ORDER BY id DESC LIMIT 1").get(user.id, fingerprint, DUPLICATE_WINDOW);
     if (same) {
@@ -1557,8 +1690,8 @@ async function route(request, response) {
       return sendJson(response, 200, reply);
     }
     charge('message', { address: clientIp(request), account: String(user.id) });
-    const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location, service_id, fingerprint, topic) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location, serviceId, fingerprint, topic);
-    const reply = { id: Number(result.lastInsertRowid), status: 'new', confirmation: 'Votre message a bien été transmis.' };
+    const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location, service_id, fingerprint, topic, emergency, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location, serviceId, fingerprint, emergency ? 'sante' : topic, emergency ? 1 : 0, emergency ? 'urgent' : 'normal');
+    const reply = { id: Number(result.lastInsertRowid), status: 'new', confirmation: 'Votre message a bien été transmis.', ...(emergency ? { emergency: true } : {}) };
     guard.done(201, reply);
     return sendJson(response, 201, reply);
   }
@@ -1853,6 +1986,9 @@ async function route(request, response) {
   // B's participation module answers /api/participation/** (roles, validation, duplicates and its own transactions are inside it); the session, Origin, size and
   // throttle checks above have already run.
   if (await handleParticipation({ request, response, path, method, user: currentUser(request), db, readJson, sendJson, fail, tx, audit })) return;
+
+  // D10, F89-F92 (B's module): a public read-only index of the real services and places; the matching runs in the browser, nothing the resident types reaches the server.
+  if (await handleOrientation({ request, response, path, method, db, sendJson, fail, cityNow })) return;
 
   if (method === 'GET' && (path === '/monde' || path.startsWith('/monde/'))) return serveWorld(request, path, response);
   if (method === 'GET' && !path.startsWith('/api/')) return serveFile(request, path, response);

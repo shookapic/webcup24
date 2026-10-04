@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 const path = resolve(process.env.DATA_PATH || './data/terra-nova.sqlite');
 mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
 
+export const dbFile = path;
 export const db = new DatabaseSync(path);
 chmodSync(path, 0o600);
 db.exec(`
@@ -356,6 +357,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS agent_scopes (
   service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
   PRIMARY KEY (agent_id, service_id)
 )`);
+
+// F86: a request that reports a medical emergency (ticked by the resident or recognised by its words). Ordinary requests, and every request that existed before, are 0.
+{
+  const columns = new Set(db.prepare('PRAGMA table_info(messages)').all().map((column) => column.name));
+  if (!columns.has('emergency')) db.exec('ALTER TABLE messages ADD COLUMN emergency INTEGER NOT NULL DEFAULT 0');
+}
 
 // F82: a durable fingerprint of what a resident sent (messages and concerns), so the same text sent again within minutes (a retry, a script) is recognised
 // even after a restart. Additive: old rows keep an empty fingerprint and are never matched.

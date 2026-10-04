@@ -8,8 +8,10 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/participation.css">
+    <link rel="stylesheet" href="/orientation.css">
     <script src="/i18n.js" defer></script>
     <script src="/participation.js" defer></script>
+    <script src="/orientation.js" defer></script>
     <script src="/app.js" defer></script>
     <title>Terra Nova — Le portail de la cité</title>
   </head>
@@ -52,6 +54,10 @@
           <p class="hero-footnote"><span aria-hidden="true">✦</span> Les premiers services numériques de la cité.</p>
         </div>
         <div class="hero-art" aria-hidden="true"><div class="orbit orbit-outer"></div><div class="orbit orbit-inner"></div><div class="planet"><div class="planet-sheen"></div></div><div class="moon"></div><div class="art-label label-top">TERRA NOVA <span>PORTAIL</span></div><div class="art-label label-bottom">NOUVEL HORIZON <span>◎ EN DIRECT</span></div></div>
+      </section>
+
+      <section class="overview orientation-section" id="orientation" aria-labelledby="to-title" tabindex="-1">
+        <div id="orientation-root" data-content></div>
       </section>
 
       <section class="overview" id="services" aria-labelledby="services-title">
@@ -179,6 +185,8 @@
                 <div id="tip-report" class="tip-slot" role="status"></div>
                 <label id="location-field" hidden>Lieu du problème <input name="location" type="text" minlength="5" maxlength="180" placeholder="Rue, quartier ou repère précis"></label>
                 <label>Thème de la demande <select name="topic" id="message-topic" data-content></select></label>
+                <label class="check-field emergency-check"><input type="checkbox" name="emergency"> C’est une urgence médicale</label>
+                <p id="emergency-warning" class="emergency-warning" role="alert" hidden>⚠ En cas d’urgence médicale, appelez le <a href="tel:112">112</a> tout de suite. N’attendez pas la réponse de la ville : ce formulaire n’est pas un appel d’urgence.</p>
                 <label>Votre message <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label>
                 <div class="hp" aria-hidden="true"><label>Laissez ce champ vide <input type="text" name="fax_ref" tabindex="-1" autocomplete="off"></label></div><button class="button button-primary" type="submit">Envoyer mon message</button>
                 <p id="message-status" class="form-status" role="status" aria-live="polite"></p>
@@ -267,7 +275,7 @@
           </div>
 
           <div id="staff-area" hidden>
-            <nav class="jump-nav" aria-label="Dans l’espace agent"><a href="#dashboard-panel">Tableau de bord</a><a href="#staff-messages-panel">Messages</a><a href="#traffic-form">Info trafic</a><a href="#availability-form">Disponibilité des services</a><a href="#slots-panel">Horaires de rendez-vous</a><a href="#security-panel">Sécurité</a><a href="#citizens-panel">Comptes des habitants</a><a href="#audit-panel">Journal des actions</a><a href="#feed-panel">Demandes du concours</a><a href="#concerns-panel">Inquiétudes sur les données</a><a class="admin-only" href="#service-form" hidden>Ajouter un service</a><a class="admin-only" href="#news-form" hidden>Publier une actualité</a><a class="admin-only" href="#place-admin" hidden>Lieux de la ville</a><a href="#factors-panel">Sécurité du compte</a></nav>
+            <nav class="jump-nav" aria-label="Dans l’espace agent"><a href="#dashboard-panel">Tableau de bord</a><a href="#staff-messages-panel">Messages</a><a href="#traffic-form">Info trafic</a><a href="#availability-form">Disponibilité des services</a><a href="#slots-panel">Horaires de rendez-vous</a><a href="#security-panel">Sécurité</a><a href="#citizens-panel">Comptes des habitants</a><a href="#audit-panel">Journal des actions</a><a href="#ops-panel">Exports et sauvegarde</a><a href="#feed-panel">Demandes du concours</a><a href="#concerns-panel">Inquiétudes sur les données</a><a class="admin-only" href="#service-form" hidden>Ajouter un service</a><a class="admin-only" href="#news-form" hidden>Publier une actualité</a><a class="admin-only" href="#place-admin" hidden>Lieux de la ville</a><a href="#factors-panel">Sécurité du compte</a></nav>
             <div class="section-heading staff-heading"><div><span class="section-kicker">ESPACE AGENT</span><h3>Suivi de l’activité</h3></div><p>Demandes citoyennes et flux officiel, dans un espace réservé aux agents.</p></div>
             <section id="dashboard-panel" class="panel dashboard-panel" aria-labelledby="dashboard-title" tabindex="-1">
               <div class="panel-title-row"><h3 id="dashboard-title">Tableau de bord</h3><span id="dashboard-time" class="dashboard-time" data-content></span></div>
@@ -352,7 +360,33 @@
             <section id="security-panel" class="panel security-panel" aria-labelledby="security-title" tabindex="-1">
               <h3 id="security-title">Sécurité des connexions</h3><p>Tentatives de connexion échouées ou bloquées sur les 15 dernières minutes. Après 5 erreurs depuis une même adresse, 20 sur un même compte ou 40 depuis une même adresse, la connexion est suspendue.</p>
               <p id="security-summary" class="security-summary" role="status" data-content></p>
+              <h4 id="anomalies-title">Activité inhabituelle</h4>
+              <ul id="security-anomalies" class="security-targets" data-content></ul>
+              <p id="integrity-status" class="form-status" role="status" aria-live="polite" tabindex="-1"></p>
+              <div class="factors-actions"><button id="integrity-check" class="button" type="button">Vérifier la cohérence des données</button></div>
               <ul id="security-targets" class="security-targets" data-content></ul>
+            </section>
+            <section id="ops-panel" class="panel" aria-labelledby="ops-title" tabindex="-1">
+              <h3 id="ops-title">Exports et sauvegarde</h3>
+              <form id="export-form" class="export-form">
+                <h4>Récupérer des données de suivi</h4>
+                <p>Choisissez le jeu de données, la période, l’état et les colonnes utiles. Vous obtenez un fichier simple à réutiliser (tableur ou JSON). Chaque export est noté dans le journal. Un agent limité à certains services n’exporte que ce qu’il peut voir.</p>
+                <label>Données <select name="dataset" id="export-dataset"></select></label>
+                <label>État <select name="status" id="export-status"></select></label>
+                <label>Du <input type="date" name="from"></label>
+                <label>Au <input type="date" name="to"></label>
+                <label>Format <select name="format"><option value="csv">Tableur (CSV)</option><option value="json">JSON</option></select></label>
+                <fieldset id="export-fields"><legend>Colonnes à inclure</legend></fieldset>
+                <p id="export-status-line" class="form-status" role="status" aria-live="polite"></p>
+                <button class="button button-primary" type="submit">Télécharger</button>
+              </form>
+              <div id="backup-box" class="backup-box" hidden>
+                <h4>Vérifier la sauvegarde</h4>
+                <p>Fait une copie complète des données, la relit, la compare table par table avec les données réelles puis la supprime. La copie n’est jamais proposée au téléchargement : elle contiendrait les mots de passe sous forme brouillée.</p>
+                <p id="backup-last" class="form-status" data-content></p>
+                <button id="backup-verify" class="button" type="button">Vérifier maintenant</button>
+                <p id="backup-status" class="form-status" role="status" aria-live="polite" tabindex="-1" data-content></p>
+              </div>
             </section>
             <section id="audit-panel" class="panel audit-panel" aria-labelledby="audit-title" tabindex="-1">
               <h3 id="audit-title">Journal des actions</h3>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orientation (hôte de test)</title>
+<link rel="stylesheet" href="/orientation.css"></head>
+<body>
+<section id="urgences" tabindex="-1"><p>Urgence ? Appelez le <a class="emergency-call" href="tel:112">112</a>.</p></section>
+<main>
+<section id="orientation"><div id="orientation-root"></div></section>
+<section id="services" tabindex="-1"><h2>Services</h2><input id="service-search"></section>
+<section id="lieux" tabindex="-1"><h2>Où trouver ?</h2></section>
+<section id="transports" tabindex="-1"><h2>Transports</h2></section>
+<section id="actualites" tabindex="-1"><h2>Actualités</h2></section>
+<section id="espace" tabindex="-1"><h2>Votre espace</h2><form id="message-form"><h3>Écrire à la ville</h3></form><section id="appointments-panel"></section><form id="profile-form"></form><section id="privacy-panel"></section><section id="public-panel"></section><div id="citizen-messages"></div></section>
+</main>
+<script src="/orientation.js"></script>
+<script>
+  async function api(path, method = 'GET', body) {
+    const response = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(data.error || 'Une erreur est survenue.'), { status: response.status });
+    return data;
+  }
+  const params = new URLSearchParams(location.search);
+  window.__mount = async () => { const { user } = await api('/api/me'); window.__handle?.unmount(); window.__handle = TerraOrientation.mount(document.getElementById('orientation-root'), { user, lang: params.get('lang') === 'en' ? 'en' : 'fr', api }); };
+  window.__mount();
+</script></body></html>
