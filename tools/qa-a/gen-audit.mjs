@@ -74,7 +74,7 @@ const rows = [
   ['F69', 'PARTIAL', 'strict CSP, escaping, validation, body/Origin limits, rate limits, form guard, maintained WebAuthn; ' + L + ': smoke/form-protection/passkeys (hostile CBOR)', 'no independent penetration test: UNVERIFIED'],
   ['F70', 'PASS', 'role gates + per-agent perimeter (list, count, 404, journal); ' + L + ': scoping 16; ' + P + ': limited agent'],
   ['F71', 'PARTIAL', 'e-mail optional, access code, counter-opened accounts, password change, FR/EN; ' + L + '; ' + P, 'only 2 languages for ~500 new residents'],
-  ['F72', 'PASS', '"Je viens d\'arriver" guide, 4 situations, real links, no account; ' + L + ': served live (/ has #debuter)', 'not asserted in a dedicated browser test: add if time'],
+  ['F72', 'PASS', '"Je viens d\'arriver" guide, 4 situations, real links, no account; ' + L + ': served live (/ has #debuter)', 'dedicated browser assertion added (essentials-browser F72 section)'],
   ['F73', 'PASS', 'Haut Conseil sender, banner for all, first in news; ' + L + ': ops-api/auth-browser; ' + P + ': field handled', ''],
   ['F74', 'PASS', 'partner places with address/hours; ' + L + '; ' + P + ': partner place present', ''],
   ['F75', 'PASS', 'lexical grouping for staff; ' + L + ': triage-api/civic-browser; ' + P + ': 2 similar TEST requests grouped', 'different wording is not matched (stated in the UI)'],

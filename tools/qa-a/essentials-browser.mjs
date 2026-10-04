@@ -64,6 +64,19 @@ check('following an anchor that targets the participation section opens it at on
 check('no page error', s.errors.length === 0, s.errors.join(' | '));
 await s.context.close();
 
+console.log('\n# F72. first steps for a newcomer, no account');
+s = await open();
+await s.page.goto(base + '/', { waitUntil: 'networkidle0' });
+const guide = async () => s.page.evaluate(() => [...document.querySelectorAll('#start-steps li')].map((li) => ({ text: li.querySelector('span').textContent, href: li.querySelector('a').getAttribute('href'), target: Boolean(document.querySelector(li.querySelector('a').getAttribute('href'))) })));
+const arrive = await guide();
+await s.page.click('input[name=situation][value=sante]');
+const sante = await guide();
+check('F72: a newcomer sees first steps at once (no sign-in), each a real link to an existing part of the page; another situation changes the steps; an account is suggested only where something needs it', arrive.length >= 4 && arrive.every((x) => x.target) && sante.length >= 3 && JSON.stringify(arrive.map((x) => x.text)) !== JSON.stringify(sante.map((x) => x.text)) && /112/.test(sante[0].text) && arrive.filter((x) => /compte|espace/i.test(x.text)).length === 1, JSON.stringify([arrive.length, sante.length]));
+await s.page.click('#lang-toggle');
+await s.page.waitForFunction(() => /^I have just arrived$/.test(document.querySelector('#start-title')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+check('F72: the guide reads in English too', /^I have just arrived$/.test(await s.page.$eval('#start-title', (n) => n.textContent)));
+await s.context.close();
+
 console.log('\n# F62 / F96. the essentials mode');
 s = await open();
 await s.page.goto(base + '/', { waitUntil: 'networkidle0' });
