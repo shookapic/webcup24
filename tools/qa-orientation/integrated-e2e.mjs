@@ -38,6 +38,8 @@ async function open(user) {
     await page.click('#register-form button[type=submit]');
     await page.waitForSelector('#member-area:not([hidden])', { timeout: 20000 });
   }
+  const openBtn = await page.$('[data-open-module="orientation"]');
+  if (openBtn) await openBtn.click(); // deployed index.html lazy-loads the module behind an "Ouvrir l'aide à l'orientation" button (F95/F96)
   await page.waitForSelector('#orientation-root .to-root', { timeout: 15000 });
   return { page, context, response };
 }
@@ -45,7 +47,7 @@ async function open(user) {
   const { page, context, response } = await open(null);
   check('portal CSP forbids inline script and still serves the module (same-origin external script)', /script-src 'self'/.test(response.headers()['content-security-policy'] ?? '') && (await page.$('#orientation-root #to-q')) !== null);
   await ask(page, 'un lampadaire est cassé dans ma rue');
-  check('real portal, guest: the report procedure is found with its reason and says sign-in is needed', /Signaler un problème/.test(await textOf(page, '.to-card h3')) && /Connexion nécessaire/.test(await textOf(page, '.to-card.to-action')) || /Signaler un problème/.test(await textOf(page, '.to-card h3')));
+  check('real portal, guest: the report procedure is found, with its reason AND the required sign-in hint/action (both independently true)', /Signaler un problème/.test(await textOf(page, '.to-card h3')) && /Connexion nécessaire/.test(await textOf(page, '.to-card.to-action')) && /Se connecter ou créer un compte/.test(await textOf(page, '.to-card.to-action .to-dest button')));
   await ask(page, 'je voudrais me faire vacciner');
   check('real data: the health centre service is found for a vaccination request, official text shown, explanation on demand', /Centre de santé/.test(await textOf(page, '.to-card.to-service h3')) && (await page.$('.to-card.to-service button[aria-expanded]')) !== null);
   await ask(page, 'ma mère est inconsciente');

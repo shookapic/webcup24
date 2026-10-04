@@ -24,14 +24,21 @@ async function session(kind, creds) {
   await page.setViewport({ width: 1100, height: 900 });
   const problems = []; // console 409/403 lines are filtered below: they are refusals this script provokes on purpose
   page.on('pageerror', (e) => problems.push(`pageerror ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404|status of (409|403)/.test(m.text())) problems.push(`console ${m.text()}`); });
+  page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404|status of (409|403|429)/.test(m.text())) problems.push(`console ${m.text()}`); }); // 429 on /api/auth/register is A's F37 per-IP throttle, expected after repeated runs against one disposable server; not a product defect
   page.on('response', (r) => { if (r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.url()}`); });
   await page.goto(base + '/', { waitUntil: 'networkidle0' });
-  const r = kind === 'register'
-    ? await jsonIn(page, 'POST', '/api/auth/register', creds)
-    : await jsonIn(page, 'POST', '/api/auth/login', creds);
-  if (r.status >= 400) console.log('auth issue', kind, r.status, JSON.stringify(r.body));
-  await page.goto(base + '/', { waitUntil: 'networkidle0' });
+  if (kind === 'register') {
+    // the real form, not a raw fetch: A's F81/F82 signed single-use form token rejects an unsigned direct POST
+    await page.type('#register-form [name=name]', creds.name);
+    await page.type('#register-form [name=email]', creds.email);
+    await page.type('#register-form [name=password]', creds.password);
+    await page.click('#register-form button[type=submit]');
+    await page.waitForSelector('#member-area:not([hidden])', { timeout: 20000 }).catch((e) => console.log('auth issue register: member area did not appear', e.message));
+  } else {
+    const r = await jsonIn(page, 'POST', '/api/auth/login', creds);
+    if (r.status >= 400) console.log('auth issue', kind, r.status, JSON.stringify(r.body));
+    await page.goto(base + '/', { waitUntil: 'networkidle0' });
+  }
   return { page, context, problems };
 }
 
@@ -42,6 +49,8 @@ async function session(kind, creds) {
   const problems = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) problems.push(m.text()); });
   const response = await page.goto(base + '/', { waitUntil: 'networkidle0' });
+  const openBtn = await page.$('[data-open-module="participation"]');
+  if (openBtn) await openBtn.click(); // deployed index.html lazy-loads the module behind an "Ouvrir la participation" button (F95/F96)
   await page.waitForSelector('#participation-root .tp-root h2', { timeout: 15000 });
   check('portal CSP forbids inline script and still serves the module (same-origin external script)', /script-src 'self'/.test(response.headers()['content-security-policy'] ?? '') && (await page.$$eval('#participation-root .tp-card', (els) => els.length)) >= 4);
   check('guest in the real portal: login prompt, demo badges, no console errors', (await page.$$eval('#participation-root .tp-badge-demo', (els) => els.length)) >= 4 && (await page.$$eval('#participation-root a[href="#espace"]', (els) => els.length)) >= 3 && problems.length === 0, problems.join(' | '));
@@ -53,6 +62,8 @@ const email = `part${Date.now()}@example.org`;
 const citizen = await session('register', { name: 'Camille Citoyenne', email, password: 'motdepasse-solide-123' });
 {
   const { page, problems } = citizen;
+  const openBtn2 = await page.$('[data-open-module="participation"]');
+  if (openBtn2 && !(await page.$('#participation-root .tp-root'))) await openBtn2.click();
   await page.waitForSelector('#participation-root .tp-root h2');
   const me = await jsonIn(page, 'GET', '/api/me');
   check('real citizen session', me.body.user?.role === 'citizen', me.body.user?.email);
