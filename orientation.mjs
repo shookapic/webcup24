@@ -93,32 +93,50 @@ export const ACTIONS = [
 // listed here (or whose title changed) gets no explanation: the UI then shows the original text intact. Reviewed by B on 2026-10-04 against the seed texts;
 // the city should re-confirm them whenever the service text changes.
 export const PLAIN = {
+  // `reviewedSource` / `reviewedSource_en` are the EXACT { description, details } this explanation was reviewed against, each language independently.
+  // buildIndex() below only attaches `plain.fr` when the service's CURRENT description+details still equals reviewedSource verbatim, and the same for
+  // `plain.en`/reviewedSource_en; a staff edit that keeps the title but changes either text (a new condition, a corrected detail, a language-only edit)
+  // silently drops that language's explanation back to "no reviewed explanation" instead of showing a stale one. To re-approve after a real edit: an
+  // editor who can read both texts side by side copies the service's new description+details into reviewedSource (or reviewedSource_en) and updates
+  // `fr`/`en` and `facts`/`facts_en` to match; nothing here regenerates text automatically.
   'Relations citoyennes': {
+    reviewedSource: { description: 'Une question ou une difficulté ?', details: 'Depuis votre espace personnel, envoyez un message aux services municipaux et suivez son traitement.' },
+    reviewedSource_en: { description: 'A question or a difficulty?', details: 'From your personal space, send a message to the city services and follow how it is handled.' },
     fr: 'Vous avez une question ou une difficulté ? Connectez-vous à votre espace personnel et envoyez un message aux services municipaux. Vous pouvez ensuite suivre son traitement.',
     en: 'Do you have a question or a difficulty? Sign in to your personal space and send a message to the city services. You can then follow how it is handled.',
     facts: ['espace personnel', 'message', 'traitement'], facts_en: ['personal space', 'message', 'handled'],
   },
   'Espace personnel': {
+    reviewedSource: { description: 'Vos démarches au même endroit.', details: 'Créez un compte pour accéder à vos informations et retrouver vos échanges avec la ville.' },
+    reviewedSource_en: { description: 'All your requests in one place.', details: 'Create an account to access your information and find your conversations with the city.' },
     fr: 'Pour voir vos informations et retrouver vos échanges avec la ville, créez un compte. Tout est au même endroit.',
     en: 'To see your information and find your conversations with the city, create an account. Everything is in one place.',
     facts: ['compte', 'échanges avec la ville'], facts_en: ['account', 'conversations with the city'],
   },
   'Suivi des demandes': {
+    reviewedSource: { description: 'Gardez une trace de vos échanges.', details: 'Consultez le statut de chaque message : reçu, en cours de traitement ou résolu.' },
+    reviewedSource_en: { description: 'Keep track of your conversations.', details: 'Check the status of each message: received, in progress or resolved.' },
     fr: 'Pour chaque message envoyé, vous voyez où il en est : reçu, en cours de traitement ou résolu.',
     en: 'For each message you send, you can see where it stands: received, in progress or resolved.',
     facts: ['reçu', 'en cours de traitement', 'résolu'], facts_en: ['received', 'in progress', 'resolved'],
   },
   'Centre de santé': {
+    reviewedSource: { description: 'Consultations, vaccinations et soins de proximité.', details: 'Le centre de santé municipal reçoit les habitants pour la médecine générale, les vaccinations et les soins infirmiers. Pour prendre rendez-vous, envoyez un message depuis votre espace personnel.' },
+    reviewedSource_en: { description: 'Consultations, vaccinations and local care.', details: 'The city health centre welcomes residents for general medicine, vaccinations and nursing care. To book an appointment, send a message from your personal space.' },
     fr: 'Le centre de santé de la ville reçoit les habitants pour la médecine générale (voir un médecin), les vaccinations et les soins infirmiers. Pour prendre rendez-vous, envoyez un message depuis votre espace personnel.',
     en: 'The city health centre welcomes residents for general medicine (seeing a doctor), vaccinations and nursing care. To book an appointment, send a message from your personal space.',
     facts: ['médecine générale', 'vaccinations', 'soins infirmiers', 'rendez-vous', 'message', 'espace personnel'], facts_en: ['general medicine', 'vaccinations', 'nursing care', 'appointment', 'message', 'personal space'],
   },
   'Signaler un problème': {
+    reviewedSource: { description: 'Lampadaire cassé, voirie, propreté…', details: 'Depuis votre espace personnel, choisissez « Signaler un problème », décrivez ce qui s’est passé et indiquez le lieu. Vous suivez ensuite son traitement.' },
+    reviewedSource_en: { description: 'Broken street light, roads, cleanliness…', details: 'From your personal space, choose “Report a problem”, describe what happened and give the location. You can then follow how it is handled.' },
     fr: 'Quelque chose ne va pas dans la ville ? Dans votre espace personnel, choisissez « Signaler un problème », décrivez ce qui s’est passé et indiquez le lieu. Vous suivez ensuite son traitement.',
     en: 'Is something wrong in the city? In your personal space, choose “Report a problem”, describe what happened and give the location. You then follow how it is handled.',
     facts: ['Signaler un problème', 'lieu', 'espace personnel', 'traitement'], facts_en: ['Report a problem', 'location', 'personal space', 'handled'],
   },
   'Prévention et santé publique': {
+    reviewedSource: { description: 'Chaleur, montée des eaux, épidémies : les bons gestes.', details: 'Le service de prévention informe sur les risques sanitaires et accompagne les personnes vulnérables. Les alertes en cours s’affichent en haut de chaque page ; activez les notifications pour être prévenu.' },
+    reviewedSource_en: { description: 'Heat, rising water, epidemics: what to do.', details: 'The prevention service informs residents about health risks and supports vulnerable people. Active alerts appear at the top of every page; turn on notifications to be warned.' },
     fr: 'Ce service explique les bons gestes en cas de chaleur, de montée des eaux ou d’épidémie, et accompagne les personnes vulnérables. Les alertes en cours sont affichées en haut de chaque page ; activez les notifications pour être prévenu.',
     en: 'This service explains what to do in case of heat, rising water or epidemics, and supports vulnerable people. Current alerts are shown at the top of every page; turn on notifications to be warned.',
     facts: ['personnes vulnérables', 'alertes', 'en haut de chaque page', 'notifications'], facts_en: ['vulnerable people', 'alerts', 'top of every page', 'notifications'],
@@ -127,19 +145,26 @@ export const PLAIN = {
 
 const text = (value) => (typeof value === 'string' ? value : null);
 const safeAll = (db, sql) => { try { return db.prepare(sql).all(); } catch { return []; } }; // a table that does not exist yet means "nothing to index"
+// A reviewed explanation is shown for a language only when the service's CURRENT description+details still match, verbatim, the exact text that
+// explanation was reviewed against (reviewedSource / reviewedSource_en in PLAIN). Changing either field — a new condition, a corrected detail, even
+// whitespace — drops that language back to "no reviewed explanation" rather than showing a stale one; the two languages are checked independently,
+// so an FR-only edit does not invalidate the EN explanation and vice versa.
+const sourceMatches = (reviewed, description, details) => Boolean(reviewed) && reviewed.description === (description ?? '') && reviewed.details === (details ?? '');
 
 export function buildIndex(db, { cityNow } = {}) {
   const now = typeof cityNow === 'function' ? cityNow() : null;
   const services = safeAll(db, 'SELECT * FROM services ORDER BY featured DESC, id').slice(0, 200).map((row) => {
     const over = Boolean(now && row.available_again && row.available_again <= now);
-    const plain = PLAIN[row.title] ?? null;
+    const curated = PLAIN[row.title] ?? null;
+    const freshFr = curated && sourceMatches(curated.reviewedSource, row.description, row.details);
+    const freshEn = curated && sourceMatches(curated.reviewedSource_en, row.description_en, row.details_en);
     return {
       id: row.id, title: text(row.title), title_en: text(row.title_en), description: text(row.description), description_en: text(row.description_en),
       details: text(row.details), details_en: text(row.details_en), featured: Boolean(row.featured),
       availability: row.availability === 'unavailable' && !over ? 'unavailable' : 'available',
       unavailableReason: text(row.unavailable_reason), unavailableReason_en: text(row.unavailable_reason_en), availableAgain: text(row.available_again),
       alternative: text(row.alternative), alternative_en: text(row.alternative_en),
-      plain: plain && row.details ? { fr: plain.fr, en: plain.en, facts: plain.facts, facts_en: plain.facts_en, source: 'service' } : null,
+      plain: (freshFr || freshEn) ? { fr: freshFr ? curated.fr : null, en: freshEn ? curated.en : null, facts: freshFr ? curated.facts : [], facts_en: freshEn ? curated.facts_en : [], source: 'service' } : null,
     };
   });
   const places = safeAll(db, "SELECT * FROM places ORDER BY CASE kind WHEN 'emergency' THEN 0 WHEN 'hospital' THEN 1 ELSE 2 END, name").slice(0, 200).map((row) => ({

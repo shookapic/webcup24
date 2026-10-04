@@ -1,0 +1,5 @@
+PASS network abort (guest): visible error with alert role, accessible-portal link and retry {"role":"alert","heading":"Le monde 3D n’a pas pu se charger","portal":"/","retry":true}
+PASS 404 json (guest): visible error with alert role, accessible-portal link and retry {"role":"alert","heading":"Le monde 3D n’a pas pu se charger","portal":"/","retry":true}
+PASS SPA html served as glb (guest): visible error with alert role, accessible-portal link and retry {"role":"alert","heading":"Le monde 3D n’a pas pu se charger","portal":"/","retry":true}
+PASS network abort (logged in): visible error with alert role, accessible-portal link and retry {"role":"alert","heading":"Le monde 3D n’a pas pu se charger","portal":"/","retry":true}
+ALL PASS

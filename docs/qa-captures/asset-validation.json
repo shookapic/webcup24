@@ -1,0 +1,113 @@
+{
+  "file": "world/public/models/colony-pack.glb",
+  "rawKB": 221,
+  "gzipKB": 43.1,
+  "textures": 0,
+  "assets": {
+    "bench": {
+      "triangles": 496,
+      "vertices": 1080,
+      "meshes": 3,
+      "materials": [
+        "bark",
+        "slate",
+        "terracotta"
+      ],
+      "boundsMin": [
+        -1.1,
+        0,
+        -0.3
+      ],
+      "boundsMax": [
+        1.1,
+        1.08,
+        0.25
+      ],
+      "sizeXYZ": [
+        2.2,
+        1.08,
+        0.55
+      ]
+    },
+    "streetLamp": {
+      "triangles": 460,
+      "vertices": 876,
+      "meshes": 4,
+      "materials": [
+        "lampGlass",
+        "slate",
+        "slateDark",
+        "terracotta"
+      ],
+      "boundsMin": [
+        -0.26,
+        0,
+        -0.3
+      ],
+      "boundsMax": [
+        0.26,
+        4.52,
+        0.3
+      ],
+      "sizeXYZ": [
+        0.52,
+        4.52,
+        0.6
+      ]
+    },
+    "colonyTree": {
+      "triangles": 416,
+      "vertices": 1128,
+      "meshes": 2,
+      "materials": [
+        "bark",
+        "foliage"
+      ],
+      "boundsMin": [
+        -2.18,
+        0,
+        -1.5
+      ],
+      "boundsMax": [
+        2.12,
+        5.46,
+        1.94
+      ],
+      "sizeXYZ": [
+        4.3,
+        5.46,
+        3.44
+      ]
+    },
+    "townHall": {
+      "triangles": 2336,
+      "vertices": 4828,
+      "meshes": 7,
+      "materials": [
+        "beacon",
+        "chalk",
+        "glass",
+        "slate",
+        "slateDark",
+        "teal",
+        "terracotta"
+      ],
+      "boundsMin": [
+        -20.8,
+        -0.01,
+        -8.75
+      ],
+      "boundsMax": [
+        20.8,
+        13.72,
+        13.25
+      ],
+      "sizeXYZ": [
+        41.6,
+        13.73,
+        22
+      ]
+    }
+  },
+  "problems": []
+}

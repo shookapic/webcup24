@@ -1,0 +1,21 @@
+PASS hangar_roundA at 40,-6 centre offset 0.00 m rendered 12.7x14.7x6.8 vs footprint 12.7x14.7x6.8
+PASS hangar_largeB at 40,-20 centre offset 0.00 m rendered 10.5x7.7x3.9 vs footprint 10.5x7.7x3.9
+PASS hangar_smallA at 40,9 centre offset 0.00 m rendered 8.0x8.0x4.0 vs footprint 8.0x8.0x4.0
+PASS hangar_smallB at -47,-9 centre offset 0.00 m rendered 4.8x4.8x2.4 vs footprint 4.8x4.8x2.4
+PASS hangar_smallB at -40,-9 centre offset 0.00 m rendered 4.8x4.8x2.4 vs footprint 4.8x4.8x2.4
+PASS hangar_smallB at -33,-9 centre offset 0.00 m rendered 4.8x4.8x2.4 vs footprint 4.8x4.8x2.4
+PASS hangar_smallB at -47,4.5 centre offset 0.00 m rendered 4.8x4.8x2.4 vs footprint 4.8x4.8x2.4
+PASS hangar_smallB at -40,4.5 centre offset 0.00 m rendered 4.8x4.8x2.4 vs footprint 4.8x4.8x2.4
+PASS hangar_smallB at -33,4.5 centre offset 0.00 m rendered 4.8x4.8x2.4 vs footprint 4.8x4.8x2.4
+PASS hangar_smallA at -51,-38.5 centre offset 0.00 m rendered 7.0x7.0x3.5 vs footprint 7.0x7.0x3.5
+PASS hangar_smallA at -44,-38.5 centre offset 0.00 m rendered 7.0x7.0x3.5 vs footprint 7.0x7.0x3.5
+PASS hangar_smallA at -37,-38.5 centre offset 0.00 m rendered 7.0x7.0x3.5 vs footprint 7.0x7.0x3.5
+PASS hangar_smallA at -51,-25.5 centre offset 0.00 m rendered 7.0x7.0x3.5 vs footprint 7.0x7.0x3.5
+PASS hangar_smallA at -44,-25.5 centre offset 0.00 m rendered 7.0x7.0x3.5 vs footprint 7.0x7.0x3.5
+PASS hangar_roundA at -14,36 centre offset 0.00 m rendered 8.5x7.4x3.9 vs footprint 8.5x7.4x3.9
+PASS hangar_roundA at -23,41 centre offset 0.00 m rendered 8.5x7.4x3.9 vs footprint 8.5x7.4x3.9
+PASS hangar_smallA at -16,49 centre offset 0.00 m rendered 6.0x6.0x3.0 vs footprint 6.0x6.0x3.0
+PASS hangar_smallA at 24,38 centre offset 0.00 m rendered 6.0x6.0x3.0 vs footprint 6.0x6.0x3.0
+PASS hangar_roundA at 31,46 centre offset 0.00 m rendered 8.5x7.4x3.9 vs footprint 8.5x7.4x3.9
+PASS landmark townHall at 0,-27 x -20.8..20.8 (footprints -20.5..20.5), z -35.8..-13.8 (-35.5..-13.8), height 13.7 m
+ALL PASS (19 buildings + 1 landmark)

@@ -1,0 +1,82 @@
+{
+  "hardware": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "dpr": 1.0000000149011612,
+    "cores": 32
+  },
+  "results": [
+    {
+      "stop": "spawn",
+      "frames": 318,
+      "p50": 17.899999999999636,
+      "p95": 25.100000000000364,
+      "p99": 28.69999999999891,
+      "max": 53.5,
+      "calls": 721,
+      "triangles": 216767,
+      "geometries": 350,
+      "textures": 49
+    },
+    {
+      "stop": "mairie",
+      "frames": 268,
+      "p50": 21.400000000001455,
+      "p95": 32.099999999998545,
+      "p99": 39.29999999999927,
+      "max": 67.79999999999927,
+      "calls": 734,
+      "triangles": 218019,
+      "geometries": 350,
+      "textures": 54
+    },
+    {
+      "stop": "sante",
+      "frames": 425,
+      "p50": 14.299999999999272,
+      "p95": 21.400000000001455,
+      "p99": 24.899999999997817,
+      "max": 28.5,
+      "calls": 556,
+      "triangles": 211339,
+      "geometries": 350,
+      "textures": 54
+    },
+    {
+      "stop": "marche",
+      "frames": 345,
+      "p50": 17.799999999999272,
+      "p95": 25,
+      "p99": 28.5,
+      "max": 50,
+      "calls": 771,
+      "triangles": 216073,
+      "geometries": 350,
+      "textures": 59
+    },
+    {
+      "stop": "habitat",
+      "frames": 346,
+      "p50": 17.799999999995634,
+      "p95": 25,
+      "p99": 32.099999999998545,
+      "max": 32.200000000004366,
+      "calls": 669,
+      "triangles": 205861,
+      "geometries": 350,
+      "textures": 59
+    },
+    {
+      "stop": "sud",
+      "frames": 309,
+      "p50": 17.900000000001455,
+      "p95": 28.599999999998545,
+      "p99": 32.099999999998545,
+      "max": 57.200000000004366,
+      "calls": 754,
+      "triangles": 226851,
+      "geometries": 350,
+      "textures": 69
+    }
+  ]
+}

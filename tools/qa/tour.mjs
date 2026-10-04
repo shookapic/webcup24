@@ -30,7 +30,7 @@ await page.evaluate(async () => {
   const { user } = await (await fetch('/api/me')).json();
   localStorage.setItem(`world-seen-alerts:${user.id}`, JSON.stringify(Array.from({ length: 200 }, (_, i) => i)));
 });
-await page.goto(base + '/monde/?debug&fps=30', { waitUntil: 'networkidle0' });
+await page.goto(base + '/monde/?debug&fps=30' + (process.env.EXTRA || ''), { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => window.__tn?.run, { timeout: 60000 });
 await page.evaluate(async () => { const tn = window.__tn; for (let i = 0; i < 60 && !tn.ecctrl; i++) await tn.run(0.5); await tn.run(2); });
 for (const [name, x, z, az, dist, polar] of views) {

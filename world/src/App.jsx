@@ -1,28 +1,45 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import { Sky } from './Sky.jsx';
 import { City, Ground, Rocks } from './City.jsx';
 import { LabelLayer, LabelProjector } from './Labels.jsx';
+import { WayfindingScene, WayfindingUi, useWayfinding } from './Wayfinding.jsx';
+import { PhoneRecovery, readFlatPreference, writeFlatPreference } from './PhoneRecovery.jsx';
 import { AvatarEditor } from './AvatarEditor.jsx';
 import { Npcs } from './Npcs.jsx';
 import { AlertAnnouncer, PhoneFallback, useAnnouncements, useServices, useTransports } from './Phone.jsx';
 import { WorldHud } from './ui/WorldHud.jsx';
 import { getLocale, t } from './ui/i18n.js';
 import { defaultAvatar } from './Avatar.jsx';
+import { ACCESSORY_IDS, LOOK_IDS, normalizeAvatar } from './avatarCatalog.js';
 import { SPAWN, nearestStop, playerPos } from './layout.js';
 import { Sun } from './Sun.jsx';
 import { PhoneHost, PhoneRig } from './PhoneRig.jsx';
+import { AvatarPreview } from './AvatarPreview.jsx';
 import { api } from './api.js';
 import { debug } from './debug.js';
 
-const PlayableCity = lazy(() => import('./PlayableCity.jsx'));
+import { settings } from './quality.js';
+
+const Effects = lazy(() => import('./Effects.jsx'));
+// Returning players: start the (large) physics chunk right away instead of after /api/me answers. The hint is set once a session
+// has been seen and cleared for guests, so guests pay for it at most once.
+const hint = (() => { try { return localStorage.getItem('tn.world') === '1'; } catch { return false; } })();
+const playableChunk = hint ? import('./PlayableCity.jsx') : null;
+const PlayableCity = lazy(() => playableChunk ?? import('./PlayableCity.jsx'));
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const PHONE_MS = reducedMotion ? 0 : 300; // raise / lower time; the PhoneRig animates over this
 const flatQuery = new URLSearchParams(location.search).has('flatphone');
 const narrow = matchMedia('(max-width: 720px)');
+
+// ?debug: exposes the renderer so QA can read draw calls / triangles (tools/qa/perf.mjs).
+function GlProbe() {
+  const gl = useThree((state) => state.gl);
+  useEffect(() => { debug.gl = gl; }, [gl]);
+  return null;
+}
 
 // ?debug&fps=N: frames are driven by window.__tn.run(seconds, input) at exactly N Hz.
 function SimDriver() {
@@ -43,6 +60,10 @@ function SimDriver() {
   }, [advance, clock]);
   return null;
 }
+
+// QA only (?debug&look=lunettes&acc=sac): shows look / accessory before the editor and API can persist them.
+const debugParams = new URLSearchParams(location.search);
+const debugAvatar = debug.enabled ? Object.fromEntries([['look', debugParams.get('look')], ['accessory', debugParams.get('acc')]].filter(([, v]) => v)) : {};
 
 export function App() {
   const locale = getLocale();
@@ -65,9 +86,14 @@ export function App() {
   // Physical phone on desktop with a playable avatar; flat accessible dialog on narrow screens, for guests or with ?flatphone.
   const [isNarrow, setNarrow] = useState(narrow.matches);
   useEffect(() => { const on = (e) => setNarrow(e.matches); narrow.addEventListener('change', on); return () => narrow.removeEventListener('change', on); }, []);
-  const physical = Boolean(user) && !isNarrow && !flatQuery;
+  const [flatPreferred, setFlatPreferred] = useState(readFlatPreference);
+  const physical = Boolean(user) && !isNarrow && !flatQuery && !flatPreferred;
   const services = useServices(phoneUp);
   const transports = useTransports(true);
+  const way = useWayfinding({ locale, enabled: true });
+  const wayRef = useRef(way);
+  wayRef.current = way;
+  if (debug.enabled) debug.way = way; // QA only
 
   const later = (fn) => {
     clearTimeout(timer.current);
@@ -112,7 +138,8 @@ export function App() {
   useEffect(() => {
     api('/api/me').then(({ user: me }) => {
       setUser(me);
-      if (me?.avatar) setAvatar(me.avatar);
+      try { if (me) localStorage.setItem('tn.world', '1'); else localStorage.removeItem('tn.world'); } catch { /* storage unavailable */ }
+      if (me?.avatar) setAvatar(normalizeAvatar(me.avatar));
       else if (me) setEditing(true);
     }, () => setUser(null));
   }, []);
@@ -120,6 +147,8 @@ export function App() {
   const toggleView = () => {
     if (phoneRef.current.phase === 'closed') setView((v) => (v === 'tps' ? 'fps' : 'tps'));
   };
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
   const togglePhone = () => {
@@ -139,6 +168,8 @@ export function App() {
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable], dialog')) return;
       if (event.code === 'KeyV') toggleView();
       if (event.code === 'KeyT') togglePhone();
+      if (event.code === 'KeyG' && phoneRef.current.phase === 'closed' && !editingRef.current) wayRef.current.guideEmergency();
+      if (event.code === 'Escape' && phoneRef.current.phase === 'closed' && wayRef.current.guide) wayRef.current.stopGuide();
       if (event.code === 'Escape' && phoneRef.current.phase === 'open' && !pendingRef.current.length) closePhone(); // focus may have fallen to the page after a click
     };
     addEventListener('keydown', keys);
@@ -158,30 +189,41 @@ export function App() {
 
   return (
     <>
-      <Canvas aria-hidden="true" shadows dpr={[1, 1.5]} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
+      <Canvas aria-hidden="true" shadows={settings.shadows} dpr={settings.dpr} frameloop={debug.simFps ? 'never' : 'always'} camera={{ position: [40, 30, 60], fov: 55, far: 1000 }}>
         <fog attach="fog" args={['#d3b295', 90, 300]} />
         <hemisphereLight args={['#b9d0e0', '#8a6c58', 1.6]} />
-        <Sun />
+        <Sun size={settings.shadowSize} shadows={settings.shadows} />
         {debug.simFps > 0 && <SimDriver />}
+        {debug.enabled && <GlProbe />}
         <Sky reducedMotion={reducedMotion} />
         <Ground />
         {!debug.floorOnly && <Rocks />}
         {!debug.floorOnly && <Npcs reducedMotion={reducedMotion} />}
         {user ? (
           <Suspense fallback={<City reducedMotion={reducedMotion} />}>
-            <PlayableCity avatar={avatar} view={view} reducedMotion={reducedMotion} inputEnabled={!editing && !phoneUp} />
+            <PlayableCity avatar={{ ...avatar, ...debugAvatar }} view={view} reducedMotion={reducedMotion} inputEnabled={!editing && !phoneUp} />
           </Suspense>
         ) : <City reducedMotion={reducedMotion} />}
         <LabelProjector />
+        <WayfindingScene places={way.places} guide={way.guide} reducedMotion={reducedMotion} />
         {physical && phoneUp && <PhoneRig phase={phone.phase} reducedMotion={reducedMotion} outfit={avatar.outfit} />}
         {/* Glow materials use toneMapped={false} and intensity > 1, so only they cross the bloom threshold. */}
-        {!debug.simFps && <EffectComposer multisampling={4}>
-          <Bloom mipmapBlur luminanceThreshold={1} intensity={0.9} />
-          <Vignette offset={0.3} darkness={0.55} />
-        </EffectComposer>}
+        {!debug.simFps && settings.effects && <Suspense fallback={null}><Effects /></Suspense>}
         {!user && <OrbitControls target={[0, 4, 0]} maxPolarAngle={1.45} minDistance={15} maxDistance={140} autoRotate={!reducedMotion} autoRotateSpeed={0.3} />}
       </Canvas>
       <LabelLayer />
+      <WayfindingUi
+        locale={locale}
+        places={way.places}
+        guide={way.guide}
+        prompt={way.prompt}
+        announce={way.announce}
+        hidden={phoneUp || editing}
+        onEmergency={way.guideEmergency}
+        onStop={way.stopGuide}
+        onDismissPrompt={way.dismissPrompt}
+        onOpenPhone={() => { setPage('places'); openPhone('manual'); }}
+      />
       <WorldHud
         locale={locale}
         view={view}
@@ -200,6 +242,16 @@ export function App() {
           <a href="/">Se connecter</a>
         </div>
       )}
+      {user && !isNarrow && !flatQuery && (
+        <PhoneRecovery
+          locale={locale}
+          physicalOpen={physical && phoneUp}
+          flatPreferred={flatPreferred}
+          phoneClosed={!phoneUp}
+          onFlat={() => { writeFlatPreference(true); setFlatPreferred(true); }}
+          onPhysical={() => { writeFlatPreference(false); setFlatPreferred(false); }}
+        />
+      )}
       <AlertAnnouncer alerts={pending} locale={locale} active={editing && !phoneUp} />
       {(() => {
         const screenProps = {
@@ -216,13 +268,16 @@ export function App() {
           onRetry: retry,
           onAcknowledge: acknowledgeAlerts,
           onClose: closePhone,
+          // F45/F46 handoff (A's Phone.jsx renders a "guide me" button per place when this prop is present): starts the ground route and puts the phone away.
+          onLocate: (place) => { way.startGuide(place); closePhone(); },
+          guidedPlaceCode: way.guide?.place.code,
           locale,
         };
         return physical
           ? phoneUp && <PhoneHost screenProps={{ ...screenProps, dialogLabel: t(locale, 'phone.label') }} />
           : <PhoneFallback open={phoneUp} {...screenProps} />;
       })()}
-      {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} locale={locale} />}
+      {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} locale={locale} looks={LOOK_IDS} accessories={ACCESSORY_IDS} preview={editing ? <AvatarPreview avatar={avatar} /> : null} />}
       {user && help && <p className="controls-help">{t(locale, 'help.controls')}</p>}
     </>
   );

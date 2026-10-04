@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { Euler } from 'three';
 import { Colonist } from './Colonist.jsx';
 import { api } from './api.js';
+import { firstDelay, nextDelay } from './polling.js';
 
 const POLL = 2000; // No WebSockets on Hodifly: post our position, read everyone else's.
 const euler = new Euler();
@@ -17,7 +18,15 @@ export function Multiplayer({ ecctrl }) {
 
   useEffect(() => {
     let timer;
+    let alive = true;
+    let running = false;
+    let failures = 0;
+    let retryAfter = 0;
+    // Polling stops while the tab is hidden (no requests, no battery / data) and refreshes at once when it comes back.
     const tick = async () => {
+      clearTimeout(timer);
+      if (!alive || running || document.hidden) return;
+      running = true;
       try {
         const body = ecctrl.current;
         if (body) {
@@ -25,17 +34,30 @@ export function Multiplayer({ ecctrl }) {
           await api('/api/presence', 'POST', { x: body.currPos.x, z: body.currPos.z, ry: euler.y });
         }
         const { players: list } = await api('/api/presence');
+        if (!alive) return;
         targets.current = new Map(list.map((player) => [player.id, player]));
         lastOk.current = Date.now();
+        failures = 0;
+        retryAfter = 0;
         setPlayers(list);
-      } catch {
+      } catch (error) {
+        failures += 1; // overloaded or offline server: back off with jitter instead of hammering it
+        retryAfter = error?.retryAfter || 0;
         // Offline or server restarting: keep the last positions, but drop peers once they are older than the server's 15 s window.
-        if (Date.now() - lastOk.current > 15_000) setPlayers((current) => (current.length ? [] : current));
+        if (alive && Date.now() - lastOk.current > 15_000) setPlayers((current) => (current.length ? [] : current));
+      } finally {
+        running = false;
+        if (alive && !document.hidden) timer = setTimeout(tick, nextDelay(POLL, failures, { retryAfter }));
       }
-      timer = setTimeout(tick, POLL);
     };
-    tick();
-    return () => clearTimeout(timer);
+    const visibility = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', visibility);
+    timer = setTimeout(tick, firstDelay(POLL));
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', visibility);
+    };
   }, [ecctrl]);
 
   // Glide towards the last known position so 2 s updates still look like walking.

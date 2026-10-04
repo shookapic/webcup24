@@ -1,0 +1,16 @@
+PASS NPC routes keep >= 1.5 m from the clinic envelope min 5.78 m
+PASS rails stay >= 3 m (horizontal) from the clinic envelope; rail y 9.2 vs roof 7.75 = 1.45 m vertical gap min 5.78 m
+PASS annex at 40,-20 does not overlap the clinic (gap along z) 2.94 m
+PASS annex at 40,9 does not overlap the clinic (gap along z) 3.79 m
+PASS porch mouth ground point is outside every ground-level collider point 34.6,-6
+FAIL player walks from the plaza side into the porch and reaches the doors end x 30.85 z -6.00 (door face x 35.43)
+INFO body y along the approach (steps 0.24 / 0.35 m): min 0.97 max 1.00 end 0.99
+FAIL jumping under the canopy never puts the head above the 2.95 m soffit max head 2.99 m, max body y 2.24
+INFO jump under open sky reference is below: body y max 3.11
+FAIL roof not reachable by walking + jumping into the west wing face max body y 3.10 m (roof 6.0-7.75 m)
+FAIL roof not reachable by walking + jumping into the east wing face max body y 3.09 m (roof 6.0-7.75 m)
+FAIL roof not reachable by walking + jumping into the rear max body y 3.11 m (roof 6.0-7.75 m)
+FAIL roof not reachable by walking + jumping into the side +z max body y 3.11 m (roof 6.0-7.75 m)
+FAIL roof not reachable by walking + jumping into the side -z max body y 3.10 m (roof 6.0-7.75 m)
+PASS camera blockers include the overhead canopy (y 2.95..6.25) and the ground-level wings 7 blockers near the clinic
+FAILURES (7)

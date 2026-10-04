@@ -1,0 +1,82 @@
+{
+  "hardware": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "dpr": 1.0000000149011612,
+    "cores": 32
+  },
+  "results": [
+    {
+      "stop": "spawn",
+      "frames": 261,
+      "p50": 17.899999999999636,
+      "p95": 28.600000000000364,
+      "p99": 42.899999999999636,
+      "max": 46.399999999999636,
+      "calls": 790,
+      "triangles": 193339,
+      "geometries": 368,
+      "textures": 48
+    },
+    {
+      "stop": "mairie",
+      "frames": 315,
+      "p50": 14.299999999999272,
+      "p95": 25.100000000000364,
+      "p99": 32.20000000000073,
+      "max": 71.39999999999964,
+      "calls": 859,
+      "triangles": 203085,
+      "geometries": 368,
+      "textures": 48
+    },
+    {
+      "stop": "sante",
+      "frames": 410,
+      "p50": 10.799999999999272,
+      "p95": 17.900000000001455,
+      "p99": 21.5,
+      "max": 21.5,
+      "calls": 587,
+      "triangles": 185472,
+      "geometries": 379,
+      "textures": 48
+    },
+    {
+      "stop": "marche",
+      "frames": 290,
+      "p50": 14.400000000001455,
+      "p95": 25,
+      "p99": 32.19999999999709,
+      "max": 57.099999999998545,
+      "calls": 763,
+      "triangles": 190398,
+      "geometries": 387,
+      "textures": 53
+    },
+    {
+      "stop": "habitat",
+      "frames": 261,
+      "p50": 17.900000000001455,
+      "p95": 28.599999999998545,
+      "p99": 32.200000000004366,
+      "max": 35.799999999995634,
+      "calls": 843,
+      "triangles": 195511,
+      "geometries": 399,
+      "textures": 58
+    },
+    {
+      "stop": "sud",
+      "frames": 414,
+      "p50": 10.799999999995634,
+      "p95": 17.900000000001455,
+      "p99": 17.900000000001455,
+      "max": 21.5,
+      "calls": 468,
+      "triangles": 181894,
+      "geometries": 399,
+      "textures": 63
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+PASS admin login {"status":200}
+PASS open {}
+PASS reopened during lowering stays up in first person {"cam":0.01}
+PASS input still locked after rapid reopen {}
+PASS final close lowers and restores third person {"cam":"9.00"}
+PASS reopen 20 ms before the lowering timer: still up {}
+PASS then closes cleanly {}
+PASS alert shown inside the manually opened phone {}
+PASS acknowledge keeps a manual phone open {}
+PASS manual phone closes afterwards, third person restored {}
+PASS alert raised the phone {}
+PASS withdrawal puts the phone away and restores the view {"cam":"9.00"}
+ALL PASS

@@ -1,0 +1,8 @@
+PASS a first-time player gets the editor, with look and accessory groups from the renderer catalogue 
+PASS the live preview loads the model for the chosen look (lunettes -> character-i) c,i
+PASS saved through the real API: look lunettes, accessory sac {"skin":"#e0ac69","outfit":"#3a6ea5","accent":"#ff4fa3","look":"lunettes","accessory":"sac"}
+PASS after a reload the editor does not reopen (avatar already saved) 
+PASS the editor reopens with the saved choices selected 
+PASS second change saved: bandeau + visiere, colours kept {"skin":"#e0ac69","outfit":"#3a6ea5","accent":"#ff4fa3","look":"bandeau","accessory":"visiere"}
+PASS no page errors 
+ALL PASS

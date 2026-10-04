@@ -1,0 +1,112 @@
+{
+  "profile": "slow4g",
+  "mode": "user",
+  "cold": {
+    "label": "cold slow4g user",
+    "domContentLoaded": 2141,
+    "sceneVisible": 3412,
+    "playable": 8464,
+    "requests": 16,
+    "transferredKB": 1366,
+    "cachedRequests": 1,
+    "byType": {
+      "Document": {
+        "n": 1,
+        "bytes": 1045
+      },
+      "Script": {
+        "n": 4,
+        "bytes": 1245450
+      },
+      "Stylesheet": {
+        "n": 1,
+        "bytes": 3542
+      },
+      "Fetch": {
+        "n": 10,
+        "bytes": 149058
+      }
+    },
+    "biggest": [
+      {
+        "url": "/monde/assets/PlayableCity-TeRHPkaQ.js",
+        "KB": 837,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/index-CGkOZ7Ru.js",
+        "KB": 355,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/models/colony-pack.glb",
+        "KB": 43,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/kit-pack.glb",
+        "KB": 41,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/nature-pack.glb",
+        "KB": 29,
+        "encoding": "gzip"
+      }
+    ]
+  },
+  "warm": {
+    "label": "warm slow4g user",
+    "domContentLoaded": 236,
+    "sceneVisible": 940,
+    "playable": 2285,
+    "requests": 16,
+    "transferredKB": 7,
+    "cachedRequests": 6,
+    "byType": {
+      "Document": {
+        "n": 1,
+        "bytes": 529
+      },
+      "Script": {
+        "n": 4,
+        "bytes": 0
+      },
+      "Stylesheet": {
+        "n": 1,
+        "bytes": 0
+      },
+      "Fetch": {
+        "n": 10,
+        "bytes": 7011
+      }
+    },
+    "biggest": [
+      {
+        "url": "/api/announcements",
+        "KB": 3,
+        "encoding": "identity"
+      },
+      {
+        "url": "/api/transports",
+        "KB": 1,
+        "encoding": "identity"
+      },
+      {
+        "url": "/monde/?debug",
+        "KB": 1,
+        "encoding": "identity"
+      },
+      {
+        "url": "/monde/assets/models/kit-pack.glb",
+        "KB": 1,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/models/colony-pack.glb",
+        "KB": 1,
+        "encoding": "gzip"
+      }
+    ]
+  }
+}

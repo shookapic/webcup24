@@ -1,0 +1,150 @@
+{
+  "when": "2026-10-03T21:19:42.244Z",
+  "blender": "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe",
+  "passed": 36,
+  "failed": 0,
+  "committedModelSha256": "7396daef12e09cbc8da7db3941025cfcae86358516e389aa438683e8c0e27f4d",
+  "freshExportIdenticalToCommitted": true,
+  "results": [
+    {
+      "name": "build rejects --out outside the checkout (absolute)",
+      "ok": true
+    },
+    {
+      "name": "build rejects --out reaching outside by .. (relative)",
+      "ok": true
+    },
+    {
+      "name": "build rejects --out in the wrong checkout directory (docs/)",
+      "ok": true
+    },
+    {
+      "name": "build rejects --out with another suffix (.glb)",
+      "ok": true
+    },
+    {
+      "name": "build rejects --out with an upper-case suffix (.BLEND)",
+      "ok": true
+    },
+    {
+      "name": "build rejects --out with another name",
+      "ok": true
+    },
+    {
+      "name": "build rejects --out in a nested directory",
+      "ok": true
+    },
+    {
+      "name": "build rejects --out through a junction that points outside",
+      "ok": true
+    },
+    {
+      "name": "build refuses the committed .blend without --allow-overwrite",
+      "ok": true
+    },
+    {
+      "name": "build refuses when only the sibling report exists (all outputs respect --allow-overwrite)",
+      "ok": true
+    },
+    {
+      "name": "the pre-existing sibling report was left untouched",
+      "ok": true
+    },
+    {
+      "name": "build writes the .blend and the sibling report inside the source area",
+      "ok": true
+    },
+    {
+      "name": "build with --allow-overwrite succeeds and leaves no .blend1 backup",
+      "ok": true
+    },
+    {
+      "name": "build refuses the same outputs again without --allow-overwrite",
+      "ok": true
+    },
+    {
+      "name": "export rejects --out outside the checkout",
+      "ok": true
+    },
+    {
+      "name": "export rejects --out reaching outside by ..",
+      "ok": true
+    },
+    {
+      "name": "export rejects --out in the wrong checkout directory (world/public/models/)",
+      "ok": true
+    },
+    {
+      "name": "export rejects --out with another suffix (.gltf)",
+      "ok": true
+    },
+    {
+      "name": "export rejects --out with another name",
+      "ok": true
+    },
+    {
+      "name": "export refuses the committed .glb without --allow-overwrite",
+      "ok": true
+    },
+    {
+      "name": "export rejects an opened .blend outside the checkout",
+      "ok": true
+    },
+    {
+      "name": "export rejects an opened .blend inside the checkout but outside the source area",
+      "ok": true
+    },
+    {
+      "name": "export rejects an empty scene (no .blend opened)",
+      "ok": true
+    },
+    {
+      "name": "export writes the .glb inside the runtime area",
+      "ok": true
+    },
+    {
+      "name": "export refuses the same .glb again without --allow-overwrite",
+      "ok": true
+    },
+    {
+      "name": "the refused export left the previous .glb unchanged",
+      "ok": true
+    },
+    {
+      "name": "the validator passes every check on the freshly exported .glb",
+      "ok": true
+    },
+    {
+      "name": "validator rejects a manifest outside the checkout",
+      "ok": true
+    },
+    {
+      "name": "validator rejects a manifest with another name in the source area",
+      "ok": true
+    },
+    {
+      "name": "validator writes a manifest in the source area with measured, declared and compared parts kept apart",
+      "ok": true
+    },
+    {
+      "name": "measured part reports the real texture, image and sampler counts and no declared values",
+      "ok": true
+    },
+    {
+      "name": "declared door anchor is marked as not stored in the GLB, and the comparison is computed from the declared numbers",
+      "ok": true
+    },
+    {
+      "name": "a GLB that fails the footprint check yields footprintMatchesDeclaredCollisionBox false and allChecksPass false",
+      "ok": true
+    },
+    {
+      "name": "after cleanup every watched directory is exactly as before (no stray .blend1, .blend@, __pycache__, report, manifest or glb)",
+      "ok": true
+    },
+    {
+      "name": "committed model, source and build report are byte-identical",
+      "ok": true
+    }
+  ]
+}

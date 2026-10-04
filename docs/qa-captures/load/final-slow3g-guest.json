@@ -1,0 +1,110 @@
+{
+  "profile": "slow3g",
+  "mode": "guest",
+  "cold": {
+    "label": "cold slow3g guest",
+    "domContentLoaded": 8068,
+    "sceneVisible": 10881,
+    "requests": 11,
+    "transferredKB": 466,
+    "cachedRequests": 0,
+    "byType": {
+      "Document": {
+        "n": 1,
+        "bytes": 1045
+      },
+      "Script": {
+        "n": 1,
+        "bytes": 361816
+      },
+      "Stylesheet": {
+        "n": 1,
+        "bytes": 3542
+      },
+      "Fetch": {
+        "n": 8,
+        "bytes": 110441
+      }
+    },
+    "biggest": [
+      {
+        "url": "/monde/assets/index-B0SHILdO.js",
+        "KB": 353,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/kit-pack.glb",
+        "KB": 41,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/nature-pack.glb",
+        "KB": 29,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/chars/character-c.glb",
+        "KB": 15,
+        "encoding": "gzip"
+      },
+      {
+        "url": "/monde/assets/models/chars/Textures/texture-c.png",
+        "KB": 13,
+        "encoding": "identity"
+      }
+    ]
+  },
+  "warm": {
+    "label": "warm slow3g guest",
+    "domContentLoaded": 512,
+    "sceneVisible": 1840,
+    "requests": 11,
+    "transferredKB": 12,
+    "cachedRequests": 2,
+    "byType": {
+      "Document": {
+        "n": 1,
+        "bytes": 529
+      },
+      "Script": {
+        "n": 1,
+        "bytes": 0
+      },
+      "Stylesheet": {
+        "n": 1,
+        "bytes": 0
+      },
+      "Fetch": {
+        "n": 8,
+        "bytes": 12097
+      }
+    },
+    "biggest": [
+      {
+        "url": "/api/announcements",
+        "KB": 5,
+        "encoding": "identity"
+      },
+      {
+        "url": "/api/services",
+        "KB": 3,
+        "encoding": "identity"
+      },
+      {
+        "url": "/api/transports",
+        "KB": 1,
+        "encoding": "identity"
+      },
+      {
+        "url": "/monde/?debug",
+        "KB": 1,
+        "encoding": "identity"
+      },
+      {
+        "url": "/monde/assets/models/kit-pack.glb",
+        "KB": 1,
+        "encoding": "gzip"
+      }
+    ]
+  }
+}

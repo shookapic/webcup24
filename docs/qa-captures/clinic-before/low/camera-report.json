@@ -1,0 +1,183 @@
+{
+  "quality": "low",
+  "viewport": [
+    1280,
+    800
+  ],
+  "report": [
+    {
+      "name": "1-clinic-front",
+      "requested": {
+        "eye": [
+          24,
+          2.4,
+          -6
+        ],
+        "target": [
+          40,
+          3.2,
+          -6
+        ]
+      },
+      "settled": {
+        "eye": [
+          24,
+          2.4,
+          -6
+        ],
+        "target": [
+          40,
+          3.2,
+          -6
+        ]
+      },
+      "blockersActive": 0,
+      "valid": true
+    },
+    {
+      "name": "2-clinic-three-quarter",
+      "requested": {
+        "eye": [
+          26,
+          5.5,
+          6
+        ],
+        "target": [
+          40,
+          3.5,
+          -7
+        ]
+      },
+      "settled": {
+        "eye": [
+          26,
+          5.5,
+          6
+        ],
+        "target": [
+          40,
+          3.5,
+          -7
+        ]
+      },
+      "blockersActive": 0,
+      "valid": true
+    },
+    {
+      "name": "3-clinic-player-height",
+      "requested": {
+        "eye": [
+          30,
+          1.7,
+          -3.2
+        ],
+        "target": [
+          38,
+          1.6,
+          -6
+        ]
+      },
+      "settled": {
+        "eye": [
+          30,
+          1.7,
+          -3.2
+        ],
+        "target": [
+          38,
+          1.6,
+          -6
+        ]
+      },
+      "blockersActive": 0,
+      "valid": true
+    },
+    {
+      "name": "4-clinic-rail-view",
+      "requested": {
+        "eye": [
+          28,
+          9.8,
+          -3
+        ],
+        "target": [
+          40,
+          4.5,
+          -6
+        ]
+      },
+      "settled": {
+        "eye": [
+          28,
+          9.8,
+          -3
+        ],
+        "target": [
+          40,
+          4.5,
+          -6
+        ]
+      },
+      "blockersActive": 0,
+      "valid": true
+    },
+    {
+      "name": "5-clinic-back",
+      "requested": {
+        "eye": [
+          54,
+          4.5,
+          -2
+        ],
+        "target": [
+          40,
+          3.5,
+          -6
+        ]
+      },
+      "settled": {
+        "eye": [
+          54,
+          4.5,
+          -2
+        ],
+        "target": [
+          40,
+          3.5,
+          -6
+        ]
+      },
+      "blockersActive": 0,
+      "valid": true
+    },
+    {
+      "name": "6-clinic-annexes",
+      "requested": {
+        "eye": [
+          32,
+          12,
+          -6
+        ],
+        "target": [
+          40,
+          1.5,
+          -6
+        ]
+      },
+      "settled": {
+        "eye": [
+          32,
+          12,
+          -6
+        ],
+        "target": [
+          40,
+          1.5,
+          -6
+        ]
+      },
+      "blockersActive": 0,
+      "valid": true
+    }
+  ]
+}

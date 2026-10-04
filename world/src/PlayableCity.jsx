@@ -9,13 +9,14 @@ const walls = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 function Footprints() {
   useEffect(() => () => { cameraBlockers.length = 0; }, []);
+  // Thin things (trunks, columns, pillars) block the player but not the camera: a camera that snaps in behind every tree is worse than seeing through a trunk.
   const register = (mesh) => mesh && !cameraBlockers.includes(mesh) && cameraBlockers.push(mesh);
   return (
     <RigidBody type="fixed" colliders={false}>
       {footprints.map((f, i) => f.shape === 'box' ? (
         <group key={i}>
-          <CuboidCollider args={[f.w / 2, f.h / 2, f.d / 2]} position={[f.x, f.h / 2, f.z]} />
-          <mesh ref={register} visible={false} position={[f.x, f.h / 2, f.z]}><boxGeometry args={[f.w, f.h, f.d]} /></mesh>
+          <CuboidCollider args={[f.w / 2, f.h / 2, f.d / 2]} position={[f.x, (f.y ?? 0) + f.h / 2, f.z]} />
+          {!f.thin && <mesh ref={register} visible={false} position={[f.x, (f.y ?? 0) + f.h / 2, f.z]}><boxGeometry args={[f.w, f.h, f.d]} /></mesh>}
         </group>
       ) : (
         <group key={i}>

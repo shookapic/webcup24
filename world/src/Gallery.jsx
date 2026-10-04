@@ -3,11 +3,14 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Vector3 } from 'three';
 import { Prop } from './kit.jsx';
+import { Colonist } from './Colonist.jsx';
 
 // ?gallery=name1,name2,...  contact sheet of kit models with their names (debug, used to pick assets).
-const names = new URLSearchParams(location.search).get('gallery')?.split(',') ?? [];
-const COLS = 6;
-const GAP = 7;
+const params = new URLSearchParams(location.search);
+const names = params.get('gallery')?.split(',') ?? params.get('lineup')?.split(',') ?? [];
+const lineup = params.has('lineup'); // ?lineup=a,b,c: Colonist models side by side (look selection)
+const COLS = lineup ? 12 : 6;
+const GAP = lineup ? 3.2 : 7;
 const els = [];
 const p = new Vector3();
 const place = (i) => [(i % COLS) * GAP, 0, Math.floor(i / COLS) * GAP];
@@ -31,7 +34,7 @@ export function Gallery() {
         <color attach="background" args={['#8fb0c8']} />
         <hemisphereLight args={['#ffffff', '#887766', 1.2]} />
         <directionalLight position={[10, 20, 10]} intensity={2} />
-        <Suspense>{names.map((n, i) => <Prop key={n} name={n} position={place(i)} scale={3} />)}</Suspense>
+        <Suspense>{names.map((n, i) => (lineup ? <Colonist key={n} letter={n} position={place(i)} scale={2.2} /> : <Prop key={n} name={n} position={place(i)} scale={3} />))}</Suspense>
         <Labels />
         <OrbitControls target={[(COLS * GAP) / 2 - 2, 0, (rows * GAP) / 2 - 2]} />
       </Canvas>

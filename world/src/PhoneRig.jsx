@@ -8,11 +8,14 @@ import { useDialogFocus } from './ui/useDialog.js';
 // Physical handheld phone: a camera-child device + gloved hand drawn over the world (no depth test, fixed draw order, so
 // it never clips into walls and never gets bloom), and an HTML host whose CSS matrix3d follows the projected screen quad.
 // The Canvas never renders HTML; the host is ordinary DOM above it (see CLAUDE.md "B's PhoneRig").
-export const SCREEN_PX = { w: 360, h: 740 }; // layout size of the DOM screen; the transform scales it onto the 3D quad
+export const SCREEN_PX = { w: 360, h: 766 }; // layout size of the DOM screen; the transform scales it onto the 3D quad
 
 const PHONE = { w: 0.108, h: 0.222, d: 0.011 };
 const SCREEN = { w: 0.094, h: 0.2 };
-const REST = { x: 0.025, y: -0.005, z: -0.29, rx: -0.14, ry: 0.1, rz: -0.05 };
+// Held square to the camera: the screen quad projects to an axis-aligned rectangle, so the DOM host needs only translate + scale
+// (no perspective, no rotation: sliced/missing glyphs were reported with projective matrix3d text in Firefox).
+const projective = new URLSearchParams(location.search).has('phoneproj'); // diagnostics only: the previous tilted pose + full matrix3d placement
+const REST = projective ? { x: 0.025, y: -0.005, z: -0.29, rx: -0.14, ry: 0.1, rz: -0.05 } : { x: 0.025, y: -0.005, z: -0.29, rx: 0, ry: 0, rz: 0 };
 const HIDDEN_Y = -0.42; // lowered out of view
 
 // Projected screen corners in CSS px, order: top-left, top-right, bottom-right, bottom-left. Written by the rig, read by the host.
@@ -142,11 +145,28 @@ export function PhoneHost({ screenProps }) {
   useDialogFocus(host, true);
   useEffect(() => {
     let frame;
+    let applied = '';
     const place = () => {
       const el = host.current;
       if (el && bridge.ready) {
-        el.style.transform = quadToMatrix3d(SCREEN_PX.w, SCREEN_PX.h, bridge.corners);
-        el.style.opacity = bridge.alpha > 0.55 ? '1' : '0'; // screen lights up once the device is mostly raised
+        const c = bridge.corners;
+        let transform;
+        if (projective) transform = quadToMatrix3d(SCREEN_PX.w, SCREEN_PX.h, c);
+        else {
+          const left = Math.min(c[0], c[2], c[4], c[6]);
+          const top = Math.min(c[1], c[3], c[5], c[7]);
+          const sx = (Math.max(c[0], c[2], c[4], c[6]) - left) / SCREEN_PX.w;
+          const sy = (Math.max(c[1], c[3], c[5], c[7]) - top) / SCREEN_PX.h;
+          // Whole-pixel position and a quantised scale: a steady phone writes nothing, a moving one never re-rasterises at fractions.
+          transform = `translate(${Math.round(left)}px, ${Math.round(top)}px) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`;
+        }
+        const opacity = bridge.alpha > 0.55 ? '1' : '0'; // screen lights up once the device is mostly raised
+        const key = transform + opacity;
+        if (key !== applied) {
+          applied = key;
+          el.style.transform = transform;
+          el.style.opacity = opacity;
+        }
       }
       frame = requestAnimationFrame(place);
     };
@@ -160,7 +180,7 @@ export function PhoneHost({ screenProps }) {
       role="dialog"
       aria-modal="true"
       aria-label={screenProps.dialogLabel}
-      style={{ position: 'fixed', left: 0, top: 0, width: SCREEN_PX.w, height: SCREEN_PX.h, transformOrigin: '0 0', zIndex: 20, overflow: 'hidden', borderRadius: 14, opacity: 0, transition: 'opacity 0.12s' }}
+      style={{ position: 'fixed', left: 0, top: 0, width: SCREEN_PX.w, height: SCREEN_PX.h, transformOrigin: '0 0', zIndex: 20, opacity: 0, willChange: 'transform' }}
     >
       <PhoneScreen {...screenProps} />
     </div>

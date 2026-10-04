@@ -100,6 +100,78 @@ Fixed on the way: `Texture.clone()` shares its `Source` with the glTF texture, s
 - Foot sliding not measured; no jump/fall clip; service-marker interaction (E near a building) not built; F45/F46 world wayfinding not started.
 - NPCs have no mutual avoidance; remote players do not show jumping (API has no such state).
 
+## Live defect round (user test of de791f3): kit origin offset, tram geometry, phone text (2026-10-03 ~18:10)
+
+**Cause 1 (measured, all buildings + trams): the Space Kit exports every model under a root node translated by [2, 0, 1.5].** `Prop` cloned the scene without normalising it, so a model drawn at (x, z) appeared (2, 1.5) x scale away, rotated by its yaw. At scale 6 the Mairie sat 15 m from its collider, trams were 6.6 m / 4.95 m off their rail. `tools/qa/building-check.mjs` on the previous code: 22/22 FAIL (centre offsets 3-15 m); after zeroing the horizontal root offset on the clone (`kit.jsx`): 22/22 PASS, rendered width/depth/height equal the collision footprint within 0.3 m. Representative edge: walking into the Mairie west wing stops the avatar at z = -19.65, the wing's rendered face is z = -20 (0.35 m = capsule radius), so colliders, doors, labels and NPC nodes now agree with what is drawn. Before/after: `docs/qa-captures/before/*` vs `after/*`.
+
+**Cause 2 (tram, measured):** (a) the offset above; (b) `sample()` clamped car arcs, so with three cars at `s - dir*i*CAR` the trailing cars stacked on the rail start/end and the consist was not symmetric when reversing; (c) corners were snapped vertices; (d) both lines shared a trunk, so two trams could overlap; (e) the kit nose car's nose is local **-z** (windscreens pointed inward in the first fix attempt, caught in PM's capture review). New design: `rail.js` (rounded corners, arc length, sampling), T1 and T2 on separate guideways (T2 rides at y = 9.2 over T1 at 6 where they cross), symmetric nose-passenger-nose consist driven by the middle car's arc, travel range limited by the measured nose extent (1.85 m) so nothing overhangs the rail end, cars oriented from the rail chord. `tools/qa/tram-check.mjs` (22 checks, PASS): full-rail coverage, dwell at every stop, reversal, cars on the rail polyline (0.000 m), underside on the rail top (0.000 m), no stacking (chord >= 3.3 m), mesh bounds centred on the car, no body beyond either rail end (-0.035 m), outer nose outward / inner inward at both ends of both lines, zero 4xx/5xx. Captures: `after/T1-straight`, `T1-station`, `T1-corner`, `T1-end` (end column and nose flush), `T2-*`.
+
+**Phone text (Firefox) — NOT reproduced here, mitigated, UNVERIFIED on the user's machine.** Real headed Firefox (disposable profile, hardware GPU, DPR 1.25) and headed Edge on this PC render the previous projective placement and the new one with identical, stable glyph coverage 0.45 s and 3.5 s after opening (`tools/qa/phone-firefox.mjs`; A's headless Firefox, Chrome and Edge captures also readable). Suspected paths removed in `PhoneHost`: per-frame `transform` rewrite (now written only when the rounded value changes), projective `matrix3d` plus 3-D tilt (the device is now held square to the camera, so the host needs only `translate()` + `scale()` at whole-pixel positions), rounded `overflow: hidden` mask on the transformed host (removed), `will-change: transform` added. `?phoneproj` restores the old tilted pose with matrix3d placement for A/B diagnosis (A's `?phonefix=layer|nomask|smooth` switches are independent). The user must retest in Firefox after deploy; this is a plausible mitigation, not a proven fix.
+
+Regression on this build: world-checks 15/15 (60 Hz, 30 Hz jitter, 144 Hz), alert-flow 14/14, phone-capture normal + alert, phone-race 12/12, tram-check 22/22, building-check 22/22.
+
+## Streetscape + vegetation checkpoint (2026-10-03 ~19:00)
+
+Roads now have sidewalks (1.8 m), raised curbs (instanced, clipped where roads meet or enter the plaza), dashed centre lines, six marked zebra crossings, a plaza that covers the avenues where they enter it, a fingerpost with district boards (canvas text, no font files), stop shelters with line discs. Vegetation (Kenney Nature Kit, CC0): 36 trees on the plaza ring, avenues and districts (trunks collide; the camera ignores thin colliders so it no longer snaps in behind trees), 23 planting beds with border, soil, bushes, flowers and grass. Data: `layout.js` (`crossings`, `trees`, `beds`, `roads`); components `Streetscape.jsx`, `Plantings.jsx`, `nature.jsx`.
+
+Same-camera before/after: `docs/qa-captures/street-before/` (963b08b) vs `street-after/` (spawn, mairie, sante, marche, habitat, sud).
+
+**Frame cost, named hardware** (`tools/qa/perf.mjs`, headed Edge 154, real rAF, 1440 x 900, DPR 1, NVIDIA GeForce RTX 5070 Ti via ANGLE/D3D11, 32 logical cores; `docs/qa-captures/perf-streetscape-rtx5070ti.json`):
+
+| Stop | frame p50 / p95 / max (ms) | draw calls per frame* | triangles per frame* |
+|---|---|---|---|
+| spawn | 3.6 / 3.7 / 3.7 | 962 | 206k |
+| mairie | 3.6 / 3.7 / 10.7 | 813 | 194k |
+| sante | 3.6 / 3.7 / 7.1 | 571 | 185k |
+| marche | 3.6 / 3.7 / 3.7 | 795 | 192k |
+| habitat | 3.6 / 3.7 / 3.7 | 706 | 189k |
+| sud | 3.6 / 3.7 / 3.7 | 818 | 203k |
+
+*whole frame = shadow pass + scene + post-processing, measured with `info.autoReset` off. The roadmap budget (< 200 visible draw calls, < 500k triangles) is met for triangles but **not for draw calls** (every kit prop, NPC part and shadow-casting mesh is drawn twice). Frame time is excellent on this GPU (uncapped ~277 Hz); a weak device is **UNVERIFIED** and draw-call reduction (merging static props, instancing buildings) is a B4 task, not hidden by bloom.
+
+Regression: world-checks 15/15 (60 Hz), building-check 22/22 on this build.
+
+## Bench NPCs checkpoint (2026-10-03 ~19:40)
+
+Nine benches (data in `layout.js`, rendered by `Plaza.jsx`, with thin colliders) with two seats each. NPCs (`Npcs.jsx`) now run a state machine: walk > (18 % at a node) reserve the nearest free seat within 14 m > `approach` (walk to the point 0.8 m in front of the seat) > `turn` (to face the bench direction) > `sitDown` (0.8 s, backs into the seat from wherever the turn ended, hips lowered, kit `sit` clip) > `sit` (8-22 s) > `standUp` (0.8 s) > release the seat > resume the route. Ownership is a module-level reservation array: a seat belongs to one walker from selection until it has stood up and left, so no two NPCs share or overlap a seat. The kit's blocky leg is one 1 m block, so seated legs stick out horizontally over the seat front (stylised, from the asset's own clip).
+
+`tools/qa/bench-check.mjs` (10 checks, PASS in normal and in reduced motion): forced cycle in the exact order, seated pose (y = -0.09, sit clip), seat released, largest single-frame move 0.047 m forced / 0.063 m over 6 simulated minutes (an earlier version snapped 0.22 m at the start of sitting down, fixed), 54-71 natural sit episodes in 6 min with zero double ownership / overlap / NaN, walkers keep travelling (4.2-4.5 km total) under reduced motion. Captures: `docs/qa-captures/bench/1-approach ... 6-resumed.png` (`tools/qa/bench-view.mjs`).
+
+## Avatar looks + accessories (renderer side) checkpoint (2026-10-03 ~20:00)
+
+Measured: the kit character is **2.7 m tall** (not 1.6): legs 1.0 + torso 0.9 + head 0.8; it is now drawn at `HEIGHT_SCALE` 0.64 (1.7 m) in `Colonist.jsx`, which also fixes the perception that benches, doors and props were tiny. Seat height for the sit pose recomputed: thigh underside (0.8 - 0.2) x 0.64 on the 0.56 m seat -> `SEAT_Y` 0.176 (bench-check updated and PASS).
+
+Renderer contract (**FINAL, fixed by the PM; supersedes the earlier drafts in this file and in my handoff reports: first `ingenieur`/`medecin` as provisional ids, then `colon`/`ingenieur`/`medecin`**): `avatar = { skin, outfit, accent, look?, accessory? }`. `look` in `colon` (default, Kenney model c, short ginger hair) | `lunettes` (model i, glasses) | `bandeau` (model n, long dark hair with headband); `accessory` in `none` | `sac` | `visiere`. Legacy ids `ingenieur` -> `lunettes` and `medecin` -> `bandeau` are aliases. Catalogue and normalizer: `world/src/avatarCatalog.js` (`LOOK_IDS`, `ACCESSORY_IDS`, `DEFAULT_LOOK`, `DEFAULT_ACCESSORY`, `LOOK_MODEL`, `normalizeLook`, `normalizeAccessory`, `normalizeAvatar`); unknown / missing values never throw and fall back to `colon` / `none`. The three colours work for every look. `AvatarPreview.jsx` takes the full draft avatar object for A's `preview` prop; App passes it only while the editor is open (no extra WebGL context while closed). `tools/qa/avatar-catalog.mjs` checks the contract. All nine canonical combinations render: `docs/qa-captures/avatar/nine-combinations.png`. **Persistence, reload, presence and old-save behaviour in the integrated editor are A's server plus editor and are NOT proven on my side yet; nothing is offered or claimed deployed.** `?debug&look=lunettes&acc=sac` is a QA-only override. Remote players render whatever `look` / `accessory` the API returns.
+
+Captures: `docs/qa-captures/avatar/` (colon, lunettes + sac front/back, bandeau + visiere). `Gallery.jsx ?lineup=c,i,n,...` shows models side by side. Bug found and fixed on the way: the recolour pass overwrote accessory materials with the character atlas (accessories now carry `userData.accessory`).
+
+## World weight and loading (F57-F60 proxy evidence) — STOPPED PARTIAL (2026-10-03 ~20:30, user said stop implementing)
+
+Status: **implemented and measured locally, not integrated, not pushed, not reviewed by the PM; the user ordered feature work to stop.** Everything below is committed on branch `world` as a preservation checkpoint.
+
+What changed (world only; portal and server untouched):
+1. **Duplicate WebAssembly removed (`vite.config.js`)**: ecctrl wants `@dimforge/rapier3d-compat ^0.19.2` but npm hoists 0.12.0 to the top level, so the physics chunk carried two Rapier wasm blobs (2043 KB + 1876 KB of base64). The config aliases every import to the copy `@react-three/rapier` uses. Physics chunk 4.38 MB -> 2.33 MB raw, 1.62 MB -> 0.86 MB gzip. Movement/input/collision checks identical (world-checks 15/15, floor movement 39.3 m, lateral <= 0.001 m, stop 0.28 s).
+2. **Models packed (`tools/pack-models.mjs`)**: 31 kit/nature GLBs -> `kit-pack.glb` (269 KB) + `nature-pack.glb` (120 KB); sources moved to `world/assets-src/`. Requests per cold world load 41 -> 14-15.
+3. **Quality tiers (`quality.js`, `Effects.jsx`)**: `low` is chosen automatically for data-saver, 2g/3g `effectiveType` or `prefers-reduced-data` (or `?quality=low`): no shadow pass, no post-processing (the 23 KB gzip effects chunk is never fetched), pixel ratio 1, 6 walkers instead of 12, no flowers/grass. All features, services and interactions remain.
+4. **Returning players** start the physics chunk before `/api/me` answers (localStorage hint, cleared for guests). **Presence polling** pauses while the tab is hidden and refreshes at once on resume (`tools/qa/visibility.mjs` PASS: 0 requests hidden, first refresh 2 ms after resume).
+5. Lit matte Nature Kit materials (the kit marks them unlit) so trees take sun and shadows.
+
+Measured with `tools/qa/load.mjs` (headless Edge, CDP throttling, cold = empty cache, warm = reload; `docs/qa-captures/load/*.json`):
+
+| Profile / state | before (ac6c95d) | after |
+|---|---|---|
+| slow 4G (1.6 Mbit/s, 150 ms RTT), logged-in, cold: scene visible / playable | 4.0 s / 11.6 s | 3.4 s / 7.4 s |
+| same, bytes transferred / requests | 2096 KB / 41 | 1324 KB / 15 |
+| same, warm: playable | 2.7 s | 1.2-2.2 s |
+| slow 3G (400 kbit/s, 400 ms RTT), cold: scene visible / playable | 13.1 s / 44.6 s | 11.4 s / 28.1 s |
+| same, bytes / requests | 2101 KB / 43 | 1307 KB / 15 |
+| guest (no physics), slow 4G cold: scene visible, bytes | n/a | 3.2 s, 489 KB / 12 requests |
+| guest, slow 3G cold | n/a | 10.9 s, 466 KB / 11 requests |
+
+Render cost with `tools/qa/perf.mjs` (headed Edge, real rAF, 1440 x 900, DPR 1, NVIDIA GeForce RTX 5070 Ti, `docs/qa-captures/perf-*.json`): high = 694-1007 draw calls and 190-208k triangles per whole frame (shadow + scene + post), low = 116-481 calls and 110-132k triangles. Frame time on this GPU is flat at 3.6 ms (uncapped, GPU not the limit). With the CPU throttled 6x as a weak-device proxy: high p50 10.8-17.9 ms (p95 up to 28.6 ms), low p50 3.7-10.7 ms (p95 up to 17.9 ms); one 37 s stall in the first low sample (asset parse under throttling) is not representative and is not reproduced elsewhere. Bundle composition: `tools/qa/bundle-sizes.mjs` (index chunk: three 571 KB, react-dom 203, fiber 163, three-stdlib 85, app 76, postprocessing 58 raw; physics chunk: Rapier 2.2 MB raw, mostly inlined wasm).
+
+Not done (proposals, not claims): Brotli (the Node server only gzips; precompressed `.br` would take the physics chunk from ~860 KB to ~590 KB, needs a server change by A), a manual quality toggle in the HUD (A), merging static props into fewer draw calls, shipping the wasm as a real file, A's portal-side items of F57-F60. No carbon figure is claimed; bytes, requests and CPU frame times above are the proxies.
+
 ## Wave 6 triage (15:25, H+7h) — A, with B support
 
 D13 plain wording (310), D20 inclusive platform (930), F41 keyboard-only (620), F42 assistive-tech forms/errors (930), F43 colour distinction (310), F44 zoom without breaking layout (620). All portal/UI shaped: **Session A**. B support only: world HUD/phone must stay keyboard-operable (movement keys are ignored inside dialogs, T/V/Escape documented), colour must not be the only signal (alert badge has text), world HUD must survive 200% zoom (A's CSS). The world is not a substitute for the portal route; "Version accessible" link stays visible.
@@ -107,3 +179,87 @@ D13 plain wording (310), D20 inclusive platform (930), F41 keyboard-only (620), 
 ## Wave 7 triage (16:25, H+8h)
 
 F45 locate physical services in the city (960), F46 where are hospitals/emergency services (320), F47 justify actions / traceability (960), F48 who changed what in admin (640). F47/F48: **A** (audit trail, agent workspace). F45/F46: **A** owns the information (service locations/addresses on the portal and in the phone services page); **B support** once A exposes a location field: world signs/markers at the Santé clinic and other service buildings and the contextual "open services" prompt within ~3 m (roadmap section 6). Not started; the world already has the Santé district with a cross sign and a stop at each district.
+
+## GLTF asset pipeline + four-object slice (task 179f9875) — checkpoint
+
+Scope: Mairie (`townHall`), `streetLamp`, `bench`, `colonyTree`, authored in Blender 5.2.2 by committed scripts (`tools/assets/`), packed into `world/public/models/colony-pack.glb` (221 KB, no textures), loaded by `world/src/assets/` (registry + `WorldAsset` + `WorldAssetInstances`). Details: `docs/ASSETS.md`, `docs/BLENDER_TOOLING.md`. No city-wide migration, no hospital, no push.
+
+Final-source review fixes: lamps (-13,-3), (13,-3), (0,14) sat on NPC routes; moved to (-12.5,-6.5), (12.5,-6.5), (4.5,12.5), and (+-6,-11) to (+-7.5,-14) (they were 1.48 m from a route). One source (`layout.lamps`) still drives render + collider. `tools/qa/lamp-clearance.mjs`: every lamp >= 1.70 m (lane 0.8 + lamp 0.2 + body 0.4 + margin 0.3) from every route segment and node, clear of bench approach points, benches, trees, tram supports and crossings: PASS, min route distance 2.41 m. Mairie steps flattened to 0.05 m each (0.15 m total, decorative, no collider) so the player does not clip a 0.5 m block. Mairie label raised from 12 to 16 m (beacon top is 13.7 m). Registry townHall budget corrected to 2336 triangles (measured by `validate.mjs`; 2432 was stale). `tools/assets/build.mjs` now moves to the project root itself (checked from another cwd).
+
+Asset failure: `WorldErrorBoundary` wraps the whole app (not partial streaming): role=alert, "Le monde 3D n'a pas pu se charger", link to the accessible portal `/`, retry button. `tools/qa/asset-fallback.mjs` ALL PASS (pack aborted, 404 JSON, SPA HTML served as GLB, logged-in abort; log `docs/qa-captures/slice-gates/asset-fallback.log`, screenshots beside it). Real server: missing model -> 404 `application/json`; models revalidate (no-cache + ETag).
+
+Regression (PASS/FAIL, source state noted). Full batch `docs/qa-captures/slice-gates/` ran on the slice build BEFORE the lamp/step/label edits; the fast affected checks were re-run on the FINAL source in `docs/qa-captures/slice-final/`:
+
+| Gate | slice-gates (pre lamp move) | slice-final (final source) |
+|---|---|---|
+| world-checks 60 / 30+jitter | PASS / PASS | PASS / PASS |
+| world-checks 144 / 120 | PASS / PASS | not re-run (lamp collider moves only; UNVERIFIED on final source) |
+| movement floor 30/60/144 | 39.47 / 39.33 / 39.33 m, backsteps 0, lateral <= 0.001 m, speed 4.00 | not re-run (floor scene has no lamps) |
+| building (19 + landmark) / tram | PASS / PASS | PASS / PASS |
+| bench normal / reduced-motion | PASS / PASS | normal PASS / reduced not re-run |
+| alert-flow, phone physical, phone alert, phone race, flat phone | all PASS | not re-run (no phone/alert/HUD code changed; label height only) |
+| tier low / high tours | 3 shots each, 0 non-presence failures | same, 0 failures |
+| asset fallback / missing glb | PASS / 404 | PASS (4 scenarios) |
+
+Performance, same machine (RTX 5070 Ti, headed Edge, 1440x900, DPR 1, high tier, CPU throttle x6 as a weak-device PROXY, not real weak hardware), 3 runs each, baseline = 11a3262 on port 3102 vs slice on 3100 (`slice-final/perf-*-run{1,2,3}.json`):
+
+| Stop | draw calls, median of 3 (runs) | triangles, median of 3 | geometries, median of 3 | p50 median (runs) | p95 median |
+|---|---|---|---|---|---|
+| spawn | 856 (856/856/808.5) -> 733 (763/733/721), -14.4% | 196.2k -> 225.6k, +15.0% | 399 -> 316 | 24.9 (25.0/24.9/21.5) -> 17.9 (17.9/21.4/17.9) | 35.8 -> 28.6 |
+| Mairie | 797 (791/797/965) -> 734 (752/696/734), -7.9% | 202.3k -> 218.6k, +8.0% | 399 -> 341 | 17.9 (25.0/17.8/17.9) -> 18.0 (18.0/17.9/21.4) | 28.6 -> 28.6 |
+
+All columns are medians of the same three committed runs (`slice-final/perf-{base,slice}-high-cpu6x-run{1,2,3}.json`); the first version of this table showed run 1 only. Reading: draw calls and geometry count fell; triangles rose (authored detail). Frame times are rAF samples with about 3.6 ms observed quantisation under throttling and the base/slice runs overlap, so no general frame-time or weak-device claim is made (spawn looks better, Mairie equal; real weak hardware UNVERIFIED). Load: cold slow-4G playable about +0.8 s, +1 request, +47 KB versus the baseline (`slice-perf/load-*.json`); the slice does not improve load. Real weak-device proof: UNVERIFIED.
+
+Captures: `docs/qa-captures/slice-final/views/` (high), `views-low/` (low), earlier before/after pairs `slice-compare-*.png`. The three-quarter view is re-aimed (the old one was blocked by trees).
+
+Not done / open: hospital (A's `hospital-a-v001.glb`, 6208 triangles, door anchor 1.8 m inside a solid collider and roof 7.75 m over a 6.75 m collider; waits for slice acceptance), all other props still on the older path, GLB reproducibility: two Blender builds give a structurally identical glTF (JSON chunk and length equal) but a non-deterministic binary buffer (vertex ordering), so the pack is NOT byte-reproducible; `validate.mjs` is the check, not a hash, no Draco/Meshopt (not needed at 221 KB).
+
+Lamp clearance evidence: `docs/qa-captures/slice-final/lamp-clearance.log` (pure-data run of `tools/qa/lamp-clearance.mjs`, source revision 55df7db and `layout.js` sha256 recorded in the log). Its header says "2 changes": at write time only the docs files being edited were uncommitted (CRLF/LF line-ending warnings from git appear for those); no source file differed from 55df7db.
+
+## Santé clinic integration (task cd06a074) — A's `hospital-a-v001` through the shared registry
+
+Source/build identity: B `world` after cherry-picks 499bb32 (= A dc289fd) and 7eab236 (= A 8d14891), plus the integration commit listed in the handoff; production `npm run build`, served by `node server.mjs` on port 3100; baseline for before/after = disposable worktree `webcup24-clinicbase` at 5672b65 (the runtime source before the clinic), served on 3104. Details of files, placement and collision: `docs/ASSETS.md`.
+
+Local asset serving (real Node server): `/monde/models/buildings/hospital-a-v001.glb` -> 200 `model/gltf-binary`, `Cache-Control: no-cache`, weak ETag, gzip (54 KB on the wire), strict CSP unchanged; `/monde/models/buildings/none.glb` -> 404 `application/json`; zero remote requests (CSP). Hospital GLB missing -> same whole-app fallback: `asset-fallback.mjs` 5/5 PASS, `docs/qa-captures/clinic-after/asset-fallback.log`.
+
+Collision checks (`tools/qa/hospital-check.mjs`, real player, 60 Hz; logs preserved):
+- `docs/qa-captures/hospital-check-v1.log` FAIL (7): (a) straight approach along z=-6 stopped at x 30.85: this is the existing bench at (31.5,-6) standing on the axis to the door, not the clinic collider; (b) head 2.99 m under a 2.95 m soffit: the canopy collider started at 2.95 and a 6 m/s jump penetrates about 4 cm before the solver resolves it; (c) the roof test threshold (body y < 2.2) failed on a normal free jump (apex body y 3.11 m) with no roof access, a wrong criterion.
+- `hospital-check-v2.log` FAIL (1): the direct-segment threshold was 3 cm beyond where the waypoint test ended (harness, not geometry).
+- Fixes: canopy collider underside lowered to 2.85 m (0.1 m under the visual soffit; no controller change); routes now follow waypoints around the bench; roof criterion = highest body y must not exceed the free-jump apex; the under-canopy probe only counts samples horizontally under the soffit.
+- `hospital-check-v3.log` ALL PASS (18 checks): realistic route from the Santé stop area around the bench, up both steps (body rises 0.97 -> 1.31 m, the 0.35 m step is climbed) to the doors (end x 35.08, door face 35.43; capsule radius 0.35); direct porch segment ends x 35.13; 40/40 samples under the canopy with max head 2.881 m < 2.95; five LIMITED roof attempts (walking + jumping into west/east wing faces, rear, both sides) never exceed a free jump (3.09-3.11 m vs 3.11 m): not a proof against every possible climb; camera blockers include the overhead box (2.85..6.25) and the ground wings; NPC routes >= 5.78 m from the envelope; rails >= 5.78 m horizontally (rail y 9.2 vs roof top 7.75); annex gaps 2.94 m and 3.79 m. Route-end capture of that v3 run (source before the apron collider): `docs/qa-captures/clinic-after/route-end.png`, since deleted from the tree and retained in commit decab4d (`git show decab4d:docs/qa-captures/clinic-after/route-end.png`). The current final-source route end (with the apron collider, 13c2696) is `docs/qa-captures/clinic-final/route-end-apron-collider.png`; it is a different capture on a different source, not the old one.
+- Apron 0.12 m: first integration left it without a collider and the avatar's feet sank into the slab (`clinic-after/feet/A-feet-on-apron.png`, body y 0.968 on the slab versus 0.975 on bare ground = no lift). Fix (layout only, no controller change): one thin 0.12 m box over the footprint, camera-ignored; now the body stands at y 1.070 on the apron (`clinic-after/feet-apron-collider/A-feet-on-apron.png`). Steps 0.24/0.35 m are real thin boxes. No per-decoration colliders; roof furniture above 6.25 m has no collider (a limited camera nit: the camera can see through it).
+- Regression on the integrated build (`clinic-after/`): building-check ALL PASS (18 buildings + 2 landmarks, hospital footprints 33.8..46.2 vs rendered 33.6..46.4, height 7.8 m), tram-check ALL PASS, world-checks 60 ALL PASS, lamp-clearance PASS 13 lamps (min 2.41 m). Not re-run (unchanged paths): movement floor, bench reduced, alert/phone suites, world-checks 30j/120/144 -> reuse of slice-final results, UNVERIFIED on this exact source.
+
+Captures (same camera, valid): `clinic-before|after/{high,low}/` six views each, side by side in `docs/qa-captures/clinic-compare-*.png`, plus `camera-report.json` per folder (requested vs settled camera eye/target, blockers active 0, `valid` true for all 24 shots). First attempt rejected by the PM: the free-camera target sat inside the solid building with camera blockers active, so the camera contracted into the building (interior views, and the old baseline shots were taken the same way); the harness now disables blockers for staged shots only (player camera untouched), records the settled camera and flags INVALID shots, and BOTH before and after were regenerated with it. Rejected baseline set kept in `docs/qa-captures/clinic-rejected/`.
+
+Cost snapshots (NOT a demonstrated clinic-only effect): `perf.mjs` records frames, calls, triangles, geometries and textures but NOT the settled camera position/target/distance, so equal stop coordinates and azimuth do not prove equal visibility (pitch, distance and pull-in can differ), and the old baseline server is deleted. The single unthrottled samples at the Santé stop were draw calls 836 -> 539, triangles 220.8k -> 220.8k, geometries 336 -> 332, textures 54 -> 48 (`clinic-before|after/perf-high.json`, p50 3.6 ms = rAF quantisation in both). Treat them as observed, view-dependent snapshots: any FPS or causal draw-call benefit is UNVERIFIED. What is known independently: the standalone asset is 6,208 triangles, 8 material meshes, +1 request, +54.8 KB gzip (+59 KB measured transferred); the old hangar main building and the cross primitive were removed as separate changes. Whole-world budget status remains PARTIAL. Load, slow 4G cold, user mode (`load-slow4g.json`, one run each): requests 16 -> 17, transferred 1366 -> 1425 KB, scene visible 3.41 -> 3.79 s, playable 8.46 -> 8.43 s (noise level).
+
+### Final closure (tasks 07e75aa2, b34dec2e, 11c45fed)
+
+- Why v2 -> v3 passed: v2's failing direct-segment check used the waypoint doorX - 0.45 with a stop at x >= doorX - 0.7; v3 changed the waypoint to the door face itself (doorX) and the assertion to final x >= doorX - 0.5. The world source did NOT change between v2 and v3 (same build), so v3 is an identifiable harness correction, not evidence that a world fix resolved the FAIL. To separate chance from the corrected waypoint behaviour, the realistic route and the direct porch approach were repeated twice more (`clinic-final/hospital-check-v4.log`, after the apron collider was added): route end x 35.11 / 35.08 / 35.08, direct 35.117 / 35.118 / 35.116, body y 0.97..1.31 and end y 1.31 / 1.30 every time (repeatable in three local attempts under this harness; no general timing or flakiness guarantee). v1, v2, v3 logs are preserved in `docs/qa-captures/`.
+- Hospital GLB failure on the hospital-built source: `clinic-final/asset-fallback-hospital.log` ALL PASS for a network abort and a 404 of `http://127.0.0.1:3100/monde/models/buildings/hospital-a-v001.glb` (the actual intercepted URL, required to be hit), readable role=alert recovery with the accessible-portal link and retry through the shared boundary; screenshots beside it. The four colony-pack scenarios were not repeated (already PASS on the unchanged earlier source).
+- Canopy camera: `clinic-feet.mjs` now saves the original `colliderMeshes`, restores it before the real-camera shots and marks a shot INVALID unless blockers > 0 and the canopy box is among them (27 blockers, canopy present, steep-down camera at (33.60, 4.62, -6.00) and steep-up at (31.69, 1.95, -6.00): both outside the porch box, not inside the upper mass). The earlier zero-blocker C/D shots were rejected and overwritten. Feet/canopy report: `clinic-after/feet*/feet-camera-report.json`.
+- Provenance of the final logs: `docs/qa-captures/clinic-final/provenance.json` (HEAD, tracked-source hashes, tool hashes, built `dist` hash).
+
+## Features-first world work (task a2f8c061, 2026-10-04)
+
+Source: B `world` ffa1aae (avatar catalogue wiring), 54542fa (F45/F46 wayfinding), ad51351 (phone recovery, avatar-editor check, regression logs); participation in 148711f / 86f2474 / 35c60e1 (see `docs/PARTICIPATION_HANDOFF_B.md`). All **committed**, none **integrated** into A's tree or **deployed**. "Combined server" = a disposable scratch copy of A's `8fe6b85` (real `/api/places`, real editor/phone) with B's world build, port 3101.
+
+| Item | Evidence (log under `docs/qa-captures/`) | Result |
+|---|---|---|
+| F45/F46 wayfinding (place markers + labels, `G`/button emergency guidance, ground route bent around obstacles, arrival, `Escape`, proximity prompt, onLocate hook) | `tools/qa/wayfinding-check.mjs` on the combined server: `wayfinding/`, `features-regress/wayfinding-final.log` | PASS (local, disposable data). Phone "guide me" button is A's (handoff `docs/WAYFINDING_HANDOFF_B.md`): UNVERIFIED end to end |
+| Avatar look/accessory (A's real editor + B's renderer + real API) | `tools/qa/avatar-editor-check.mjs`: `avatar-editor/`, `features-regress/avatar-editor.log` | PASS: catalogue groups shown, preview loads `character-i` for lunettes, saved `look/accessory` through the API, reopen shows the saved choice, second change saved (bandeau + visiere), screenshots show headband and visor. Note for A: the editor preview crops the head at 900 px viewport height |
+| Physical phone recovery (user-reported Firefox failure, cause unverified) | `tools/qa/phone-recovery.mjs`: `features-regress/phone-recovery-scratch.log`, `phone-recovery-*.png` | PASS in Chromium (Edge): visible "Écran illisible ? Version simple" control opens the flat accessible dialog, remembered, reversible. It is a RECOVERY path, not a fix for the Firefox paint failure: Firefox itself UNVERIFIED |
+| Regression on the new world build (B's own server, no `/api/places`) | `features-regress/`: world-checks 60 Hz and 30 Hz jitter, building (18 + 2 landmarks), flat phone, physical phone, hospital-check, lamp-clearance: all PASS. tram-check on B's server FAILS only on the 404 of the new `/api/places` call (harness counts every 404); tier tours show the same single 404 | see next row |
+| Same checks on the combined server (has `/api/places`) | `tram-check-scratch.log` ALL PASS, `tier-low-scratch.log` / `tier-high-scratch.log` 0 failures, wayfinding, recovery, avatar: ALL PASS | PASS |
+| Not re-run after these changes | movement floor 30/60/144, bench reduced, alert-flow, phone race, world-checks 120/144 | UNVERIFIED on this source (no change in those code paths except App.jsx wiring) |
+
+F36 world half: stations and tram unchanged since the accepted tram rewrite; `tram-check` ALL PASS on the combined build, the user's earlier screenshots predate it (user retest pending). F60 world media: no raster media; the world ships three small GLB packs plus the standalone clinic (`bundle-sizes.mjs`, load measurements in the sections above).
+
+### Polling under load (F77 / F78 world side), task a2f8c061
+
+`world/src/polling.js` (used by `Multiplayer.jsx`; `api.js` now exposes `status` and `retryAfter` on errors): +-20 % jitter on every poll, exponential back-off 2 s -> 4 -> 8 -> 16 -> 30 s cap while the server fails or answers 429/503 (Retry-After honoured, capped at 120 s), back to the normal rate after one success, and the first poll of a page load is spread over 0..2 s so many simultaneous visitors do not fire in lock step. Visibility pause unchanged (`visibility.mjs` PASS: nothing while hidden, one refresh on resume). Evidence: `tools/qa/polling-check.mjs` ALL PASS (pure); `tools/qa/presence-load.mjs` (loopback only, refuses any other host) on the combined scratch server (A 8fe6b85 single Node process, temp SQLite): 60 clients x 20 s = 89 req/s, 200 clients x 20 s = 295 req/s (presence POST + GET + announcements at the real 2 s rhythm), every response 200/204, p50 about 16 ms, p95 about 16 ms, no 429/5xx/network error (`features-regress/presence-load-60.json`, `-200.json`). Limits: loopback, one machine, no TLS/proxy, 20 s, 200 clients; real hosting (Passenger), real network latency and sustained load are UNVERIFIED; the world's polling cost is a server-side concern for A (F77/F78 server). world-checks 60 Hz re-run after the change: ALL PASS.
+
+### Loading on slow 4G after the features-first world changes (F57 / F58 / F60 world half)
+
+`tools/qa/load.mjs` on B's server, CDP slow 4G (1.6 Mbit/s, 150 ms RTT), cold cache, one run each (`features-regress/load-slow4g-{user,guest}.json`): logged-in cold: scene visible 3.82 s, playable 8.42 s, 16 requests, 1,434 KB, warm playable 2.34 s; guest cold: scene visible 3.83 s, 14 requests, 596 KB. Versus the clinic measurement (1,425 KB, 17 requests, visible 3.79 s, playable 8.43 s) the wayfinding/recovery/polling code adds about 9 KB and nothing noticeable in time (noise level). The world ships no raster media, video or iframe: only GLB packs (colony 221 KB, kit, nature, standalone clinic 55 KB gzip) and code. Low tier (automatic on saveData / 2G / 3G) and lazy effects unchanged. Real weak devices and real hosting latency: UNVERIFIED.

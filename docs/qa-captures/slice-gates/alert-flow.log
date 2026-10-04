@@ -1,0 +1,15 @@
+PASS alert raises phone {}
+PASS alert has acknowledge button and role=alert {}
+PASS alert view is first person {"distance":0.01}
+PASS input locked while alert shown {"moved":"0.000"}
+PASS V ignored while phone up {}
+PASS T cannot dismiss an unacknowledged alert {}
+PASS acknowledge closes the alert-raised phone {}
+PASS previous (third person) view restored {"distance":"9.00"}
+PASS acknowledged alert does not return after reload {}
+PASS manual T opens phone {}
+PASS Escape closes manual phone, view restored {}
+PASS editor open, phone not raised {}
+PASS alert announced in HTML while editing {}
+PASS phone raised after editor closes {}
+ALL PASS

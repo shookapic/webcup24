@@ -1,0 +1,4 @@
+source revision: 55df7db3886d20d509ebdf96b68f37d20d6a04e3 (worktree clean: 2 changes)
+layout.js sha256: 0f0d6d0ec579470630064dd4ce633f6e3b03029b88c2cbdb8ad11a591e5b7c45
+tools/qa/lamp-clearance.mjs sha256: bf7fa46d8792b0d08d78f5a2de1551c3024067e0aeda9d3ad4f4715cf53eb73c
+PASS 13 lamps clear (min route distance 2.41 m, need 1.70)

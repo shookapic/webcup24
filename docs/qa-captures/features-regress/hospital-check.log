@@ -1,0 +1,17 @@
+PASS NPC routes keep >= 1.5 m from the clinic envelope min 5.63 m
+PASS rails stay >= 3 m (horizontal) from the clinic envelope; rail y 9.2 vs roof 7.75 = 1.45 m vertical gap min 5.63 m
+PASS annex at 40,-20 does not overlap the clinic (gap along z) 2.79 m
+PASS annex at 40,9 does not overlap the clinic (gap along z) 3.64 m
+PASS porch mouth ground point is outside every ground-level collider point 34.6,-6
+PASS straight line along z=-6 from x=26 is stopped by the bench at x 31.5 (known obstacle, not the clinic) stops at x 30.85
+PASS realistic route from the Santé stop area, around the bench, up the steps and to the doors end x 35.11 z -6.08 (door face x 35.43), 22 samples, body y 0.97..1.31, end y 1.31
+PASS short direct segment from beyond the bench through the porch to the doors end x 35.117, body y 0.98..1.30, end y 1.30
+PASS jumping under the canopy: head (capsule top) never above the visual soffit 2.95 m 40/40 samples under the soffit, max head 2.881 m, x range 34.68..35.09
+INFO free jump apex (body y, open ground): 3.11 m; roof 6.0 (wings) / 6.25 (centre) / 7.75 (plant room)
+PASS limited attempt: walking + jumping into the west wing face gains no height beyond a free jump max body y 3.10 m vs free jump 3.11 m (5 face attempts only, not every possible climb)
+PASS limited attempt: walking + jumping into the east wing face gains no height beyond a free jump max body y 3.09 m vs free jump 3.11 m (5 face attempts only, not every possible climb)
+PASS limited attempt: walking + jumping into the rear gains no height beyond a free jump max body y 3.11 m vs free jump 3.11 m (5 face attempts only, not every possible climb)
+PASS limited attempt: walking + jumping into the side +z gains no height beyond a free jump max body y 3.11 m vs free jump 3.11 m (5 face attempts only, not every possible climb)
+PASS limited attempt: walking + jumping into the side -z gains no height beyond a free jump max body y 3.10 m vs free jump 3.11 m (5 face attempts only, not every possible climb)
+PASS camera blockers include the overhead canopy (y 2.85..6.25) and the ground-level wings 7 blockers near the clinic
+ALL PASS

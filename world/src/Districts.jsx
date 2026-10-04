@@ -2,7 +2,10 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { CanvasTexture, Color, DoubleSide, MeshStandardMaterial, RepeatWrapping } from 'three';
 import { Prop } from './kit.jsx';
-import { buildings, lines, stops } from './layout.js';
+import { buildings, footprintOf, footprints, landmarks, lines, stops } from './layout.js';
+import { WorldAsset, preloadAssets } from './assets/WorldAsset.jsx';
+preloadAssets(['hospital']);
+import { debug } from './debug.js';
 
 // Buildings (from layout.buildings, which also feeds collision), district dressing, stop shelters and the Quartier sud water.
 const make = (color, extra = {}) => new MeshStandardMaterial({ color: new Color(color), roughness: 0.85, ...extra });
@@ -55,16 +58,6 @@ function Booth({ b, index }) {
       <mesh material={mats.foliage} position={[1.5, 0.7, 0.3]} scale={[1, 0.7, 1]} castShadow><icosahedronGeometry args={[0.5, 1]} /></mesh>
     </group>
   );
-}
-
-function Garden({ b }) {
-  const [fx, fz] = front(b.ry);
-  return [-1.6, 1.6].map((o) => (
-    <group key={o} position={[b.x + fx * 5.6 + fz * o, 0, b.z + fz * 5.6 - fx * o]}>
-      <mesh material={mats.planter} position-y={0.3} castShadow receiveShadow><cylinderGeometry args={[0.7, 0.6, 0.6, 12]} /></mesh>
-      <mesh material={mats.foliage} position-y={0.9} scale={[1, 0.8, 1]} castShadow><icosahedronGeometry args={[0.65, 1]} /></mesh>
-    </group>
-  ));
 }
 
 function HealthCross({ b }) {
@@ -150,14 +143,24 @@ function Stop({ stop }) {
 }
 
 export function Districts({ reducedMotion }) {
+  if (debug.enabled) {
+    debug.footprintOf = footprintOf;
+    debug.footprintsNear = (l) => footprints.filter((f) => f.landmark === l.id || (l.id === 'townHall' && f.h === 4 && f.w === 0.9)); // landmark boxes (+ the Mairie canopy pillars)
+  }
   return (
     <group>
       {buildings.map((b, i) => (
         <group key={`${b.model}${b.x}${b.z}`}>
-          <Prop name={b.model} variant={b.variant} position={[b.x, 0, b.z]} rotation-y={b.ry} scale={b.scale} />
+          <group ref={(g) => { if (debug.enabled && g) (debug.buildingObjects ??= new Map()).set(b, g); }}>
+            <Prop name={b.model} variant={b.variant} position={[b.x, 0, b.z]} rotation-y={b.ry} scale={b.scale} />
+          </group>
           {b.booth && <Booth b={b} index={i} />}
-          {b.garden && <Garden b={{ ...b, ry: b.garden > 0 ? 0 : Math.PI }} />}
           {b.cross && <HealthCross b={b} />}
+        </group>
+      ))}
+      {landmarks.map((l) => (
+        <group key={l.id} ref={(g) => { if (debug.enabled && g) (debug.landmarkObjects ??= new Map()).set(l, g); }}>
+          <WorldAsset id={l.id} position={[l.x, 0, l.z]} rotation={[0, l.ry, 0]} />
         </group>
       ))}
       {stops.map((stop) => <Stop key={stop.name} stop={stop} />)}

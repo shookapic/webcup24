@@ -1,0 +1,7 @@
+PASS flat dialog opens (role=dialog, no 3D host) {}
+PASS exactly one phone screen {}
+PASS focus is inside the dialog {}
+PASS tab click selects it {"current":"Services"}
+PASS movement locked while open {}
+PASS Escape closes the dialog {}
+ALL PASS

@@ -1,0 +1,19 @@
+PASS keyboard W walks {"moved":"7.36"}
+PASS walk clip plays and legs swing {"clip":"walk","d":"1.247"}
+PASS Shift switches to sprint clip {"clip":"sprint"}
+PASS idle clip after release {"clip":"idle"}
+PASS blur stops and stays stopped (key still physically held) {"speed":"0.000","drift":"0.000"}
+PASS fresh press resumes {"moved":"3.36","from":["47.68","23.51"],"to":["45.81","20.72"]}
+PASS hidden tab stops {"speed":"0.000"}
+PASS phone open ignores movement keys {"moved":"0.000"}
+PASS phone closed, fresh press walks {"moved":"3.36"}
+PASS jump once per press while held {"takeoffs":1,"maxY":"3.11"}
+PASS wall stops at south face (-19.7 <= z <= -19.3) {"z":"-19.65"}
+PASS wall slides along face (x < -13) {"x":"-16.66","keys":"KeyW"}
+PASS camera pulled in at wall (< 7 m of 9) {"camDist":"0.40"}
+PASS fall below world respawns {"x":"0.0","y":"2.5","z":"1.0"}
+PASS outside bounds respawns {"x":"0.0","z":"1.0"}
+PASS boundary wall holds {"x":"63.3","z":"0.0"}
+PASS FPS wheel does not zoom out {"distance":0.01}
+PASS TPS wheel clamps (3..16) {"distance":"16.00"}
+ALL PASS @144Hz jitter=0

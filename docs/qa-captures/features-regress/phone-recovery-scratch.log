@@ -1,0 +1,10 @@
+PASS T opens the physical phone (3D host) and shows the recovery control 
+PASS recovery control is a real, labelled button with a description 
+PASS click switches to the flat accessible dialog: one dialog, no 3D host, one phone screen 
+PASS preference remembered (localStorage tn.flatphone=1) 
+PASS Escape closes the flat dialog; the 3D-phone return control appears while the phone is closed 
+PASS after a reload T opens the flat dialog directly (choice remembered) 
+PASS return control clears the preference 
+PASS T opens the physical phone again 
+PASS no page errors 
+ALL PASS

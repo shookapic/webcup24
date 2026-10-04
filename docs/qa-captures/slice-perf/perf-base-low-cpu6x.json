@@ -1,0 +1,82 @@
+{
+  "hardware": {
+    "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "dpr": 1.0000000149011612,
+    "cores": 32
+  },
+  "results": [
+    {
+      "stop": "spawn",
+      "frames": 632,
+      "p50": 7.199999999998909,
+      "p95": 10.800000000001091,
+      "p99": 17.900000000001455,
+      "max": 46.399999999999636,
+      "calls": 234,
+      "triangles": 123643,
+      "geometries": 257,
+      "textures": 24
+    },
+    {
+      "stop": "mairie",
+      "frames": 720,
+      "p50": 7.100000000000364,
+      "p95": 14.299999999999272,
+      "p99": 17.899999999999636,
+      "max": 35.70000000000073,
+      "calls": 174,
+      "triangles": 122097,
+      "geometries": 257,
+      "textures": 24
+    },
+    {
+      "stop": "sante",
+      "frames": 793,
+      "p50": 7.099999999998545,
+      "p95": 10.799999999999272,
+      "p99": 14.30000000000291,
+      "max": 17.900000000001455,
+      "calls": 111,
+      "triangles": 109986,
+      "geometries": 297,
+      "textures": 24
+    },
+    {
+      "stop": "marche",
+      "frames": 647,
+      "p50": 7.100000000002183,
+      "p95": 14.299999999999272,
+      "p99": 17.900000000001455,
+      "max": 35.69999999999709,
+      "calls": 228,
+      "triangles": 113626,
+      "geometries": 339,
+      "textures": 29
+    },
+    {
+      "stop": "habitat",
+      "frames": 754,
+      "p50": 7.099999999998545,
+      "p95": 10.799999999999272,
+      "p99": 14.30000000000291,
+      "max": 14.400000000001455,
+      "calls": 163,
+      "triangles": 111590,
+      "geometries": 339,
+      "textures": 29
+    },
+    {
+      "stop": "sud",
+      "frames": 366,
+      "p50": 14.200000000004366,
+      "p95": 21.400000000001455,
+      "p99": 21.599999999998545,
+      "max": 25,
+      "calls": 493,
+      "triangles": 131957,
+      "geometries": 359,
+      "textures": 39
+    }
+  ]
+}

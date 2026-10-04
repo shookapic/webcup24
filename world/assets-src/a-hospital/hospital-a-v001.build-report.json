@@ -1,0 +1,60 @@
+{
+  "status": "built",
+  "version": 1,
+  "validation": {
+    "objects": {
+      "hospital_amber": {
+        "triangles": 164,
+        "material": "Hospital_Amber"
+      },
+      "hospital_ceramic": {
+        "triangles": 948,
+        "material": "Hospital_Ceramic"
+      },
+      "hospital_glass": {
+        "triangles": 708,
+        "material": "Hospital_Glass"
+      },
+      "hospital_lobbyglass": {
+        "triangles": 60,
+        "material": "Hospital_LobbyGlass"
+      },
+      "hospital_paving": {
+        "triangles": 12,
+        "material": "Hospital_Paving"
+      },
+      "hospital_slate": {
+        "triangles": 3836,
+        "material": "Hospital_Slate"
+      },
+      "hospital_teal": {
+        "triangles": 420,
+        "material": "Hospital_Teal"
+      },
+      "hospital_terracotta": {
+        "triangles": 60,
+        "material": "Hospital_Terracotta"
+      }
+    },
+    "triangles": 6208,
+    "bounds_min": [
+      -7.3575,
+      0.0,
+      -6.3675
+    ],
+    "bounds_max": [
+      7.3575,
+      7.75,
+      6.3675
+    ],
+    "size": [
+      14.715,
+      7.75,
+      12.735
+    ],
+    "footprint": [
+      14.715,
+      12.735
+    ]
+  }
+}

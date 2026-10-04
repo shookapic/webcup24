@@ -1,0 +1,18 @@
+{
+  "head": "decab4dd812ed027faa1a564a84cf9ed4e59ab9a",
+  "note": "HEAD plus a working tree that contained the apron-collider change in layout.js when these logs were written; hashes are of the files as run",
+  "builtAt": "npm run build immediately before the logs",
+  "sha256_16": {
+    "world/src/layout.js": "c2ae6a4da8a52bd8",
+    "world/src/Districts.jsx": "2c9f5fe85393cb04",
+    "world/src/PlayableCity.jsx": "122283a796523bc3",
+    "world/src/assets/registry.js": "e047ca1700d86531",
+    "world/src/assets/WorldAsset.jsx": "b3c1ce6000578a97",
+    "world/public/models/buildings/hospital-a-v001.glb": "7396daef12e09cbc",
+    "dist/monde/index.html": "96f35d01d0d41fe8",
+    "tools/qa/hospital-check.mjs": "2cff4a3556e08c94",
+    "tools/qa/asset-fallback.mjs": "81fe3759880d87e4",
+    "tools/qa/clinic-feet.mjs": "870e03efe084e0fa",
+    "tools/qa/clinic-views.mjs": "7b4d48822b13d11f"
+  }
+}

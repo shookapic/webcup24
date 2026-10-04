@@ -1,0 +1,3 @@
+while hidden (8 s): {}
+after resume: {"POST /api/presence":1,"GET /api/presence":1,"GET /api/announcements":1} first presence refresh after [33m2[39m ms
+PASS world presence polling pauses while hidden and refreshes immediately on resume
