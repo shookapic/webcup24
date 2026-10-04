@@ -299,6 +299,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS message_replies_message ON message_replies(message_id);
 `);
 
+// F79: the subject of a request (a code from the topic list in server.mjs). Requests sent before it existed keep an empty topic ("non précisé").
+{
+  const columns = new Set(db.prepare('PRAGMA table_info(messages)').all().map((column) => column.name));
+  if (!columns.has('topic')) db.exec('ALTER TABLE messages ADD COLUMN topic TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS messages_topic ON messages(topic)');
+}
+
 // F82: a durable fingerprint of what a resident sent (messages and concerns), so the same text sent again within minutes (a retry, a script) is recognised
 // even after a restart. Additive: old rows keep an empty fingerprint and are never matched.
 for (const table of ['messages', 'concerns']) {

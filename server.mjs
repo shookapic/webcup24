@@ -102,6 +102,21 @@ const deletions = new Limiter(5);
 // F82: what a resident sent, reduced to a stable fingerprint (case, accents and spacing ignored) so the same text sent again within minutes is recognised.
 const DUPLICATE_WINDOW = '-10 minutes';
 
+// F79: the subjects a request can be about. One list for the form, the filters, the public reports and the staff workspace, served by GET /api/topics so the
+// two languages cannot drift apart. "autre" is the default; a request sent before topics existed has none.
+const topics = [
+  { code: 'sante', fr: 'Santé et urgences', en: 'Health and emergencies' },
+  { code: 'voirie', fr: 'Voirie, éclairage et propreté', en: 'Roads, lighting and cleanliness' },
+  { code: 'eau', fr: 'Eau et énergie', en: 'Water and energy' },
+  { code: 'transport', fr: 'Transports', en: 'Transport' },
+  { code: 'logement', fr: 'Logement et habitat', en: 'Housing' },
+  { code: 'securite', fr: 'Sécurité et tranquillité', en: 'Safety and quiet' },
+  { code: 'environnement', fr: 'Environnement et espaces verts', en: 'Environment and green spaces' },
+  { code: 'demarches', fr: 'Démarches et administration', en: 'Paperwork and administration' },
+  { code: 'autre', fr: 'Autre sujet', en: 'Other subject' },
+];
+const topicCodes = topics.map((topic) => topic.code);
+
 // F83: every request has a reference (M-12) and a verification code derived from a persistent key, so a receipt a resident kept still checks out after a
 // restart. The code carries no content; anyone holding the reference and the code can ask whether the city received it and when.
 db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('receipt_key', ?)").run(randomBytes(32).toString('hex'));
@@ -488,6 +503,7 @@ async function route(request, response) {
     }
     return sendJson(response, 200, { token: issue(form, { address, account }, subject), minAgeMs });
   }
+  if (path === '/api/topics' && method === 'GET') return sendJson(response, 200, { topics });
   if (path === '/api/me' && method === 'GET') return sendJson(response, 200, { user: currentUser(request) });
   if (path === '/api/me' && method === 'PATCH') {
     const user = requireUser(request);
@@ -991,7 +1007,7 @@ async function route(request, response) {
     const all = ['agent', 'admin'].includes(user.role);
     const messages = all
       ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, users.district AS citizen_district, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
-      : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT public_title FROM public_requests WHERE message_id = messages.id) AS public_title, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
+      : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, topic, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT public_title FROM public_requests WHERE message_id = messages.id) AS public_title, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
     const replies = repliesOf(messages.map((message) => message.id));
     return sendJson(response, 200, {
       messages: messages.map(({ fingerprint, ...message }) => ({
@@ -1060,6 +1076,8 @@ async function route(request, response) {
     const content = text(body.body, 10, 4000, 'Le message');
     const kind = body.kind || 'contact';
     if (!['contact', 'incident'].includes(kind)) fail(400, 'Type de demande invalide.');
+    const topic = body.topic === undefined || body.topic === null || body.topic === '' ? 'autre' : body.topic;
+    if (!topicCodes.includes(topic)) fail(400, 'Sujet invalide.');
     const location = kind === 'incident' ? text(body.location, 5, 180, 'Le lieu') : null;
     let serviceId = null;
     if (body.service_id !== undefined && body.service_id !== null && body.service_id !== '') {
@@ -1075,7 +1093,7 @@ async function route(request, response) {
       return sendJson(response, 200, reply);
     }
     charge('message', { address: clientIp(request), account: String(user.id) });
-    const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location, service_id, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location, serviceId, fingerprint);
+    const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location, service_id, fingerprint, topic) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location, serviceId, fingerprint, topic);
     const reply = { id: Number(result.lastInsertRowid), status: 'new', confirmation: 'Votre message a bien été transmis.' };
     guard.done(201, reply);
     return sendJson(response, 201, reply);
@@ -1181,7 +1199,7 @@ async function route(request, response) {
   // F52: supporting a request that its author chose to make public. The private message is never part of these answers.
   if (path === '/api/public-requests' && method === 'GET') {
     const user = requireUser(request);
-    const rows = db.prepare(`SELECT pr.id, pr.public_title, pr.public_summary, pr.district, pr.created_at, m.status, m.user_id AS owner_id,
+    const rows = db.prepare(`SELECT pr.id, pr.public_title, pr.public_summary, pr.district, pr.created_at, m.status, m.topic, m.user_id AS owner_id,
         (SELECT COUNT(*) FROM supports WHERE public_request_id = pr.id) AS support_count,
         (SELECT at FROM supports WHERE public_request_id = pr.id AND user_id = ?) AS supported_at
       FROM public_requests pr JOIN messages m ON m.id = pr.message_id ORDER BY (m.status = 'resolved'), pr.id DESC`).all(user.id);

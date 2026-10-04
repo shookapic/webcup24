@@ -1,6 +1,6 @@
 // F83 (receipt with a reference) and F84 (agents answer directly) in real Chrome on a disposable server: the resident's confirmation, card, receipt page and
 // the public check; the staff reply box with a draft that survives list refreshes, the answered / not answered filter, and what the resident then sees.
-// Later sections of this file cover the other triage features. A ports 3200-3209. Usage: node tools/qa-a/civic-browser.mjs
+// F79 (themes: form, cards, filters for residents, reports and staff). Later sections of this file cover the other triage features. A ports 3200-3209. Usage: node tools/qa-a/civic-browser.mjs
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -127,6 +127,75 @@ await s.page.waitForSelector('#citizen-messages .message-card');
 const seen = await s.page.evaluate(() => { const c = document.querySelector('#citizen-messages .message-card'); return { reply: c.querySelector('.reply-text')?.textContent, head: c.querySelector('.reply-head')?.textContent, notice: document.querySelector('#notices-list')?.textContent }; });
 check('the answer is on the resident\'s card, signed "Réponse de la ville" (no staff name), and the news list says the city answered', seen.reply === longText && /^Réponse de la ville · \d{2}\/\d{2}\/\d{4}/.test(seen.head) && !/agent Civic/.test(seen.head) && /La ville a répondu à votre demande « Poubelle renversée devant l’école »/.test(seen.notice) && seen.notice.includes(longText), JSON.stringify(seen));
 await s.page.screenshot({ path: join(shots, 'resident-with-reply.png') });
+await s.context.close();
+
+console.log('\n# F79. themes: send with a theme, find requests and reports by theme');
+// fixtures: two published reports by another resident, with different themes
+const yan = (await call('/api/auth/register', 'POST', { name: 'Yan Civic', email: 'yan@civic.test', password: 'password-long-1' })).cookie;
+const publish = async (subject, topic, title) => {
+  const made = await call('/api/messages', 'POST', { subject, body: 'Un problème décrit avec assez de mots pour être accepté par le serveur.', kind: 'incident', location: 'Avenue du Centre, Centre-ville', topic }, yan);
+  await call(`/api/messages/${made.data.id}/public`, 'POST', { consent: true, public_title: title, public_summary: 'Résumé public écrit pour que les autres habitants comprennent le problème.', district: 'Centre-ville' }, yan);
+  return made.data.id;
+};
+await publish('Lampadaire éteint', 'voirie', 'Lampadaire éteint avenue du Centre');
+await publish('Fuite d’eau', 'eau', 'Fuite d’eau devant le marché');
+await publish('Bus en retard', 'transport', 'Bus T1 en retard chaque matin');
+s = await open(zoe);
+await s.page.waitForSelector('#message-topic option');
+const options = await s.page.$$eval('#message-topic option', (o) => o.map((x) => [x.value, x.textContent]));
+check('the request form has a "Thème" list from the server, "Autre sujet" preselected', options.length >= 9 && options.some(([v, label]) => v === 'eau' && label === 'Eau et énergie') && (await s.page.$eval('#message-topic', (n) => n.value)) === 'autre', JSON.stringify(options));
+await s.page.select('#message-topic', 'eau');
+await fill(s.page, '#message-form', { subject: 'Pression de l’eau trop faible', body: 'La pression de l’eau est très faible chez nous depuis hier soir, merci de vérifier.' });
+await s.page.click('#message-form button[type=submit]');
+await s.page.waitForFunction(() => document.querySelectorAll('#citizen-messages .message-card').length === 2, { timeout: 12000 }).catch(() => {});
+const cardTopics = await s.page.$$eval('#citizen-messages .message-card', (cs) => cs.map((c) => [c.querySelector('h4').textContent, c.querySelector('.message-topic')?.textContent]));
+check('each card says its theme in words (a request sent without one shows the default; an old one would say "Non précisé")', cardTopics.length === 2 && cardTopics.some(([h, tp]) => /Pression/.test(h) && tp === 'Thème : Eau et énergie') && cardTopics.some(([h, tp]) => /Poubelle/.test(h) && tp === 'Thème : Autre sujet'), JSON.stringify(cardTopics));
+await s.page.select('#mine-filter-topic', 'eau');
+await wait(300);
+const onlyWater = await s.page.$$eval('#citizen-messages .message-card h4', (h) => h.map((x) => x.textContent));
+await s.page.select('#mine-filter-topic', 'sante');
+await wait(300);
+const noneShown = await text(s.page, '#citizen-messages');
+await s.page.select('#mine-filter-topic', '');
+check('the resident filters their history by theme; an empty result says so', onlyWater.length === 1 && /Pression/.test(onlyWater[0]) && /Aucun message ne correspond à ces filtres/.test(noneShown), JSON.stringify([onlyWater, noneShown]));
+await s.page.evaluate(() => document.querySelector('#public-panel').scrollIntoView());
+await s.page.waitForFunction(() => document.querySelectorAll('#public-list li[data-public]').length === 3, { timeout: 12000 }).catch(() => {});
+const reportsAll = await s.page.$$eval('#public-list li[data-public]', (ls) => ls.map((l) => l.querySelector('strong').textContent));
+await s.page.select('#public-filter-topic', 'eau');
+await wait(300);
+const reportsWater = await s.page.$$eval('#public-list li[data-public]', (ls) => ls.map((l) => [l.querySelector('strong').textContent, l.textContent.includes('Thème : Eau et énergie')]));
+await s.page.select('#public-filter-topic', 'logement');
+await wait(300);
+const reportsNone = await text(s.page, '#public-list');
+check('published reports show their theme and can be filtered by it; an empty theme says so', reportsAll.length === 3 && reportsWater.length === 1 && reportsWater[0][1] && /Fuite/.test(reportsWater[0][0]) && /ne correspond à ce thème/.test(reportsNone), JSON.stringify([reportsAll, reportsWater, reportsNone]));
+await s.page.select('#public-filter-topic', '');
+await s.page.click('#public-list li[data-public] button');
+await s.page.waitForFunction(() => /soutient cette demande/.test(document.querySelector('#public-list')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+const supportedFirst = await (async () => {
+  const before = await s.page.$$eval('#public-list li[data-public] strong', (x) => x.map((n) => n.textContent));
+  await s.page.select('#public-sort', 'supported');
+  await wait(300);
+  const after = await s.page.$$eval('#public-list li[data-public] strong', (x) => x.map((n) => n.textContent));
+  const supported = await s.page.$eval('#public-list li[data-public]', (l) => /soutient cette demande/.test(l.textContent));
+  return { before, after, supported };
+})();
+check('"Les plus soutenues d’abord" puts the supported report first', supportedFirst.supported && supportedFirst.after.length === 3, JSON.stringify(supportedFirst));
+await s.page.click('#lang-toggle');
+await s.page.waitForFunction(() => document.querySelector('#message-topic option[value=eau]')?.textContent === 'Water and energy', { timeout: 8000 }).catch(() => {});
+await s.page.waitForFunction(() => /^Subject area: /.test(document.querySelector('#citizen-messages .message-topic')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+const englishTopics = await s.page.evaluate(() => ({ form: document.querySelector('#message-topic option[value=eau]')?.textContent, filter: document.querySelector('#mine-filter-topic option[value=""]')?.textContent, card: document.querySelector('#citizen-messages .message-topic')?.textContent, label: document.querySelector('label:has(#message-topic)')?.firstChild?.textContent.trim(), sort: document.querySelector('#public-sort option[value=supported]')?.textContent }));
+check('in English the theme names, the filter wording, the card line and the sort read in English', englishTopics.form === 'Water and energy' && englishTopics.filter === 'All subject areas' && /^Subject area: /.test(englishTopics.card) && englishTopics.label === 'Subject area of the request' && englishTopics.sort === 'Most supported first', JSON.stringify(englishTopics));
+await s.context.close();
+s = await open(agent);
+await s.page.waitForSelector('#staff-messages .message-card');
+await s.page.select('#staff-filter-topic', 'eau');
+await wait(300);
+const staffWater = await s.page.$$eval('#staff-messages .message-card h4', (h) => h.map((x) => x.textContent));
+await s.page.select('#staff-filter-topic', 'none');
+await wait(300);
+const staffNone = await text(s.page, '#staff-messages');
+check('staff narrow the list by theme (the follow-up by theme), and the no-theme choice finds nothing when every request has one', staffWater.length === 2 && staffWater.some((h) => /Pression/.test(h)) && staffWater.some((h) => /Fuite/.test(h)) && /Aucun message ne correspond à ces filtres/.test(staffNone), JSON.stringify([staffWater, staffNone]));
+await s.page.screenshot({ path: join(shots, 'staff-topic-filter.png') });
 await s.context.close();
 
 await browser.close();

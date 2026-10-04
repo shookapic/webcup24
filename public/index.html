@@ -144,11 +144,16 @@
                 <label>Sujet <input name="subject" type="text" required minlength="4" maxlength="120"></label>
                 <div id="tip-report" class="tip-slot" role="status"></div>
                 <label id="location-field" hidden>Lieu du problème <input name="location" type="text" minlength="5" maxlength="180" placeholder="Rue, quartier ou repère précis"></label>
+                <label>Thème de la demande <select name="topic" id="message-topic" data-content></select></label>
                 <label>Votre message <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label>
                 <div class="hp" aria-hidden="true"><label>Laissez ce champ vide <input type="text" name="fax_ref" tabindex="-1" autocomplete="off"></label></div><button class="button button-primary" type="submit">Envoyer mon message</button>
                 <p id="message-status" class="form-status" role="status" aria-live="polite"></p>
               </form>
-              <div class="panel"><h3>Mes messages</h3><p>Suivez les réponses de la ville.</p><div id="citizen-messages" class="message-list" data-content></div></div>
+              <div class="panel"><h3>Mes messages</h3><p>Suivez les réponses de la ville.</p>
+                <div class="filter-row">
+                  <label>Thème <select id="mine-filter-topic" data-content></select></label>
+                  <label>État <select id="mine-filter-status"><option value="">Tous</option><option value="new">À traiter</option><option value="in_progress">En cours</option><option value="resolved">Résolu</option></select></label>
+                </div><div id="citizen-messages" class="message-list" data-content></div></div>
             </div>
             <section id="appointments-panel" class="panel appointments-panel" aria-labelledby="appointments-title" tabindex="-1">
               <h3 id="appointments-title">Rendez-vous avec un agent</h3>
@@ -175,7 +180,11 @@
             </form>
             <section id="public-panel" class="panel" aria-labelledby="public-title" tabindex="-1">
               <h3 id="public-title">Demandes d’habitants à soutenir</h3>
-              <p>Un habitant peut choisir de rendre son signalement visible des autres : seuls un titre, un résumé et un quartier écrits pour cela sont montrés. Vous pouvez soutenir une demande une seule fois. Son auteur et les agents voient le nombre de soutiens, pas qui soutient.</p>
+              <p>Un habitant peut choisir de rendre son signalement visible des autres : seuls un titre, un résumé, un quartier et le thème choisi sont montrés. Vous pouvez soutenir une demande une seule fois. Son auteur et les agents voient le nombre de soutiens, pas qui soutient.</p>
+              <div class="filter-row">
+                <label>Thème <select id="public-filter-topic" data-content></select></label>
+                <label>Trier par <select id="public-sort"><option value="">Les plus récentes d’abord</option><option value="supported">Les plus soutenues d’abord</option></select></label>
+              </div>
               <p id="public-status" class="form-status" role="status" aria-live="polite"></p>
               <ul id="public-list" class="notice-list" data-content></ul>
               <h4>Mes soutiens</h4>
@@ -245,6 +254,7 @@
                   <label>État <select id="staff-filter-status"><option value="">Tous</option><option value="new">À traiter</option><option value="in_progress">En cours</option><option value="resolved">Résolu</option></select></label>
                   <label>Type <select id="staff-filter-kind"><option value="">Tous</option><option value="incident">Signalements de problème</option><option value="contact">Questions aux services</option></select></label>
                   <label>Quartier de l’habitant <select id="staff-filter-district"><option value="">Tous</option><option>Centre-ville</option><option>Quartier nord</option><option>Quartier est</option><option>Quartier ouest</option><option>Quartier sud</option><option value="none">Non précisé</option></select></label>
+                  <label>Thème <select id="staff-filter-topic" data-content></select></label>
                   <label>Réponse <select id="staff-filter-reply"><option value="">Toutes</option><option value="none">Sans réponse</option><option value="some">Avec réponse</option></select></label>
                 </div>
                 <p id="staff-reply-status" class="form-status" role="status" aria-live="polite"></p>

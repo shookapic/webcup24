@@ -474,6 +474,7 @@ function renderIdentity() {
   renderTips();
   renderNotices(true);
   renderDashboard();
+  fillTopicSelects();
   renderStaffConcerns();
   renderPublic();
   renderDevices();
@@ -552,12 +553,38 @@ function clearIdentity() {
   renderServices();
 }
 
+// F79: every request has a theme (the same list for the form, the cards and the filters; names come from the server in both languages). Requests sent before
+// themes existed have none and are shown as "Non précisé".
+let topics = [];
+const topicLabel = (code) => { const topic = topics.find((item) => item.code === code); return topic ? topic[lang === 'en' ? 'en' : 'fr'] : t('Non précisé'); };
+const topicMatches = (item, wanted) => !wanted || (wanted === 'none' ? !item.topic : item.topic === wanted);
+function fillTopicSelects() {
+  const fill = (selector, first) => {
+    const select = $(selector);
+    const previous = select.value;
+    select.replaceChildren(...(first ? [first] : []), ...topics.map((item) => new Option(item[lang === 'en' ? 'en' : 'fr'], item.code)));
+    if (!first) { select.value = previous && topics.some((item) => item.code === previous) ? previous : 'autre'; return; }
+    if (select !== $('#public-filter-topic')) select.append(new Option(t('Thème non précisé'), 'none'));
+    select.value = [...select.options].some((option) => option.value === previous) ? previous : '';
+  };
+  fill('#message-topic');
+  for (const selector of ['#staff-filter-topic', '#mine-filter-topic', '#public-filter-topic']) fill(selector, new Option(t('Tous les thèmes'), ''));
+}
+async function loadTopics() {
+  try { topics = (await api('/api/topics')).topics; } catch { topics = []; }
+  fillTopicSelects();
+}
+
 // F50: the staff list can be narrowed by state, type and the resident's profile district; the dashboard numbers open it already filtered.
 let staffMessages = [];
-const staffFilter = () => ({ status: $('#staff-filter-status').value, kind: $('#staff-filter-kind').value, district: $('#staff-filter-district').value, reply: $('#staff-filter-reply').value });
-const staffMatches = (item, { status, kind, district, reply }) => (!status || item.status === status) && (!kind || item.kind === kind) && (!district || (district === 'none' ? !item.citizen_district : item.citizen_district === district))
-  && (!reply || (reply === 'none' ? !(item.replies || []).length : (item.replies || []).length > 0));
-for (const id of ['#staff-filter-status', '#staff-filter-kind', '#staff-filter-district', '#staff-filter-reply']) $(id).addEventListener('change', () => renderMessages(staffMessages));
+let citizenMessages = [];
+const staffFilter = () => ({ status: $('#staff-filter-status').value, kind: $('#staff-filter-kind').value, district: $('#staff-filter-district').value, reply: $('#staff-filter-reply').value, topic: $('#staff-filter-topic').value });
+const staffMatches = (item, { status, kind, district, reply, topic }) => (!status || item.status === status) && (!kind || item.kind === kind) && (!district || (district === 'none' ? !item.citizen_district : item.citizen_district === district))
+  && (!reply || (reply === 'none' ? !(item.replies || []).length : (item.replies || []).length > 0)) && topicMatches(item, topic);
+for (const id of ['#staff-filter-status', '#staff-filter-kind', '#staff-filter-district', '#staff-filter-reply', '#staff-filter-topic']) $(id).addEventListener('change', () => renderMessages(staffMessages));
+for (const id of ['#mine-filter-topic', '#mine-filter-status']) $(id).addEventListener('change', () => renderMessages(citizenMessages));
+$('#public-filter-topic').addEventListener('change', renderPublic);
+$('#public-sort').addEventListener('change', renderPublic);
 
 // Stored times are UTC; the city lives at UTC+4 and the receipts, the summary and the journal say so, so the cards say the same.
 function cityTime(utc) {
@@ -612,8 +639,9 @@ function renderMessages(messages) {
   messageCount = messages.length;
   renderGuide();
   if (staff) $('#pending-count').textContent = t('{n} à traiter', { n: messages.filter((item) => item.status === 'new').length });
-  if (staff) staffMessages = messages;
-  const shown = staff ? messages.filter((item) => staffMatches(item, staffFilter())) : messages;
+  if (staff) staffMessages = messages; else citizenMessages = messages;
+  const shown = staff ? messages.filter((item) => staffMatches(item, staffFilter()))
+    : messages.filter((item) => topicMatches(item, $('#mine-filter-topic').value) && (!$('#mine-filter-status').value || item.status === $('#mine-filter-status').value));
   if (!messages.length) {
     list.append(element('p', 'list-empty', t(staff ? 'Aucun message reçu pour le moment.' : 'Vous n’avez pas encore envoyé de message.')));
     return;
@@ -630,6 +658,7 @@ function renderMessages(messages) {
     heading.append(element('span', `message-status status-${item.status}`, t(statusLabels[item.status] || item.status)));
     card.append(heading);
     card.append(element('p', 'message-kind', t(item.kind === 'incident' ? 'Signalement de problème' : 'Message aux services')));
+    card.append(element('p', 'message-topic', t('Thème : {topic}', { topic: topicLabel(item.topic) })));
     if (item.service_title) card.append(element('p', 'message-service', t('Service concerné : {title}', { title: (lang === 'en' && item.service_title_en) || item.service_title })));
     if (staff) card.append(element('p', 'message-author', `${item.citizen_name} · ${item.citizen_email}`));
     if (item.location) card.append(element('p', 'message-location', t('Lieu : {location}', { location: item.location })));
@@ -826,6 +855,7 @@ $('#dashboard-panel').addEventListener('click', (event) => {
   $('#staff-filter-kind').value = filter.kind || '';
   $('#staff-filter-district').value = filter.district || '';
   $('#staff-filter-reply').value = filter.reply || '';
+  $('#staff-filter-topic').value = filter.topic || '';
   renderMessages(staffMessages);
   $('#staff-messages-panel').focus();
 });
@@ -1191,12 +1221,15 @@ async function loadPublic() {
 }
 
 function renderPublic() {
-  $('#public-list').replaceChildren(...(publicRequests.length ? publicRequests : [null]).map((item) => {
-    if (!item) return element('li', 'list-empty', t('Aucun habitant n’a publié de signalement pour le moment.'));
+  const wanted = $('#public-filter-topic').value;
+  const visible = publicRequests.filter((item) => topicMatches(item, wanted));
+  if ($('#public-sort').value === 'supported') visible.sort((a, b) => b.support_count - a.support_count || b.id - a.id);
+  $('#public-list').replaceChildren(...(visible.length ? visible : [null]).map((item) => {
+    if (!item) return element('li', 'list-empty', t(publicRequests.length ? 'Aucune demande publiée ne correspond à ce thème.' : 'Aucun habitant n’a publié de signalement pour le moment.'));
     const line = element('li', 'notice-item');
     line.dataset.public = item.id;
     line.append(element('strong', '', item.public_title), element('span', 'notice-action', item.public_summary));
-    line.append(element('span', '', `${t('Quartier : {district}', { district: item.district })} · ${t('État : {state}', { state: t(statusLabels[item.status]) })}`));
+    line.append(element('span', '', `${t('Thème : {topic}', { topic: topicLabel(item.topic) })} · ${t('Quartier : {district}', { district: item.district })} · ${t('État : {state}', { state: t(statusLabels[item.status]) })}`));
     line.append(element('span', 'notice-time', item.support_count === 0 ? t('Aucun soutien pour le moment.') : t(item.support_count === 1 ? '1 habitant soutient cette demande.' : '{n} habitants soutiennent cette demande.', { n: item.support_count })));
     if (item.mine) line.append(element('span', 'notice-note', t('C’est votre demande : vous ne pouvez pas la soutenir.')));
     else if (item.status === 'resolved') line.append(element('span', 'notice-note', t('Demande résolue : le soutien n’est plus possible.')));
@@ -2279,7 +2312,7 @@ $('#message-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    const data = await guardedSend('message', form, (guard) => api('/api/messages', 'POST', { kind: formValue(form, 'kind'), subject: formValue(form, 'subject'), location: formValue(form, 'location'), body: formValue(form, 'body'), service_id: formValue(form, 'service_id'), ...guard }));
+    const data = await guardedSend('message', form, (guard) => api('/api/messages', 'POST', { kind: formValue(form, 'kind'), topic: formValue(form, 'topic'), subject: formValue(form, 'subject'), location: formValue(form, 'location'), body: formValue(form, 'body'), service_id: formValue(form, 'service_id'), ...guard }));
     form.reset();
     renderServiceNotice();
     updateLocationField();
@@ -2489,4 +2522,4 @@ setInterval(() => {
 document.addEventListener('visibilitychange', () => { if (!tabHidden() && Date.now() - lastFullRefresh > 15_000) refreshAll(); });
 window.addEventListener('online', () => refreshAll());
 window.addEventListener('offline', () => setConnection(true));
-ensureEnglish().then(() => Promise.allSettled([loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]));
+ensureEnglish().then(() => Promise.allSettled([loadTopics(), loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]));
