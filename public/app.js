@@ -24,17 +24,32 @@ function preference(key, value) {
 let lang = preference('lang') === 'en' ? 'en' : 'fr';
 
 // The English dictionary (about 60 KB) is fetched only when English is wanted. French visitors never download it.
+// Resolves true when the page can be shown in the wanted language, false when English was wanted but the dictionary could not be loaded (the caller then
+// goes back to French, so the lang attribute, the toggle and the visible text always agree).
 let englishLoading = null;
 function ensureEnglish() {
-  if (lang !== 'en' || Object.keys(english).length) return Promise.resolve();
+  if (lang !== 'en' || Object.keys(english).length) return Promise.resolve(true);
   englishLoading ||= new Promise((resolve) => {
     const script = document.createElement('script');
     script.src = '/i18n-en.js';
-    script.onload = resolve;
-    script.onerror = () => { englishLoading = null; resolve(); }; // still usable in French; the next switch tries again
+    script.onload = () => { if (!Object.keys(english).length) englishLoading = null; resolve(Object.keys(english).length > 0); };
+    script.onerror = () => { englishLoading = null; script.remove(); resolve(false); }; // the next switch tries again
     document.head.append(script);
   });
   return englishLoading;
+}
+// Said in both languages: the person asked for English and cannot read this in French as easily. Clears itself.
+let languageNoticeTimer = null;
+function showLanguageFailure() {
+  const notice = $('#lang-status');
+  const inFrench = element('span', '', 'L’anglais n’a pas pu être chargé : la page reste en français. Appuyez sur « English » pour réessayer.');
+  inFrench.lang = 'fr';
+  const inEnglish = element('span', '', ' English could not be loaded: the page stays in French. Press “English” to try again.');
+  inEnglish.lang = 'en';
+  notice.replaceChildren(inFrench, inEnglish);
+  notice.hidden = false;
+  clearTimeout(languageNoticeTimer);
+  languageNoticeTimer = setTimeout(() => { notice.hidden = true; notice.replaceChildren(); }, 15_000);
 }
 
 // Translate a French interface string; {name} placeholders are filled from vars.
@@ -77,6 +92,32 @@ function setConnection(lost) {
   if (lost === connectionLost) return;
   connectionLost = lost;
   showConnection();
+}
+
+// A refresh that fails must never replace data that is already on screen. A list that loaded once keeps its last good content and a status line
+// above it says that it may be out of date and since when; only a list that never loaded shows the error in its place.
+function noticeBefore(list) {
+  const previous = list.previousElementSibling;
+  return previous?.classList.contains('stale-notice') ? previous : null;
+}
+function markFresh(list) {
+  list.dataset.loadedAt = String(Date.now());
+  noticeBefore(list)?.remove();
+}
+function forgetLoaded(list) {
+  delete list.dataset.loadedAt;
+  noticeBefore(list)?.remove();
+}
+function listFailed(list, error) {
+  if (!list.dataset.loadedAt) return list.replaceChildren(element(list.tagName === 'UL' ? 'li' : 'p', 'list-empty', error.message));
+  const time = new Date(Number(list.dataset.loadedAt)).toLocaleTimeString(lang === 'en' ? 'en-GB' : 'fr-FR', { hour: '2-digit', minute: '2-digit' });
+  let notice = noticeBefore(list);
+  if (!notice) {
+    notice = element('p', 'stale-notice');
+    notice.setAttribute('role', 'status');
+    list.before(notice);
+  }
+  notice.textContent = `⚠ ${t('Erreur :')} ${error.message} ${t('La liste affichée date de {time} et peut ne pas être à jour.', { time })}`;
 }
 
 async function api(path, method = 'GET', body) {
@@ -432,6 +473,7 @@ function clearIdentity() {
   $('#citizen-messages').replaceChildren();
   $('#staff-messages').replaceChildren();
   $('#requests-list').replaceChildren();
+  for (const list of [$('#citizen-messages'), $('#staff-messages'), $('#dashboard-todo')]) forgetLoaded(list);
   citizens = [];
   pendingDelete = null;
   pendingCitizen = null;
@@ -536,18 +578,28 @@ function renderMessages(messages) {
       note.maxLength = 300;
       note.setAttribute('aria-label', t('Message pour l’habitant, demande {id}', { id: item.id }));
       noteField.append(note);
+      const failure = element('p', 'status-failure');
+      failure.setAttribute('role', 'alert');
+      failure.hidden = true;
       select.addEventListener('change', async () => {
+        failure.hidden = true;
         select.disabled = true;
         try {
           await api(`/api/messages/${item.id}`, 'PATCH', note.value.trim() ? { status: select.value, note: note.value.trim() } : { status: select.value });
           await loadMessages();
         } catch (error) {
-          alert(error.message);
+          if (error.status === 401) return clearIdentity();
+          // The server did not take the change: the selector goes back to the state the city really holds, the typed note is kept, and the failure
+          // is said next to the control (not in a dialog).
+          select.value = item.status;
           select.disabled = false;
+          failure.textContent = `⚠ ${t('Erreur :')} ${t('Le changement d’état n’a pas été enregistré : {error}', { error: error.message })} ${t('L’état affiché est celui que la ville a enregistré.')}`;
+          failure.hidden = false;
+          select.focus();
         }
       });
       label.append(select);
-      card.append(label, noteField);
+      card.append(label, noteField, failure);
     }
     list.append(card);
   }
@@ -652,9 +704,10 @@ async function loadDashboard() {
   try {
     dashboard = await api('/api/admin/dashboard');
     renderDashboard();
+    markFresh($('#dashboard-todo'));
   } catch (error) {
     if (error.status === 401) return clearIdentity();
-    $('#dashboard-todo').replaceChildren(element('li', 'list-empty', error.message));
+    listFailed($('#dashboard-todo'), error);
   }
 }
 
@@ -1045,17 +1098,18 @@ async function toggleSupport(item) {
 
 async function loadMessages() {
   if (!user) return;
+  const list = ['agent', 'admin'].includes(user.role) ? $('#staff-messages') : $('#citizen-messages');
   try {
     const { messages } = await api('/api/messages');
     renderMessages(messages);
+    markFresh(list);
     loadDashboard();
   } catch (error) {
     if (error.status === 401) {
       clearIdentity();
       return;
     }
-    const list = ['agent', 'admin'].includes(user.role) ? $('#staff-messages') : $('#citizen-messages');
-    list.replaceChildren(element('p', 'list-empty', error.message));
+    listFailed(list, error);
   }
 }
 
@@ -2212,8 +2266,16 @@ function applyLanguage() {
 }
 $('#lang-toggle').addEventListener('click', async () => {
   lang = lang === 'en' ? 'fr' : 'en';
+  if (!(await ensureEnglish())) {
+    // English was asked for and cannot be shown: stay in French, remember French (what the page really is) and say so.
+    lang = 'fr';
+    preference('lang', 'fr');
+    applyLanguage();
+    showLanguageFailure();
+    return;
+  }
   preference('lang', lang);
-  await ensureEnglish();
+  $('#lang-status').hidden = true;
   applyLanguage();
   renderIdentity();
   renderServices();
@@ -2237,7 +2299,12 @@ $('#lang-toggle').addEventListener('click', async () => {
   loadMessages();
   loadFeed();
 });
-ensureEnglish().then(() => { applyLanguage(); updateDocumentLinks(); });
+ensureEnglish().then((ready) => {
+  // A stored English choice whose dictionary is unavailable right now: show French for this visit, keep the stored choice so the next visit tries again.
+  if (!ready) { lang = 'fr'; showLanguageFailure(); }
+  applyLanguage();
+  updateDocumentLinks();
+});
 
 $('#contrast-toggle').addEventListener('click', () => { preference('highContrast', String(document.documentElement.dataset.contrast !== 'high')); applyContrast(); });
 applyContrast();

@@ -760,6 +760,9 @@ Object.assign(english, {
   'Erreur interne.': 'Internal error.',
   // Wave 10: slow or lost connection (F59)
   'Réessayer maintenant': 'Try again now',
+  'La liste affichée date de {time} et peut ne pas être à jour.': 'The list shown dates from {time} and may be out of date.',
+  'Le changement d’état n’a pas été enregistré : {error}': 'The change of state was not saved: {error}',
+  'L’état affiché est celui que la ville a enregistré.': 'The state shown is the one the city has recorded.',
   'Connexion lente ou coupée': 'Slow or lost connection',
   'Connexion lente ou coupée. Réessayez dans un instant.': 'Slow or lost connection. Try again in a moment.',
   'Ce que vous voyez peut ne pas être à jour (dernière mise à jour : {time}).': 'What you see may be out of date (last update: {time}).',

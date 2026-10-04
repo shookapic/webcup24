@@ -202,6 +202,21 @@ async function loadFeed() {
 
 // The portal's own files (index.html, app.js, i18n.js, styles.css): compressed once per file version and kept in memory (brotli for clients that
 // accept it over HTTPS, otherwise gzip), always revalidated with an ETag so a deploy is picked up at once and an unchanged file costs a 304.
+// Content negotiation (RFC 9110, Accept-Encoding): a coding is acceptable when it is listed with a weight above 0, or when it is not listed and
+// "*" has a weight above 0. A coding refused with q=0 is never used ("gzip;q=0", "br;q=0, gzip", "identity, *;q=0"); a malformed weight counts as 0.
+function acceptsCoding(header, coding) {
+  let listed = null;
+  let wildcard = null;
+  for (const part of String(header || '').split(',')) {
+    const [rawName, ...parameters] = part.toLowerCase().split(';');
+    const name = rawName.trim();
+    const match = parameters.map((parameter) => /^\s*q\s*=\s*(.*?)\s*$/.exec(parameter)).find(Boolean);
+    const weight = match ? (/^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/.test(match[1]) ? Number(match[1]) : 0) : 1;
+    if (name === coding) listed = weight;
+    else if (name === '*') wildcard = weight;
+  }
+  return (listed ?? wildcard ?? 0) > 0;
+}
 const portalCache = new Map();
 const etagMatches = (header, etag) => String(header || '').split(',').some((candidate) => candidate.trim() === etag || candidate.trim() === '*');
 async function serveFile(request, path, response) {
@@ -230,10 +245,10 @@ async function serveFile(request, path, response) {
     entry = { etag, raw, gzip: raw.length > 1024 ? gzipSync(raw, { level: 9 }) : null, br: raw.length > 1024 ? brotliCompressSync(raw) : null };
     portalCache.set(full, entry);
   }
-  const accepted = String(request.headers['accept-encoding'] || '');
+  const accepted = request.headers['accept-encoding'];
   let body = entry.raw;
-  if (entry.br && /\bbr\b/.test(accepted)) { body = entry.br; headers['Content-Encoding'] = 'br'; }
-  else if (entry.gzip && /\bgzip\b/.test(accepted)) { body = entry.gzip; headers['Content-Encoding'] = 'gzip'; }
+  if (entry.br && acceptsCoding(accepted, 'br')) { body = entry.br; headers['Content-Encoding'] = 'br'; }
+  else if (entry.gzip && acceptsCoding(accepted, 'gzip')) { body = entry.gzip; headers['Content-Encoding'] = 'gzip'; }
   headers['Content-Length'] = body.length;
   response.writeHead(200, headers);
   response.end(body);
@@ -284,7 +299,7 @@ async function serveWorld(request, path, response) {
   }
   headers.Vary = 'Accept-Encoding';
   let body = await readFile(file);
-  if (compressible.has(extname(file).toLowerCase()) && body.length > 1024 && /\bgzip\b/.test(request.headers['accept-encoding'] || '')) {
+  if (compressible.has(extname(file).toLowerCase()) && body.length > 1024 && acceptsCoding(request.headers['accept-encoding'], 'gzip')) {
     // The playable chunk is ~4 MB of JS; compressed once per file version, then served from memory.
     const cached = gzipped.get(file);
     if (cached?.etag !== etag) gzipped.set(file, { etag, body: gzipSync(body, { level: 9 }) });
