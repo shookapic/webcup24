@@ -331,6 +331,20 @@ db.exec(`
   db.exec('CREATE INDEX IF NOT EXISTS recovery_codes_user ON recovery_codes(user_id)');
 }
 
+// D02: passkeys (WebAuthn credentials). The server keeps the public key only; the private key never leaves the person's device.
+db.exec(`CREATE TABLE IF NOT EXISTS passkeys (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  credential_id TEXT NOT NULL UNIQUE,
+  public_key TEXT NOT NULL,
+  alg INTEGER NOT NULL,
+  sign_count INTEGER NOT NULL DEFAULT 0,
+  label TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_used_at TEXT
+)`);
+db.exec('CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys(user_id)');
+
 // F82: a durable fingerprint of what a resident sent (messages and concerns), so the same text sent again within minutes (a retry, a script) is recognised
 // even after a restart. Additive: old rows keep an empty fingerprint and are never matched.
 for (const table of ['messages', 'concerns']) {

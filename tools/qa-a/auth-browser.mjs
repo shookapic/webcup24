@@ -1,5 +1,6 @@
-// F53 (second verification step) in real Chrome on a disposable server: set-up, recovery codes, the two-step sign-in, a recovery code, removal, English, staff reset,
-// axe on every state that appears. Later sections of this file cover D02 (passkeys) and F71 (access without e-mail). A ports 3200-3209.
+// F53 (second verification step) and D02 (passkeys) in real Chrome on a disposable server. F53: set-up, recovery codes, the two-step sign-in, a recovery code, removal, English,
+// staff reset. D02 / F71: a CDP virtual authenticator (a real WebAuthn ceremony in the browser) creates an account without password or e-mail, signs in, adds and removes
+// passkeys, proves itself for sensitive actions, deletes the account; the access code. axe on every state that appears. A ports 3200-3209.
 // Usage: node tools/qa-a/auth-browser.mjs   (needs puppeteer-core and axe-core: npm i --no-save puppeteer-core axe-core)
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -177,6 +178,140 @@ await s.page.evaluate(() => [...document.querySelectorAll('#citizens-list li but
 await s.page.waitForFunction(() => /Vérification en deux étapes retirée pour Yan Perdu/.test(document.querySelector('#citizens-status')?.textContent || ''), { timeout: 8000 }).catch(() => {});
 check('staff must give a reason; afterwards the status says it is done and the resident can sign in with the password alone again', /Vérification en deux étapes retirée pour Yan Perdu\. Ses sessions sont fermées\./.test(await textOf(s.page, '#citizens-status')) && (await call('/api/auth/login', 'POST', { email: 'yan@auth.test', password: PW })).data.user?.email === 'yan@auth.test', await textOf(s.page, '#citizens-status'));
 await s.context.close();
+
+console.log('\n# D02. passkeys in real Chrome (a virtual authenticator answers the real WebAuthn ceremony)');
+async function openWithAuthenticator(cookie, locale = 'fr') {
+  const session = await open(cookie, locale);
+  const client = await (session.page.createCDPSession ? session.page.createCDPSession() : session.page.target().createCDPSession());
+  await client.send('WebAuthn.enable');
+  const { authenticatorId } = await client.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+  const credentials = async () => (await client.send('WebAuthn.getCredentials', { authenticatorId })).credentials;
+  return { ...session, client, credentials, authenticatorId };
+}
+s = await openWithAuthenticator(null);
+const alt = await s.page.evaluate(() => ({ login: !document.querySelector('#login-alt').hidden, signup: !document.querySelector('#passkey-signup-form').hidden, label: document.querySelector('#login-form label').textContent.trim() }));
+check('the sign-in form offers a passkey button and the page offers account creation without a password; the identifier field says "e-mail ou code d’accès"', alt.login && alt.signup && /Adresse e-mail ou code d’accès/.test(alt.label), JSON.stringify(alt));
+await axe(s.page, 'sign-in and sign-up with passkey offered');
+await type(s.page, '#passkey-signup-form [name=name]', 'Sam Sans Mot de Passe');
+await s.page.click('#passkey-signup-form button[type=submit]');
+await s.page.waitForFunction(() => !document.querySelector('#access-code-notice').hidden, { timeout: 15000 }).catch(() => {});
+const signedUp = await s.page.evaluate(() => ({ member: !document.querySelector('#member-area').hidden, name: document.querySelector('#member-name').textContent, code: document.querySelector('#access-code-value').textContent, focus: document.activeElement?.id, status: document.querySelector('#passkey-signup-status').textContent.trim() }));
+const samCode = signedUp.code;
+check('a real WebAuthn ceremony creates an account with only a name: signed in, the access code shown and focused, no password and no e-mail anywhere', signedUp.member && /Sam Sans Mot de Passe/.test(signedUp.name) && /^TN-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(samCode) && signedUp.focus === 'access-code-notice', JSON.stringify(signedUp));
+check('the virtual device now holds exactly one resident credential for this site', (await s.credentials()).length === 1 && (await s.credentials())[0].isResidentCredential === true && (await s.credentials())[0].rpId === 'localhost');
+await (await s.page.$('#access-code-notice')).screenshot({ path: join(shots, 'access-code.png') });
+await axe(s.page, 'access code notice');
+await s.page.click('#access-code-dismiss');
+await s.page.evaluate(() => document.querySelector('#factors-panel').scrollIntoView());
+await s.page.waitForFunction(() => document.querySelectorAll('#passkeys-body .passkey-item').length === 1, { timeout: 8000 }).catch(() => {});
+const panel = await s.page.evaluate(() => ({ identity: document.querySelector('#identity-line').textContent, items: [...document.querySelectorAll('#passkeys-body .passkey-item')].map((li) => li.textContent), state: document.querySelector('#factors-state').textContent }));
+check('"Sécurité de mon compte" keeps the access code, lists the passkey with its dates, and the notice is gone after "J’ai noté mon code"', panel.identity.includes(samCode) && panel.items.length === 1 && /ajoutée le \d{2}\/\d{2}\/\d{4}/.test(panel.items[0]) && await s.page.$eval('#access-code-notice', (n) => n.hidden), JSON.stringify(panel));
+await (await s.page.$('#factors-panel')).screenshot({ path: join(shots, 'passkeys-panel.png') });
+await axe(s.page, 'passkey list');
+const lastRemoval = await (async () => { await s.page.evaluate(() => document.querySelector('#passkeys-body .passkey-item button').click()); await wait(1500); return textOf(s.page, '#passkeys-status'); })();
+check('the only way into the account cannot be removed by accident: the page says so (409 message), nothing is removed', /Erreur : C’est votre seul moyen de connexion/.test(lastRemoval) && (await s.credentials()).length === 1, lastRemoval);
+await s.page.evaluate(() => document.querySelector('#logout-button').click());
+await s.page.waitForFunction(() => !document.querySelector('#guest-area').hidden, { timeout: 8000 });
+await s.page.click('#passkey-login');
+await s.page.waitForFunction(() => !document.querySelector('#member-area').hidden, { timeout: 15000 }).catch(() => {});
+const passkeyIn = await s.page.evaluate(() => ({ member: !document.querySelector('#member-area').hidden, name: document.querySelector('#member-name').textContent, focus: document.activeElement?.id, status: document.querySelector('#login-status').textContent.trim() }));
+check('"Se connecter avec une clé d’accès" signs in with nothing typed (focus on the member name)', passkeyIn.member && /Sam Sans Mot de Passe/.test(passkeyIn.name), JSON.stringify(passkeyIn));
+await s.page.evaluate(() => document.querySelector('#factors-panel').scrollIntoView());
+await s.page.waitForFunction(() => document.querySelector('#passkeys-body .passkey-item'), { timeout: 8000 });
+await clickButton(s.page, '#passkeys-body', 'Ajouter une clé d’accès');
+await wait(2500);
+const sameDevice = await textOf(s.page, '#passkeys-status');
+check('adding a second passkey on the SAME device is refused by the device (one credential per account and device); the page says so in plain words, with the proof step done first, and nothing is added', /^⚠ Erreur : Cet appareil a déjà une clé d’accès pour ce compte\./.test(sameDevice) && (await s.credentials()).length === 1 && (await s.page.$$eval('#passkeys-body .passkey-item', (n) => n.length)) === 1, sameDevice);
+await clickButton(s.page, '#factors-body', 'Activer la vérification en deux étapes');
+await s.page.waitForSelector('#factors-body .factors-secret', { timeout: 15000 }).catch(() => {});
+check('the second step can be set up on a password-less account too: the passkey is the proof', Boolean(await s.page.$('#factors-body .factors-secret')), await textOf(s.page, '#factors-status'));
+await clickButton(s.page, '#factors-body', 'Annuler');
+await s.page.evaluate(() => document.querySelector('#delete-form').scrollIntoView());
+const deleteForm = await s.page.evaluate(() => ({ field: document.querySelector('#delete-password-field').hidden, note: !document.querySelector('#delete-proof-note').hidden, required: document.querySelector('#delete-form [name=password]').required }));
+check('the delete form does not ask a password-less account for a password (it says it will ask for the passkey)', deleteForm.field && deleteForm.note && !deleteForm.required, JSON.stringify(deleteForm));
+await s.page.click('#delete-form button[type=submit]');
+await s.page.waitForFunction(() => !document.querySelector('#guest-area').hidden, { timeout: 15000 }).catch(() => {});
+check('confirming with the passkey deletes the account and signs out, with the confirmation', /Votre compte a été supprimé/.test(await textOf(s.page, '#account-status')) && !(await s.page.$eval('#guest-area', (n) => n.hidden)), await textOf(s.page, '#account-status'));
+check('and the deleted account\'s access code no longer signs in anything', (await call('/api/auth/login', 'POST', { email: samCode, password: PW })).status === 401);
+check('no browser dialog and no page error during the whole passkey flow', s.log.dialogs.length === 0 && s.log.errors.length === 0, JSON.stringify([s.log.dialogs, s.log.errors]));
+await s.context.close();
+
+console.log('\n# D02. a password account adds a passkey; F71: no e-mail, an access code');
+const mia = await call('/api/auth/register', 'POST', { name: 'Mia Mot de Passe', email: 'mia@auth.test', password: PW });
+s = await openWithAuthenticator(mia.cookie);
+await s.page.evaluate(() => document.querySelector('#factors-panel').scrollIntoView());
+await s.page.waitForFunction(() => document.querySelector('#passkeys-body button'), { timeout: 8000 });
+await clickButton(s.page, '#passkeys-body', 'Ajouter une clé d’accès');
+await s.page.waitForSelector('#passkeys-body input[type=password]');
+await axe(s.page, 'add a passkey: password step');
+await type(s.page, '#passkeys-body input[type=password]', 'wrong-password-123');
+await s.page.keyboard.press('Enter');
+await s.page.waitForFunction(() => /Erreur : Mot de passe incorrect/.test(document.querySelector('#factors-status')?.textContent || ''), { timeout: 6000 }).catch(() => {});
+check('adding a passkey asks for the password; a wrong one is refused with the error cue and no device prompt', /Erreur : Mot de passe incorrect/.test(await textOf(s.page, '#factors-status')) && (await s.credentials()).length === 0, await textOf(s.page, '#factors-status'));
+await type(s.page, '#passkeys-body input[type=password]', PW);
+await s.page.keyboard.press('Enter');
+await s.page.waitForFunction(() => document.querySelectorAll('#passkeys-body .passkey-item').length === 1, { timeout: 15000 }).catch(() => {});
+check('with the right password the device is asked, the passkey is listed', (await s.credentials()).length === 1 && (await s.page.$$eval('#passkeys-body .passkey-item', (n) => n.length)) === 1, await textOf(s.page, '#passkeys-status'));
+await s.page.waitForFunction(() => /Une clé d’accès a été ajoutée à votre compte/.test(document.querySelector('#notices-list')?.textContent || ''), { timeout: 20000 }).catch(async () => { await s.page.evaluate('refreshAll()'); await wait(2000); });
+check('and a news line records it (so a stranger adding one is seen)', /Une clé d’accès a été ajoutée à votre compte/.test(await textOf(s.page, '#notices-list')));
+// a second device (another virtual authenticator) adds its own passkey with the password, then the first one is removed with the password
+await s.client.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'usb', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+await s.client.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId: s.authenticatorId }); // the first device is no longer present: only the second can answer
+await clickButton(s.page, '#passkeys-body', 'Ajouter une clé d’accès');
+await s.page.waitForSelector('#passkeys-body input[type=password]');
+await type(s.page, '#passkeys-body input[type=password]', PW);
+await s.page.keyboard.press('Enter');
+await s.page.waitForFunction(() => document.querySelectorAll('#passkeys-body .passkey-item').length === 2 || /Erreur/.test(document.querySelector('#passkeys-status')?.textContent || ''), { timeout: 15000 }).catch(() => {});
+const twoKeys = await s.page.evaluate(() => ({ items: document.querySelectorAll('#passkeys-body .passkey-item').length, status: document.querySelector('#passkeys-status').textContent.trim() }));
+check('a second passkey (another device) can be added with the password: two entries and a confirmation', twoKeys.items === 2 && /^✓ Clé d’accès ajoutée/.test(twoKeys.status), JSON.stringify(twoKeys));
+await s.page.evaluate(() => document.querySelector('#passkeys-body .passkey-item button').click());
+await s.page.waitForSelector('#passkeys-body input[type=password]');
+const removeHelp = await textOf(s.page, '#passkeys-body');
+await type(s.page, '#passkeys-body input[type=password]', 'wrong-password-123');
+await s.page.keyboard.press('Enter');
+await s.page.waitForFunction(() => /Erreur : Mot de passe incorrect/.test(document.querySelector('#factors-status')?.textContent || '') && !document.querySelector('#passkeys-body form button[type=submit]').disabled, { timeout: 6000 }).catch(() => {});
+const wrongRemoval = await textOf(s.page, '#factors-status');
+await type(s.page, '#passkeys-body input[type=password]', PW);
+await s.page.keyboard.press('Enter');
+await s.page.waitForFunction(() => document.querySelectorAll('#passkeys-body .passkey-item').length === 1, { timeout: 8000 }).catch(() => {});
+check('removing one asks for the password (a wrong one is refused), then removes it, and says so', /Pour retirer « .+ », saisissez votre mot de passe\./.test(removeHelp) && /\(2\)/.test(removeHelp) && /Mot de passe incorrect/.test(wrongRemoval) && (await s.page.$$eval('#passkeys-body .passkey-item', (n) => n.length)) === 1 && /^✓ Clé d’accès retirée\./.test(await textOf(s.page, '#passkeys-status')), JSON.stringify([removeHelp, wrongRemoval, await s.page.$eval('#passkeys-body .passkey-item', (n) => n.length), await textOf(s.page, '#passkeys-status'), await textOf(s.page, '#factors-status')]));
+await s.page.evaluate(() => document.querySelector('#logout-button').click());
+await s.page.waitForFunction(() => !document.querySelector('#guest-area').hidden, { timeout: 8000 });
+await s.page.click('#passkey-login');
+await s.page.waitForFunction(() => !document.querySelector('#member-area').hidden, { timeout: 15000 }).catch(() => {});
+check('Mia signs in with the passkey without typing her address or password', /Mia Mot de Passe/.test(await textOf(s.page, '#member-name')), await textOf(s.page, '#login-status'));
+await s.page.click('#lang-toggle');
+await s.page.waitForFunction(() => document.querySelector('#passkeys-title')?.textContent === 'Passkeys', { timeout: 8000 }).catch(() => {});
+const passkeysEnglish = await s.page.evaluate(() => ({ title: document.querySelector('#passkeys-title').textContent, add: [...document.querySelectorAll('#passkeys-body button')].map((b) => b.textContent), glossary: [...document.querySelectorAll('.glossary-list dt')].map((d) => d.textContent).filter((x) => /Passkey|Access code/.test(x)) }));
+check('in English the passkey panel and the glossary entries read in English', passkeysEnglish.title === 'Passkeys' && passkeysEnglish.add.includes('Add a passkey') && passkeysEnglish.glossary.length === 2, JSON.stringify(passkeysEnglish));
+await s.context.close();
+
+// F71: registering without an e-mail address (password), then signing in with the code
+s = await open(null);
+await type(s.page, '#register-form [name=name]', 'Lou Sans Mail');
+await type(s.page, '#register-form [name=password]', PW);
+await s.page.click('#register-form button[type=submit]');
+await s.page.waitForFunction(() => !document.querySelector('#access-code-notice').hidden, { timeout: 12000 }).catch(() => {});
+const louCode = await textOf(s.page, '#access-code-value');
+check('the e-mail field is optional: a name and a password create the account and show an access code, focused', /^TN-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(louCode) && await s.page.evaluate(() => document.activeElement?.id === 'access-code-notice'), louCode);
+await s.page.evaluate(() => document.querySelector('#logout-button').click());
+await s.page.waitForFunction(() => !document.querySelector('#guest-area').hidden, { timeout: 8000 });
+await type(s.page, '#login-form [name=email]', louCode.toLowerCase());
+await type(s.page, '#login-form [name=password]', PW);
+await s.page.click('#login-form button[type=submit]');
+await s.page.waitForFunction(() => !document.querySelector('#member-area').hidden, { timeout: 8000 }).catch(() => {});
+check('the code, typed in lower case in the usual field with the password, signs in', /Lou Sans Mail/.test(await textOf(s.page, '#member-name')), await textOf(s.page, '#login-status'));
+await s.context.close();
+
+// a browser that has no WebAuthn: nothing about passkeys is offered and nothing breaks
+const plain = await browser.createBrowserContext();
+const plainPage = await plain.newPage();
+await plainPage.evaluateOnNewDocument(() => { delete window.PublicKeyCredential; });
+const plainErrors = [];
+plainPage.on('pageerror', (e) => plainErrors.push(e.message));
+await plainPage.goto(base + '/', { waitUntil: 'networkidle0' });
+check('without WebAuthn support the passkey button and the passwordless sign-up are not shown, and the page still works', await plainPage.evaluate(() => document.querySelector('#login-alt').hidden && document.querySelector('#passkey-signup-form').hidden && !document.querySelector('#login-form').hidden) && plainErrors.length === 0, plainErrors.join(' | '));
+await plain.close();
 
 await browser.close();
 server.kill();

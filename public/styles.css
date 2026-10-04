@@ -153,6 +153,14 @@ button,a,input,select{-webkit-tap-highlight-color:transparent}
 .recovery-codes{list-style:decimal inside;columns:2;gap:24px;font-family:ui-monospace,Consolas,monospace;font-size:1.0625rem;line-height:2;margin:10px 0;padding:12px;border:1px solid #ffffff44;background:#050f1b}
 .factors-warning{padding:10px 12px;border:2px solid #ffda87;color:#ffe9ae;font-weight:700}
 .second-links{display:grid;gap:6px;margin:6px 0}
+.login-alt{display:grid;gap:8px;margin-top:14px}
+.or-line{display:flex;align-items:center;gap:12px;margin:0;color:#a7c2cc;font-size:.8125rem}
+.or-line::before,.or-line::after{content:"";flex:1;border-top:1px solid #ffffff33}
+.access-code{display:inline-block;padding:10px 16px;border:2px solid #7fe2cf;background:#050f1b;font-family:ui-monospace,Consolas,monospace;font-size:1.5rem;letter-spacing:.08em;user-select:all}
+.access-code-notice{border-color:#7fe2cf}
+.identity-line{font-weight:700;overflow-wrap:anywhere}
+.passkey-list{list-style:none;padding:0;margin:10px 0;display:grid;gap:10px}
+.passkey-item{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:10px 12px;border:1px solid #ffffff33;background:#091d31}
 .message-badges{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
 .message-priority{font-size:.6875rem;white-space:nowrap;padding:5px 7px;border-radius:3px;font-weight:800;background:#102539;color:#ffe4dc;border:2px solid #ffe4dc}
 .priority-urgent{background:#8a1f11;color:#fff;border-color:#fff}

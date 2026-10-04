@@ -519,6 +519,10 @@ function clearIdentity() {
   drafts.clear();
   securityState = null;
   factorsView = { mode: 'status' };
+  passkeysView = { mode: 'list' };
+  $('#access-code-notice').hidden = true;
+  $('#passkeys-body').replaceChildren();
+  $('#identity-line').textContent = '';
   $('#factors-body').replaceChildren();
   $('#factors-state').textContent = '';
   citizens = [];
@@ -891,6 +895,8 @@ const noticeLines = {
   'device.new': ['Connexion à votre compte depuis un nouvel appareil : {label}.', 'Si c’était vous, il n’y a rien à faire. Sinon, retirez cet appareil dans « Mes appareils » : ses connexions sont fermées. Les services municipaux peuvent aussi changer votre mot de passe.'],
   'security.recovery_used': ['Un code de secours a servi à vous connecter. Il vous en reste {label}.', 'Si ce n’était pas vous, changez votre mot de passe et générez de nouveaux codes dans « Sécurité de mon compte ».'],
   'security.2fa_off': ['La vérification en deux étapes de votre compte a été désactivée.', 'Si ce n’était pas vous, changez votre mot de passe et réactivez-la dans « Sécurité de mon compte ».'],
+  'security.passkey_added': ['Une clé d’accès a été ajoutée à votre compte : {label}.', 'Si ce n’était pas vous, retirez-la dans « Sécurité de mon compte » et changez votre mot de passe.'],
+  'security.passkey_removed': ['Une clé d’accès a été retirée de votre compte : {label}.', 'Si ce n’était pas vous, changez votre mot de passe.'],
   'security.2fa_reset': ['Un agent de la ville a retiré la vérification en deux étapes de votre compte après une demande de récupération.', 'Vous pouvez la réactiver dans « Sécurité de mon compte ».'],
   'concern.read': ['Votre inquiétude {label} a été lue par un agent.', 'Vous n’avez rien à faire : une réponse peut suivre.'],
   'concern.answered': ['Votre inquiétude {label} a reçu une réponse.', 'Lisez la réponse ci-dessous ou dans « Mes inquiétudes envoyées ».'],
@@ -2423,6 +2429,8 @@ function factorForm(fields, submitLabel, onSubmit, onCancel) {
     event.preventDefault();
     submit.disabled = true;
     form.setAttribute('aria-busy', 'true');
+    setFormStatus('#factors-status', ''); // an earlier error is not left standing while the new attempt runs
+    setFormStatus('#passkeys-status', '');
     try {
       await onSubmit(Object.fromEntries(fields.map(({ input }) => [input.name, input.value.trim()])));
     } catch (error) {
@@ -2451,6 +2459,7 @@ function renderFactors() {
   $('#factors-state').textContent = enabled
     ? t('Vérification en deux étapes : activée depuis le {date}. Codes de secours restants : {n}.', { date: cityTime(since).split(' ')[0] || '', n: left })
     : t(staff ? 'Vérification en deux étapes : désactivée. Elle est fortement conseillée pour un compte d’agent ou d’administrateur.' : 'Vérification en deux étapes : désactivée.');
+  renderPasskeys();
   const needPassword = securityState.has_password;
   const passwordField = () => factorField('Mot de passe', 'password', { type: 'password', autocomplete: 'current-password' });
   const mode = factorsView.mode;
@@ -2459,7 +2468,7 @@ function renderFactors() {
     const actions = element('div', 'factors-actions');
     const button = (label, handler) => { const b = element('button', 'button', t(label)); b.type = 'button'; b.addEventListener('click', handler); actions.append(b); return b; };
     if (!enabled) {
-      const first = button('Activer la vérification en deux étapes', async () => { if (needPassword) setFactorsView({ mode: 'setup-password' }); else await startFactorSetup({}); });
+      const first = button('Activer la vérification en deux étapes', async () => { if (needPassword) setFactorsView({ mode: 'setup-password' }); else { try { await startFactorSetup({ proof: await reauthProof() }); } catch (error) { reportError('#factors-status', error); } } });
       first.classList.add('button-primary');
       first.dataset.first = '';
     } else {
@@ -2534,7 +2543,7 @@ function renderFactors() {
   const renew = mode === 'renew';
   body.append(element('p', '', t(renew ? 'Les anciens codes de secours seront annulés. Prouvez que c’est bien vous.' : 'La protection sera retirée de votre compte : un mot de passe suffira de nouveau pour vous connecter. Prouvez que c’est bien vous.')),
     factorForm(fields, renew ? 'Générer de nouveaux codes' : 'Désactiver', async (values) => {
-      const data = await api(renew ? '/api/me/2fa/recovery-codes' : '/api/me/2fa/disable', 'POST', values);
+      const data = await api(renew ? '/api/me/2fa/recovery-codes' : '/api/me/2fa/disable', 'POST', needPassword ? values : { ...values, proof: await reauthProof() });
       await loadFactors();
       if (renew) setFactorsView({ mode: 'codes', codes: data.recovery_codes }, t('Nouveaux codes de secours : les anciens ne fonctionnent plus.'));
       else setFactorsView({ mode: 'status' }, t('La vérification en deux étapes est désactivée.'));
@@ -2548,6 +2557,77 @@ async function startFactorSetup(values) {
     if (error.status === 401) return clearIdentity();
     reportError('#factors-status', error);
     throw error;
+  }
+}
+
+// ---- D02: the passkeys of the account, in "Sécurité de mon compte".
+let passkeysView = { mode: 'list' };
+function renderPasskeys() {
+  const body = $('#passkeys-body');
+  body.replaceChildren();
+  $('#identity-line').textContent = securityState.access_code ? t('Votre identifiant de connexion est votre code d’accès : {code}. Notez-le : il remplace l’adresse e-mail.', { code: securityState.identifier }) : '';
+  const deletePassword = $('#delete-password-field');
+  deletePassword.hidden = !securityState.has_password;
+  deletePassword.querySelector('input').disabled = !securityState.has_password;
+  deletePassword.querySelector('input').required = securityState.has_password;
+  $('#delete-proof-note').hidden = securityState.has_password;
+  if (!passkeysSupported()) { body.append(element('p', '', t('Cet appareil ou ce navigateur ne gère pas les clés d’accès.'))); return; }
+  const { passkeys, has_password: hasPassword } = securityState;
+  const list = element('ul', 'passkey-list');
+  for (const item of passkeys) {
+    const row = element('li', 'passkey-item');
+    row.append(element('strong', '', item.label), element('span', '', ` · ${t('ajoutée le {date}', { date: cityTime(item.created_at).split(' ')[0] })}${item.last_used_at ? ` · ${t('utilisée pour la dernière fois le {date}', { date: cityTime(item.last_used_at).split(' ')[0] })}` : ''}`));
+    const remove = element('button', 'button', t('Retirer'));
+    remove.type = 'button';
+    remove.setAttribute('aria-label', t('Retirer la clé d’accès {label}', { label: item.label }));
+    remove.addEventListener('click', async () => {
+      if (hasPassword) { passkeysView = { mode: 'remove', id: item.id, label: item.label }; renderPasskeys(); $('#passkeys-body input')?.focus(); return; }
+      await removePasskey(item.id, {});
+    });
+    row.append(' ', remove);
+    list.append(row);
+  }
+  body.append(passkeys.length ? list : element('p', '', t('Aucune clé d’accès n’est enregistrée.')));
+  if (passkeysView.mode === 'add' || passkeysView.mode === 'remove') {
+    const field = factorField('Mot de passe', 'password', { type: 'password', autocomplete: 'current-password' });
+    field.input.dataset.first = '';
+    const adding = passkeysView.mode === 'add';
+    body.append(element('p', '', t(adding ? 'Pour votre sécurité, saisissez votre mot de passe, puis suivez les instructions de votre appareil.' : 'Pour retirer « {label} », saisissez votre mot de passe.', { label: passkeysView.label })),
+      factorForm([field], adding ? 'Ajouter cette clé d’accès' : 'Retirer', async (values) => {
+        if (adding) await addPasskey(values); else await removePasskey(passkeysView.id, values);
+      }, () => { passkeysView = { mode: 'list' }; renderPasskeys(); }));
+    return;
+  }
+  const add = element('button', 'button button-primary', t('Ajouter une clé d’accès'));
+  add.type = 'button';
+  add.addEventListener('click', async () => {
+    if (hasPassword) { passkeysView = { mode: 'add' }; renderPasskeys(); $('#passkeys-body input')?.focus(); return; }
+    try { await addPasskey({}); } catch (error) { reportError('#passkeys-status', error); }
+  });
+  body.append(add);
+}
+async function addPasskey(values) {
+  setFormStatus('#passkeys-status', t('Suivez les instructions de votre appareil…'));
+  const proof = securityState.has_password ? values : { proof: await reauthProof() };
+  const options = await api('/api/me/passkeys/options', 'POST', proof);
+  const credential = await createCredential(options);
+  await api('/api/me/passkeys', 'POST', credential);
+  passkeysView = { mode: 'list' };
+  await loadFactors();
+  setFormStatus('#passkeys-status', t('Clé d’accès ajoutée. Vous pouvez maintenant vous connecter avec.'));
+  $('#passkeys-body button')?.focus();
+}
+async function removePasskey(id, values) {
+  try {
+    const proof = securityState.has_password ? values : { proof: await reauthProof() };
+    await api(`/api/me/passkeys/${id}`, 'DELETE', proof);
+    passkeysView = { mode: 'list' };
+    await loadFactors();
+    setFormStatus('#passkeys-status', t('Clé d’accès retirée.'));
+  } catch (error) {
+    if (error.status === 401) return clearIdentity();
+    reportError('#passkeys-status', error);
+    if (securityState.has_password) throw error;
   }
 }
 
@@ -2575,11 +2655,98 @@ $('#register-form').addEventListener('submit', async (event) => {
     form.reset();
     setFormStatus('#register-status', t('Compte créé. Bienvenue !'));
     await afterAuthentication(data.user);
-    $('#member-name').focus();
+    if (data.access_code) { showAccessCode(data.access_code); $('#access-code-notice').focus(); } else $('#member-name').focus();
   } catch (error) {
     reportError('#register-status', error);
   }
 });
+
+// ---- D02: passkeys (WebAuthn). The browser talks to the device; the server only ever sees public keys and signatures.
+const passkeysSupported = () => Boolean(window.PublicKeyCredential && navigator.credentials?.create && navigator.credentials?.get);
+const toBuffer = (value) => {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4);
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0)).buffer;
+};
+const fromBuffer = (buffer) => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function passkeyFailure(error) {
+  const known = {
+    NotAllowedError: 'La vérification a été annulée ou a pris trop de temps. Vous pouvez recommencer.',
+    InvalidStateError: 'Cet appareil a déjà une clé d’accès pour ce compte.',
+    SecurityError: 'Les clés d’accès demandent une connexion sécurisée (https).',
+    NotSupportedError: 'Cet appareil ou ce navigateur ne prend pas en charge les clés d’accès.',
+    AbortError: 'La vérification a été interrompue. Vous pouvez recommencer.',
+  };
+  if (error?.name in known) return Object.assign(new Error(t(known[error.name])), { passkey: true });
+  return error;
+}
+async function createCredential(options) {
+  try {
+    const credential = await navigator.credentials.create({ publicKey: { ...options, challenge: toBuffer(options.challenge), user: { ...options.user, id: toBuffer(options.user.id) }, excludeCredentials: (options.excludeCredentials || []).map((item) => ({ ...item, id: toBuffer(item.id) })) } });
+    return { id: credential.id, type: credential.type, response: { clientDataJSON: fromBuffer(credential.response.clientDataJSON), attestationObject: fromBuffer(credential.response.attestationObject) } };
+  } catch (error) { throw passkeyFailure(error); }
+}
+async function getAssertion(options) {
+  try {
+    const credential = await navigator.credentials.get({ publicKey: { challenge: toBuffer(options.challenge), rpId: options.rpId, timeout: options.timeout, userVerification: options.userVerification, allowCredentials: (options.allowCredentials || []).map((item) => ({ ...item, id: toBuffer(item.id) })) } });
+    const response = credential.response;
+    return { id: credential.id, type: credential.type, response: { clientDataJSON: fromBuffer(response.clientDataJSON), authenticatorData: fromBuffer(response.authenticatorData), signature: fromBuffer(response.signature), userHandle: response.userHandle ? fromBuffer(response.userHandle) : null } };
+  } catch (error) { throw passkeyFailure(error); }
+}
+// For an account with no password, a sensitive action is confirmed by a fresh passkey assertion made for that purpose.
+const reauthProof = async () => getAssertion(await api('/api/me/reauth-options', 'POST', {}));
+
+// F71: an account made without an e-mail address gets an access code, shown once and kept in "Sécurité de mon compte".
+function showAccessCode(code) {
+  $('#access-code-value').textContent = code;
+  $('#access-code-notice').hidden = false;
+}
+$('#access-code-dismiss').addEventListener('click', () => { $('#access-code-notice').hidden = true; $('#member-name').focus(); });
+
+async function afterPasskeyAuth(data, statusSelector) {
+  setLoginStep(false);
+  setFormStatus(statusSelector, t('Connexion réussie.'));
+  await afterAuthentication(data.user);
+  if (data.access_code) { showAccessCode(data.access_code); $('#access-code-notice').focus(); } else $('#member-name').focus();
+}
+$('#passkey-login').addEventListener('click', async () => {
+  const button = $('#passkey-login');
+  button.disabled = true;
+  setFormStatus('#login-status', t('Suivez les instructions de votre appareil…'));
+  try {
+    const options = await api('/api/auth/passkey/options', 'POST', {});
+    const assertion = await getAssertion(options);
+    const data = await api('/api/auth/passkey/login', 'POST', assertion);
+    $('#login-form').reset();
+    await afterPasskeyAuth(data, '#login-status');
+  } catch (error) {
+    reportError('#login-status', error);
+  } finally {
+    button.disabled = false;
+  }
+});
+$('#passkey-signup-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type=submit]');
+  submit.disabled = true;
+  setFormStatus('#passkey-signup-status', t('Suivez les instructions de votre appareil…'));
+  try {
+    const data = await guardedSend('register', form, async (guard) => {
+      const options = await api('/api/auth/passkey/signup-options', 'POST', { name: formValue(form, 'name'), email: formValue(form, 'email') });
+      const credential = await createCredential(options);
+      return api('/api/auth/passkey/signup', 'POST', { ...credential, ...guard });
+    });
+    form.reset();
+    setFormStatus('#passkey-signup-status', t('Compte créé. Bienvenue !'));
+    await afterPasskeyAuth(data, '#passkey-signup-status');
+  } catch (error) {
+    reportError('#passkey-signup-status', error);
+  } finally {
+    submit.disabled = false;
+  }
+});
+$('#passkey-signup-form').addEventListener('focusin', () => warmFormToken('register'));
+if (passkeysSupported()) { $('#login-alt').hidden = false; $('#passkey-signup-form').hidden = false; }
 
 // F53: an account with a second step gets a ticket after the right password; the code (or a recovery code) then opens the session.
 let loginTicket = null;
@@ -2588,6 +2755,7 @@ function setLoginStep(second) {
   $('#login-first').hidden = second;
   $('#login-second').hidden = !second;
   for (const input of form.querySelectorAll('#login-first input')) input.disabled = second;
+  $('#login-alt').hidden = second || !passkeysSupported();
   const code = form.elements.code;
   code.disabled = !second;
   code.required = second;
@@ -2695,7 +2863,7 @@ $('#delete-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    await api('/api/me', 'DELETE', { password: passwordValue(form) });
+    await api('/api/me', 'DELETE', securityState && !securityState.has_password ? { proof: await reauthProof() } : { password: passwordValue(form) });
     form.reset();
     setFormStatus('#delete-status', '');
     clearIdentity();

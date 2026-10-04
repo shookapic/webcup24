@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +10,7 @@ import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from
 import { begin, charge, formSummary, guarded, issue, minAgeMs, note as noteForm } from './guard.mjs';
 import { cityStamp, pickLang, personalHtml, receiptHtml, recapCsv, recapHtml } from './recap.mjs';
 import { groupSimilar } from './similar.mjs';
-import { checkTotp, groupSecret, hashRecovery, looksLikeRecovery, newRecoveryCodes, newSecret, otpauthUri } from './factors.mjs';
+import { checkTotp, groupSecret, hashRecovery, looksLikeRecovery, newChallenge, newRecoveryCodes, newSecret, otpauthUri, rpIdOf, verifyAssertion, verifyRegistration } from './factors.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -140,6 +140,37 @@ const SECOND_STEP_MS = 5 * 60_000;
 setInterval(() => { const now = Date.now(); for (const [key, value] of secondSteps) if (value.expires < now) secondSteps.delete(key); }, 60_000).unref();
 const factorLimit = new Limiter(10, 10 * 60_000); // set-up, activation, removal and new recovery codes, per account
 const ISSUER = 'Terra Nova';
+// D02: WebAuthn challenges, single use, five minutes, bound to what they were issued for. In memory.
+const challenges = new Map(); // challenge -> { purpose, userId, name, email, handle, origin, expires }
+const passkeyFailures = new Limiter(30, 15 * 60_000); // per address: unknown or invalid passkey answers
+const signups = new Limiter(30, 10 * 60_000); // per address: passkey sign-up attempts
+setInterval(() => { const now = Date.now(); for (const [key, value] of challenges) if (value.expires < now) challenges.delete(key); }, 60_000).unref();
+function putChallenge(entry) {
+  if (challenges.size > 5000) fail(503, 'Le service est très sollicité. Réessayez dans un instant.');
+  const challenge = newChallenge();
+  challenges.set(challenge, { ...entry, expires: Date.now() + 5 * 60_000 });
+  return challenge;
+}
+function takeChallenge(challenge, purpose, origin) {
+  const entry = typeof challenge === 'string' ? challenges.get(challenge) : null;
+  if (!entry || entry.expires < Date.now() || entry.purpose !== purpose || entry.origin !== origin) fail(400, 'La vérification a expiré ou a déjà été utilisée. Recommencez.', { code: 'challenge-expired' });
+  challenges.delete(challenge); // single use, whatever happens next
+  return entry;
+}
+// The page's own origin: the browser tells it in Origin, and the portal's origin check already ties it to Host. WebAuthn needs https (or localhost); the credential is
+// scoped to this host name by the device itself.
+function webauthnOrigin(request) {
+  let origin;
+  try { origin = new URL(request.headers.origin); } catch { fail(400, 'Cette opération doit être lancée depuis la page du portail.'); }
+  if (origin.host !== request.headers.host || (origin.protocol !== 'https:' && origin.hostname !== 'localhost')) fail(400, 'Les clés d’accès demandent une connexion sécurisée (https).');
+  return origin.origin;
+}
+const userHandleOf = (id) => createHmac('sha256', receiptKey).update(`webauthn-user:${id}`).digest('base64url');
+const clientChallenge = (response) => { try { return JSON.parse(Buffer.from(String(response?.clientDataJSON), 'base64url').toString('utf8')).challenge; } catch { return null; } };
+const passkeyView = (row) => ({ id: row.id, label: row.label, created_at: row.created_at, last_used_at: row.last_used_at });
+const credentialShape = (value, keys) => value && typeof value === 'object' && keys.every((key) => typeof value.response?.[key] === 'string' && value.response[key].length < 20_000) && typeof value.id === 'string' && value.id.length < 1100;
+const noPasskeyMessage = 'Clé d’accès non reconnue. Réessayez, ou connectez-vous autrement.';
+const safeVerify = (fn) => { try { return fn(); } catch (error) { if (error.webauthn) fail(400, error.message); throw error; } };
 function receiptView(message, user, lang) {
   const service = message.service_id ? db.prepare('SELECT title, title_en FROM services WHERE id = ?').get(message.service_id) : null;
   return {
@@ -227,6 +258,24 @@ function email(value) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result)) fail(400, 'Adresse e-mail invalide.');
   return result;
 }
+
+// F71: a resident without an e-mail address signs in with an access code (TN-XXXX-XXXX) instead. It is stored where the address would be, so every list that
+// shows who someone is shows it, and it is typed in the same field.
+const ACCESS_CODE = /^TN-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+const codeAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function identifier(value) {
+  const raw = typeof value === 'string' ? value.trim().toUpperCase().replace(/\s/g, '') : '';
+  return ACCESS_CODE.test(raw) ? raw : email(value);
+}
+function newAccessCode() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const raw = Array.from({ length: 8 }, () => codeAlphabet[randomInt(codeAlphabet.length)]).join('');
+    const code = `TN-${raw.slice(0, 4)}-${raw.slice(4)}`;
+    if (!db.prepare('SELECT 1 FROM users WHERE email = ?').get(code)) return code;
+  }
+  throw new Error('no free access code');
+}
+const hasPasswordHash = (hash) => hash.includes(':');
 
 function password(value, min) {
   if (typeof value !== 'string' || value.length < min || value.length > 128) {
@@ -451,6 +500,25 @@ const concernTopics = ['usage', 'sharing', 'storage', 'access', 'other'];
 const reasonOf = (body, required) => (required || body.reason ? text(body.reason, 5, 200, 'Le motif') : null);
 
 // F34: staff manage citizens only; staff accounts are never reachable from these routes.
+// Who is asking, again, before something that protects the account changes: the password, or for an account without one a fresh passkey assertion made for this
+// purpose (D02). Throws 403 otherwise.
+async function requireProof(request, row, body, me) {
+  if (hasPasswordHash(row.password_hash)) {
+    if (!(await verifyPassword(typeof body.password === 'string' ? body.password : '', row.password_hash))) fail(403, 'Mot de passe incorrect.');
+    return;
+  }
+  const proof = body.proof;
+  if (!credentialShape(proof, ['clientDataJSON', 'authenticatorData', 'signature'])) fail(403, 'Confirmez avec votre clé d’accès.', { code: 'proof-required' });
+  const origin = webauthnOrigin(request);
+  const challenge = clientChallenge(proof.response);
+  const entry = takeChallenge(challenge, 'reauth', origin);
+  const stored = entry.userId === me.id ? db.prepare('SELECT * FROM passkeys WHERE credential_id = ? AND user_id = ?').get(proof.id, me.id) : null;
+  if (!stored) fail(403, noPasskeyMessage);
+  let counter;
+  try { counter = verifyAssertion(proof.response, stored, { challenge, origin, rpId: rpIdOf(origin) }); } catch (error) { if (error.webauthn) fail(403, error.message); throw error; }
+  db.prepare('UPDATE passkeys SET sign_count = ?, last_used_at = CURRENT_TIMESTAMP WHERE id = ?').run(counter, stored.id);
+}
+
 // F53: a code from the authenticator app (accepted once) or an unused recovery code (consumed). Returns 'totp', 'recovery' or null. The comparison and the
 // consumption are atomic, so one code cannot be used twice by two simultaneous requests.
 function proveSecondStep(user, input) {
@@ -543,15 +611,12 @@ async function route(request, response) {
     // Citizens only: staff accounts are managed by an administrator.
     const user = requireUser(request, ['citizen']);
     const body = await readJson(request);
-    const secret = password(body.password, 1);
     const key = String(user.id);
     const wait = deletions.waitMs(key);
     if (wait) fail(429, 'Trop de tentatives. Réessayez plus tard.', { retryAfter: Math.ceil(wait / 1000) });
-    const { password_hash: hash } = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
-    if (!(await verifyPassword(secret, hash))) {
-      deletions.add(key);
-      fail(403, 'Mot de passe incorrect.');
-    }
+    const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
+    if (hasPasswordHash(row.password_hash)) password(body.password, 1);
+    try { await requireProof(request, row, body, user); } catch (error) { deletions.add(key); throw error; }
     tx(() => {
       audit(user, { category: 'account', action: 'account.self_delete', target: { type: 'user', id: user.id, label: citizenLabel(user) }, summary: 'a supprimé son propre compte (messages et signalements effacés)' });
       eraseUser(user.id);
@@ -603,21 +668,24 @@ async function route(request, response) {
     if (guard.replay) return sendJson(response, guard.replay.status, guard.replay.body);
     try {
       const name = text(body.name, 2, 80, 'Le nom');
-      const address = email(body.email);
+      // F71: the e-mail address is optional; without one the resident gets an access code, shown once on this answer
+      const withoutEmail = body.email === undefined || body.email === null || String(body.email).trim() === '';
+      const address = withoutEmail ? null : email(body.email);
       const secret = password(body.password, 12);
-      if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(address)) fail(409, 'Cette adresse est déjà utilisée.');
+      if (address && db.prepare('SELECT 1 FROM users WHERE email = ?').get(address)) fail(409, 'Cette adresse est déjà utilisée.');
       charge('register', { address: ip });
+      const identity = address || newAccessCode();
       const hash = await hashPassword(secret);
       let result;
       try {
-        result = db.prepare('INSERT INTO users (email, name, password_hash, role) VALUES (?, ?, ?, ?)').run(address, name, hash, 'citizen');
+        result = db.prepare('INSERT INTO users (email, name, password_hash, role) VALUES (?, ?, ?, ?)').run(identity, name, hash, 'citizen');
       } catch (error) {
         if (error.message.includes('UNIQUE constraint failed')) fail(409, 'Cette adresse est déjà utilisée.');
         throw error;
       }
       clearSession(request, response);
       createSession(response, Number(result.lastInsertRowid), recognizeDevice(request, Number(result.lastInsertRowid), deviceLabel(request)));
-      const reply = { user: publicUser({ id: Number(result.lastInsertRowid), email: address, name, role: 'citizen' }) };
+      const reply = { user: publicUser({ id: Number(result.lastInsertRowid), email: identity, name, role: 'citizen' }), ...(withoutEmail ? { access_code: identity } : {}) };
       guard.done(201, reply);
       return sendJson(response, 201, reply);
     } catch (error) {
@@ -640,7 +708,7 @@ async function route(request, response) {
 
   if (path === '/api/auth/login' && method === 'POST') {
     const body = await readJson(request);
-    const address = email(body.email);
+    const address = identifier(body.email);
     const secret = password(body.password, 1);
     const ip = clientIp(request);
     // Blocked before the password is even looked at: a right guess during a lockout does not get in.
@@ -824,13 +892,159 @@ async function route(request, response) {
     }
   }
 
+  // ---- D02: passkeys. The device keeps the private key and proves it holds it (with a fingerprint, face or device code: user verification is required); the server only
+  // keeps the public key. Sign-in needs no password and no e-mail address.
+  const publicKeyParams = [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }];
+  const registrationOptions = (origin, challenge, user, exclude = []) => ({
+    challenge, rp: { id: rpIdOf(origin), name: ISSUER }, user, pubKeyCredParams: publicKeyParams, timeout: 120_000, attestation: 'none',
+    authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+    excludeCredentials: exclude.map((id) => ({ type: 'public-key', id })),
+  });
+  const credentialRow = (userId, info, label) => db.prepare('INSERT INTO passkeys (user_id, credential_id, public_key, alg, sign_count, label) VALUES (?, ?, ?, ?, ?, ?)').run(userId, info.credentialId, info.publicKey, info.alg, info.counter, label);
+  if (path === '/api/auth/passkey/options' && method === 'POST') {
+    const wait = passkeyFailures.waitMs(clientIp(request));
+    if (wait) fail(429, 'Trop de tentatives. Réessayez plus tard.', { retryAfter: Math.ceil(wait / 1000) });
+    const origin = webauthnOrigin(request);
+    return sendJson(response, 200, { challenge: putChallenge({ purpose: 'login', origin }), rpId: rpIdOf(origin), timeout: 120_000, userVerification: 'required', allowCredentials: [] });
+  }
+  if (path === '/api/auth/passkey/login' && method === 'POST') {
+    const body = await readJson(request);
+    const ip = clientIp(request);
+    const wait = passkeyFailures.waitMs(ip);
+    if (wait) fail(429, 'Trop de tentatives. Réessayez plus tard.', { retryAfter: Math.ceil(wait / 1000) });
+    const origin = webauthnOrigin(request);
+    if (!credentialShape(body, ['clientDataJSON', 'authenticatorData', 'signature'])) fail(400, 'Réponse de l’appareil invalide.');
+    const challenge = clientChallenge(body.response);
+    takeChallenge(challenge, 'login', origin);
+    const stored = db.prepare('SELECT * FROM passkeys WHERE credential_id = ?').get(body.id);
+    if (!stored) { passkeyFailures.add(ip); fail(401, noPasskeyMessage); }
+    let counter;
+    try { counter = verifyAssertion(body.response, stored, { challenge, origin, rpId: rpIdOf(origin) }); } catch (error) { if (error.webauthn) { passkeyFailures.add(ip); fail(401, error.message); } throw error; }
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(stored.user_id);
+    if (!user.active) fail(403, 'Ce compte est désactivé. Contactez les services municipaux.');
+    db.prepare('UPDATE passkeys SET sign_count = ?, last_used_at = CURRENT_TIMESTAMP WHERE id = ?').run(counter, stored.id);
+    // A passkey already combines something the person has (the device) and something they are or know (the fingerprint, face or device code): no second step is asked.
+    return completeLogin(request, response, user, 0);
+  }
+  if (path === '/api/me/reauth-options' && method === 'POST') {
+    const me = requireUser(request);
+    const origin = webauthnOrigin(request);
+    const credentials = db.prepare('SELECT credential_id FROM passkeys WHERE user_id = ?').all(me.id);
+    if (!credentials.length) fail(409, 'Aucune clé d’accès n’est enregistrée sur ce compte.');
+    return sendJson(response, 200, { challenge: putChallenge({ purpose: 'reauth', userId: me.id, origin }), rpId: rpIdOf(origin), timeout: 120_000, userVerification: 'required', allowCredentials: credentials.map((row) => ({ type: 'public-key', id: row.credential_id })) });
+  }
+  if (path === '/api/me/passkeys/options' && method === 'POST') {
+    const me = requireUser(request);
+    const wait = factorLimit.waitMs(String(me.id));
+    if (wait) fail(429, `Trop de tentatives. Réessayez dans ${Math.ceil(wait / 60_000)} min.`, { retryAfter: Math.ceil(wait / 1000) });
+    factorLimit.add(String(me.id));
+    const body = await readJson(request);
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id);
+    await requireProof(request, row, body, me);
+    const existing = db.prepare('SELECT credential_id FROM passkeys WHERE user_id = ?').all(me.id).map((item) => item.credential_id);
+    if (existing.length >= 10) fail(409, 'Dix clés d’accès sont déjà enregistrées : retirez-en une avant d’en ajouter.');
+    const origin = webauthnOrigin(request);
+    return sendJson(response, 200, registrationOptions(origin, putChallenge({ purpose: 'register', userId: me.id, origin }), { id: userHandleOf(me.id), name: row.email, displayName: row.name }, existing));
+  }
+  if (path === '/api/me/passkeys' && method === 'POST') {
+    const me = requireUser(request);
+    const body = await readJson(request);
+    const origin = webauthnOrigin(request);
+    if (!credentialShape(body, ['clientDataJSON', 'attestationObject'])) fail(400, 'Réponse de l’appareil invalide.');
+    const challenge = clientChallenge(body.response);
+    const entry = takeChallenge(challenge, 'register', origin);
+    if (entry.userId !== me.id) fail(400, 'La vérification a expiré ou a déjà été utilisée. Recommencez.', { code: 'challenge-expired' });
+    const info = safeVerify(() => verifyRegistration(body.response, { challenge, origin, rpId: rpIdOf(origin) }));
+    if (info.credentialId !== body.id) fail(400, 'Réponse de l’appareil invalide.');
+    let label = typeof body.label === 'string' && body.label.trim() ? text(body.label, 1, 60, 'Le nom de la clé') : deviceLabel(request);
+    // two keys with the same name could not be told apart in the list: the second one is numbered
+    const taken = new Set(db.prepare('SELECT label FROM passkeys WHERE user_id = ?').all(me.id).map((row) => row.label));
+    for (let n = 2, base = label; taken.has(label); n++) label = `${base} (${n})`;
+    let created;
+    try { created = credentialRow(me.id, info, label); } catch (error) { if (String(error.message).includes('UNIQUE')) fail(409, 'Cette clé d’accès est déjà enregistrée.'); throw error; }
+    if (me.role === 'citizen') db.prepare('INSERT INTO notices (user_id, code, ref_id, label) VALUES (?, ?, ?, ?)').run(me.id, 'security.passkey_added', Number(created.lastInsertRowid), label);
+    else audit(me, { category: 'security', action: 'auth.passkey_added', summary: 'a ajouté une clé d’accès à son compte' });
+    return sendJson(response, 201, { passkey: passkeyView(db.prepare('SELECT id, label, created_at, last_used_at FROM passkeys WHERE id = ?').get(Number(created.lastInsertRowid))) });
+  }
+  const passkeyMatch = /^\/api\/me\/passkeys\/(\d+)$/.exec(path);
+  if (passkeyMatch && method === 'DELETE') {
+    const me = requireUser(request);
+    const body = await readJson(request);
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id);
+    const wait = factorLimit.waitMs(String(me.id));
+    if (wait) fail(429, `Trop de tentatives. Réessayez dans ${Math.ceil(wait / 60_000)} min.`, { retryAfter: Math.ceil(wait / 1000) });
+    factorLimit.add(String(me.id));
+    await requireProof(request, row, body, me);
+    const target = db.prepare('SELECT id, label FROM passkeys WHERE id = ? AND user_id = ?').get(Number(passkeyMatch[1]), me.id);
+    if (!target) fail(404, 'Clé d’accès introuvable.');
+    const others = db.prepare('SELECT COUNT(*) AS n FROM passkeys WHERE user_id = ? AND id != ?').get(me.id, target.id).n;
+    if (!hasPasswordHash(row.password_hash) && !others) fail(409, 'C’est votre seul moyen de connexion : ajoutez d’abord une autre clé d’accès (ou demandez un mot de passe à un agent) avant de retirer celle-ci.');
+    tx(() => {
+      db.prepare('DELETE FROM passkeys WHERE id = ?').run(target.id);
+      if (me.role === 'citizen') db.prepare('INSERT INTO notices (user_id, code, ref_id, label) VALUES (?, ?, ?, ?)').run(me.id, 'security.passkey_removed', target.id, target.label);
+      else audit(me, { category: 'security', action: 'auth.passkey_removed', summary: 'a retiré une clé d’accès de son compte' });
+    });
+    return sendJson(response, 200, { ok: true });
+  }
+  // Account creation without a password: the passkey is the credential. The e-mail address is optional (F71): without one, an access code is issued.
+  if (path === '/api/auth/passkey/signup-options' && method === 'POST') {
+    const body = await readJson(request);
+    const ip = clientIp(request);
+    const wait = signups.waitMs(ip);
+    if (wait) fail(429, 'Trop de tentatives. Réessayez plus tard.', { retryAfter: Math.ceil(wait / 1000) });
+    signups.add(ip);
+    const name = text(body.name, 2, 80, 'Le nom');
+    const address = body.email === undefined || body.email === null || String(body.email).trim() === '' ? null : email(body.email);
+    if (address && db.prepare('SELECT 1 FROM users WHERE email = ?').get(address)) fail(409, 'Cette adresse est déjà utilisée.');
+    const origin = webauthnOrigin(request);
+    const handle = randomBytes(32).toString('base64url');
+    return sendJson(response, 200, registrationOptions(origin, putChallenge({ purpose: 'signup', name, email: address, origin }), { id: handle, name: address || name, displayName: name }));
+  }
+  if (path === '/api/auth/passkey/signup' && method === 'POST') {
+    const body = await readJson(request);
+    const ip = clientIp(request);
+    const guard = begin({ form: 'register', subject: `ip:${ip}`, body, pending: true });
+    if (guard.replay) return sendJson(response, guard.replay.status, guard.replay.body);
+    try {
+      const origin = webauthnOrigin(request);
+      if (!credentialShape(body, ['clientDataJSON', 'attestationObject'])) fail(400, 'Réponse de l’appareil invalide.');
+      const challenge = clientChallenge(body.response);
+      const entry = takeChallenge(challenge, 'signup', origin);
+      const info = safeVerify(() => verifyRegistration(body.response, { challenge, origin, rpId: rpIdOf(origin) }));
+      if (info.credentialId !== body.id) fail(400, 'Réponse de l’appareil invalide.');
+      charge('register', { address: ip });
+      const identity = entry.email || newAccessCode();
+      let userId;
+      try {
+        userId = tx(() => {
+          const created = db.prepare('INSERT INTO users (email, name, password_hash, role) VALUES (?, ?, ?, ?)').run(identity, entry.name, '-', 'citizen');
+          credentialRow(Number(created.lastInsertRowid), info, deviceLabel(request));
+          return Number(created.lastInsertRowid);
+        });
+      } catch (error) {
+        if (String(error.message).includes('UNIQUE constraint failed: users')) fail(409, 'Cette adresse est déjà utilisée.');
+        if (String(error.message).includes('UNIQUE')) fail(409, 'Cette clé d’accès est déjà enregistrée.');
+        throw error;
+      }
+      clearSession(request, response);
+      createSession(response, userId, recognizeDevice(request, userId, deviceLabel(request)));
+      const reply = { user: publicUser({ id: userId, email: identity, name: entry.name, role: 'citizen' }), ...(entry.email ? {} : { access_code: identity }) };
+      guard.done(201, reply);
+      return sendJson(response, 201, reply);
+    } catch (error) {
+      guard.abandon();
+      throw error;
+    }
+  }
+
   // F53: the person's own second step: status, set-up (secret + link for the app), activation with a first code, removal and new recovery codes.
   // Every route re-checks who is asking (the password, and for removal a code too), so a stolen open session cannot quietly remove the protection.
   if (path === '/api/me/security' && method === 'GET') {
     const me = requireUser(request);
-    const row = db.prepare('SELECT password_hash, totp_enabled_at FROM users WHERE id = ?').get(me.id);
+    const row = db.prepare('SELECT email, password_hash, totp_enabled_at FROM users WHERE id = ?').get(me.id);
     const left = db.prepare('SELECT COUNT(*) AS n FROM recovery_codes WHERE user_id = ? AND used_at IS NULL').get(me.id).n;
-    return sendJson(response, 200, { totp: { enabled: Boolean(row.totp_enabled_at), since: row.totp_enabled_at || null, recovery_left: row.totp_enabled_at ? left : 0 }, has_password: row.password_hash.includes(':') });
+    const passkeys = db.prepare('SELECT id, label, created_at, last_used_at FROM passkeys WHERE user_id = ? ORDER BY id').all(me.id).map(passkeyView);
+    return sendJson(response, 200, { totp: { enabled: Boolean(row.totp_enabled_at), since: row.totp_enabled_at || null, recovery_left: row.totp_enabled_at ? left : 0 }, has_password: hasPasswordHash(row.password_hash), passkeys, identifier: row.email, access_code: !row.email.includes('@') });
   }
   const factorMatch = /^\/api\/me\/2fa\/(setup|enable|disable|recovery-codes)$/.exec(path);
   if (factorMatch && method === 'POST') {
@@ -840,8 +1054,7 @@ async function route(request, response) {
     factorLimit.add(String(me.id));
     const body = await readJson(request);
     const row = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id);
-    const hasPassword = row.password_hash.includes(':');
-    const checkPassword = async () => { if (hasPassword && !(await verifyPassword(typeof body.password === 'string' ? body.password : '', row.password_hash))) fail(403, 'Mot de passe incorrect.'); };
+    const checkPassword = () => requireProof(request, row, body, me);
     const newCodes = () => {
       const codes = newRecoveryCodes();
       db.prepare('DELETE FROM recovery_codes WHERE user_id = ?').run(me.id);

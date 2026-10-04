@@ -104,7 +104,7 @@ await s.context.close();
 console.log('\n# 4. the hidden field');
 s = await open();
 const hp = await s.page.evaluate(() => [...document.querySelectorAll('input[name=fax_ref]')].map((input) => ({ form: input.form.id, tab: input.tabIndex, hidden: !!input.closest('[aria-hidden=true]'), box: (() => { const r = input.getBoundingClientRect(); return (r.width === 0 && r.height === 0) || r.right < 0 || r.left < -1000; })(), autocomplete: input.autocomplete })));
-check('the hidden field exists in the three forms, is aria-hidden, off screen (or not rendered while signed out), out of the tab order and without autofill', hp.length === 3 && hp.every((h) => h.hidden && h.tab === -1 && h.box && h.autocomplete === 'off'), JSON.stringify(hp));
+check('the hidden field exists in the four forms (sign-up, sign-up with a passkey, message, concern), is aria-hidden, off screen (or not rendered while signed out), out of the tab order and without autofill', hp.length === 4 && hp.some((h) => h.form === 'passkey-signup-form') && hp.every((h) => h.hidden && h.tab === -1 && h.box && h.autocomplete === 'off'), JSON.stringify(hp));
 await s.page.focus('#register-form [name=name]');
 const order = [];
 for (let i = 0; i < 6; i++) { await s.page.keyboard.press('Tab'); order.push(await s.page.evaluate(() => document.activeElement.name || document.activeElement.id || document.activeElement.tagName)); }
