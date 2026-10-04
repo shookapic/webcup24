@@ -227,7 +227,7 @@ if (run('submit')) {
   const posts = s.log.requests.filter((r) => r.method === 'POST' && r.url === '/api/messages' && r.at >= since).length;
   const after = await s.page.evaluate(() => ({ busy: document.querySelector('#message-form').getAttribute('aria-busy'), status: document.querySelector('#message-status').textContent, subject: document.querySelector('#message-form [name=subject]').value, error: document.querySelector('#message-status').dataset.error }));
   check('three clicks and two Enter presses during a 3 s delayed response: exactly one POST sent and exactly one message created', posts === 1 && await countMessages() === 1, `posts ${posts}, messages ${await countMessages()}`);
-  check('in flight: the form says it is sending (aria-busy, "Envoi en cours…"); afterwards a single confirmation, form emptied, no longer busy', inflight.busy === 'true' && /Envoi en cours/.test(inflight.status) && after.busy === null && after.error === 'false' && /Référence n°\d+/.test(after.status) && after.subject === '', JSON.stringify({ inflight, after }));
+  check('in flight: the form says it is sending (aria-busy, "Envoi en cours…"); afterwards a single confirmation, form emptied, no longer busy', inflight.busy === 'true' && /Envoi en cours/.test(inflight.status) && after.busy === null && after.error === 'false' && /Référence M-\d+/.test(after.status) && after.subject === '', JSON.stringify({ inflight, after }));
   s.hooks.delay.clear();
   await s.page.type('#message-form [name=subject]', 'Deuxième envoi');
   await s.page.type('#message-form [name=body]', 'Le formulaire doit pouvoir être renvoyé normalement après un succès.');

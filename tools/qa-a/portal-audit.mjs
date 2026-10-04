@@ -98,7 +98,7 @@ try {
   submit(zoe, '#message-form');
   await wait(1300);
   const confirmation = $(zoe, '#message-status').textContent;
-  check('D04/D16 sending a message gives a clear confirmation with a reference number, immediately', /Votre message a bien été transmis\. Référence n°\d+/.test(confirmation) && $(zoe, '#message-status').dataset.error === 'false', confirmation);
+  check('D04/D16 sending a message gives a clear confirmation with a reference number, immediately', /Votre message a bien été transmis\. Référence M-\d+/.test(confirmation) && $(zoe, '#message-status').dataset.error === 'false', confirmation);
   check('D16 the form is emptied so nobody sends it twice by mistake', $(zoe, '#message-form [name=subject]').value === '');
   $(zoe, '#message-kind').value = 'incident';
   $(zoe, '#message-kind').dispatchEvent(new zoe.window.Event('change', { bubbles: true }));

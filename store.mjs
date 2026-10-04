@@ -285,6 +285,20 @@ db.exec(`
   CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 `);
 
+// F83: a persistent key for receipt proofs: a restart or a redeploy must not invalidate a receipt a resident kept.
+db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+// F84: replies written by agents to a request, whatever its state. They go with the request when it is deleted.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS message_replies (
+    id INTEGER PRIMARY KEY,
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS message_replies_message ON message_replies(message_id);
+`);
+
 // F82: a durable fingerprint of what a resident sent (messages and concerns), so the same text sent again within minutes (a retry, a script) is recognised
 // even after a restart. Additive: old rows keep an empty fingerprint and are never matched.
 for (const table of ['messages', 'concerns']) {

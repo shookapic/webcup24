@@ -47,6 +47,7 @@ const limiters = {
   message: { account: new Limiter(6 * scale, 10 * MINUTE), day: new Limiter(40 * scale, DAY), address: new Limiter(60 * scale, HOUR) },
   concern: { address: new Limiter(30 * scale, HOUR) },
   book: { account: new Limiter(20 * scale, 10 * MINUTE) },
+  reply: { account: new Limiter(60 * scale, 10 * MINUTE) },
   token: { address: new Limiter(120 * scale, 10 * MINUTE), account: new Limiter(60 * scale, 10 * MINUTE) },
 };
 const wording = {
@@ -54,6 +55,7 @@ const wording = {
   message: 'Vous avez envoyé beaucoup de messages en peu de temps.',
   concern: 'Trop de préoccupations envoyées en peu de temps.',
   book: 'Trop de réservations en peu de temps.',
+  reply: 'Trop de réponses envoyées en peu de temps.',
   token: 'Trop de demandes de formulaire en peu de temps.',
 };
 // Takes one slot in every quota of the form, or throws the 429 naming the wait. `who` = { address, account }.

@@ -1,0 +1,137 @@
+// F83 (receipt with a reference) and F84 (agents answer directly) in real Chrome on a disposable server: the resident's confirmation, card, receipt page and
+// the public check; the staff reply box with a draft that survives list refreshes, the answered / not answered filter, and what the resident then sees.
+// Later sections of this file cover the other triage features. A ports 3200-3209. Usage: node tools/qa-a/civic-browser.mjs
+import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const root = fileURLToPath(new URL('../..', import.meta.url));
+const req = createRequire(root + 'package.json');
+const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer-core')).href)).default;
+const dataDir = mkdtempSync(join(tmpdir(), 'terra-civic-'));
+const shots = process.env.SHOTS_DIR || join(tmpdir(), 'terra-civic-shots');
+mkdirSync(shots, { recursive: true });
+const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
+const base = `http://127.0.0.1:${port}`;
+const env = { ...process.env, DATA_PATH: join(dataDir, 'c.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TRUST_PROXY: '1', TN_FORM_TOKENS: 'optional', TN_FORM_MIN_AGE_MS: '0', TN_FORM_LIMIT_SCALE: '1000' };
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+let failures = 0;
+const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  -> ' + String(detail).slice(0, 600)}`); };
+
+const staffPw = (role) => /conserver : (\S+)/.exec(spawnSync(process.execPath, ['create-staff.mjs', `${role}@civic.test`, `${role} Civic`, role], { cwd: root, env, encoding: 'utf8' }).stdout)[1];
+const agentPw = staffPw('agent');
+const server = spawn(process.execPath, ['server.mjs'], { cwd: root, env, stdio: 'ignore' });
+await wait(1500);
+let ipCounter = 0;
+const call = async (path, method = 'GET', body, cookie = '') => {
+  const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.82.0.${++ipCounter}`, ...(cookie ? { Cookie: cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  return { status: response.status, data: await response.json().catch(() => ({})), cookie: (response.headers.getSetCookie().find((c) => c.startsWith('tn_session=')) || '').split(';')[0] };
+};
+const zoe = (await call('/api/auth/register', 'POST', { name: 'Zoé Civic', email: 'zoe@civic.test', password: 'password-long-1' })).cookie;
+const agent = (await call('/api/auth/login', 'POST', { email: 'agent@civic.test', password: agentPw })).cookie;
+
+const browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--no-sandbox'] });
+async function open(cookie, locale = 'fr') {
+  const context = await browser.createBrowserContext();
+  const page = await context.newPage();
+  await page.setViewport({ width: 1280, height: 1100 });
+  await page.setExtraHTTPHeaders({ 'X-Forwarded-For': `10.83.0.${++ipCounter}` });
+  await page.evaluateOnNewDocument((lang) => { try { localStorage.setItem('lang', lang); } catch { /* blocked */ } }, locale);
+  if (cookie) await page.setCookie({ name: 'tn_session', value: cookie.split('=')[1], url: base });
+  const log = { dialogs: [], errors: [] };
+  page.on('dialog', (d) => { log.dialogs.push(d.message()); d.dismiss().catch(() => {}); });
+  page.on('pageerror', (e) => log.errors.push(e.message));
+  await page.goto(base + '/', { waitUntil: 'networkidle0' });
+  return { context, page, log };
+}
+const fill = (page, selector, values) => page.evaluate((sel, vals) => { const f = document.querySelector(sel); for (const [name, value] of Object.entries(vals)) { f.elements[name].value = value; f.elements[name].dispatchEvent(new Event('input', { bubbles: true })); } }, selector, values);
+const text = (page, selector) => page.$eval(selector, (n) => n.textContent.trim()).catch(() => null);
+const cardOf = (page, area, subject) => page.evaluateHandle((sel, s) => [...document.querySelectorAll(`${sel} .message-card`)].find((c) => c.querySelector('h4')?.textContent === s) || null, area, subject);
+
+console.log('# F83. the resident: confirmation, card, receipt, public check');
+let s = await open(zoe);
+await s.page.waitForSelector('#message-form [name=subject]');
+await fill(s.page, '#message-form', { subject: 'Poubelle renversée devant l’école', body: 'La poubelle devant l’école du quartier est renversée depuis ce matin.' });
+await s.page.click('#message-form button[type=submit]');
+await s.page.waitForFunction(() => /Référence M-\d+/.test(document.querySelector('#message-status')?.textContent || ''), { timeout: 12000 }).catch(() => {});
+const confirmation = await s.page.$eval('#message-status', (n) => ({ text: n.textContent.trim(), link: n.querySelector('a.receipt-link')?.getAttribute('href'), target: n.querySelector('a.receipt-link')?.target, rel: n.querySelector('a.receipt-link')?.rel, newTab: n.querySelector('a.receipt-link .visually-hidden')?.textContent }));
+const id = /Référence M-(\d+)/.exec(confirmation.text)?.[1];
+check('after sending, the confirmation gives the reference and a link to the receipt (new tab, announced as such)', Boolean(id) && confirmation.link === `/api/messages/${id}/receipt?lang=fr` && confirmation.target === '_blank' && confirmation.rel === 'noopener' && /nouvel onglet/.test(confirmation.newTab || ''), JSON.stringify(confirmation));
+await s.page.waitForFunction(() => document.querySelector('#citizen-messages .message-card'), { timeout: 8000 });
+const card = await s.page.evaluate(() => { const c = document.querySelector('#citizen-messages .message-card'); return { reference: c.querySelector('.message-reference')?.textContent, dates: c.querySelector('.message-dates')?.textContent, link: c.querySelector('a.receipt-link')?.getAttribute('href') }; });
+check('the history card keeps the reference, the date in city time and the receipt link, so the proof can be found again later', card.reference === `Référence M-${id}` && /Reçu le \d{2}\/\d{2}\/\d{4} à \d{2}:\d{2} \(heure de la cité\)/.test(card.dates) && card.link === `/api/messages/${id}/receipt?lang=fr`, JSON.stringify(card));
+await s.page.screenshot({ path: join(shots, 'resident-card.png') });
+const receiptPage = await s.context.newPage();
+await receiptPage.goto(`${base}${confirmation.link}`, { waitUntil: 'networkidle0' });
+const receipt = await receiptPage.evaluate(() => ({ title: document.title, h1: document.querySelector('h1')?.textContent, text: document.body.textContent }));
+const code = /([A-Z2-9]{5}-[A-Z2-9]{5})/.exec(receipt.text)?.[1];
+check('the receipt page opens signed in: title with the reference, the verification code, the message and how to verify it', receipt.h1 === 'Accusé de réception' && receipt.title.includes(`M-${id}`) && Boolean(code) && receipt.text.includes('Poubelle renversée devant l’école') && /Vérifier un accusé de réception/.test(receipt.text), JSON.stringify([receipt.title, code]));
+await receiptPage.screenshot({ path: join(shots, 'receipt-page.png') });
+await receiptPage.close();
+await s.page.evaluate(() => document.querySelector('#verifier').scrollIntoView());
+await fill(s.page, '#verify-form', { reference: `m-${id}`, code: code.toLowerCase() });
+await s.page.click('#verify-form button[type=submit]');
+await s.page.waitForFunction(() => /Accusé valide/.test(document.querySelector('#verify-status')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+const valid = await s.page.$eval('#verify-status', (n) => ({ text: n.textContent.trim(), error: n.dataset.error }));
+check('the public check confirms a valid receipt in words: reference, date in city time, type, state (no content)', /Accusé valide : la ville a bien reçu la demande M-\d+ le \d{2}\/\d{2}\/\d{4} à \d{2}:\d{2} \(heure de la cité\)\. Type : Question aux services\. État actuel : /.test(valid.text) && valid.error === 'false' && !/Poubelle/.test(valid.text), JSON.stringify(valid));
+await fill(s.page, '#verify-form', { reference: `M-${id}`, code: 'AAAAA-AAAAA' });
+await s.page.click('#verify-form button[type=submit]');
+await s.page.waitForFunction(() => /ne correspondent à aucune demande/.test(document.querySelector('#verify-status')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+const invalid = await s.page.$eval('#verify-status', (n) => ({ text: n.textContent.trim(), error: n.dataset.error }));
+check('a wrong code is said plainly with the error cue, and nothing else is revealed', /^⚠ Erreur : Cette référence et ce code ne correspondent à aucune demande reçue/.test(invalid.text) && invalid.error === 'true', JSON.stringify(invalid));
+await s.page.click('#lang-toggle');
+await s.page.waitForFunction(() => document.documentElement.lang === 'en', { timeout: 6000 }).catch(() => {});
+await s.page.waitForFunction(() => /^Reference M-/.test(document.querySelector('#citizen-messages .message-reference')?.textContent || ''), { timeout: 8000 }).catch(() => {}); // the cards are rebuilt after the switch
+const english = await s.page.evaluate(() => ({ heading: document.querySelector('#verifier-title').textContent, ref: document.querySelector('#citizen-messages .message-reference')?.textContent, link: document.querySelector('#citizen-messages a.receipt-link')?.textContent, dates: document.querySelector('#citizen-messages .message-dates')?.textContent }));
+check('in English the check, the reference, the receipt link and the dates read in English', english.heading === 'Check a receipt' && english.ref === `Reference M-${id}` && /Acknowledgement of receipt \(to print or save\)/.test(english.link) && /Received on \d{2}\/\d{2}\/\d{4} at \d{2}:\d{2} \(city time\)/.test(english.dates), JSON.stringify(english));
+await s.context.close();
+
+console.log('\n# F84. staff answer directly');
+s = await open(agent);
+await s.page.waitForSelector('#staff-messages .message-card');
+const staffCard = await cardOf(s.page, '#staff-messages', 'Poubelle renversée devant l’école');
+const draftKey = `reply:${id}`;
+const longText = 'Bonjour, nous avons transmis votre signalement au service de la voirie. Une équipe passe demain matin avant l’ouverture de l’école.';
+await s.page.focus(`[data-draft="${draftKey}"]`);
+await s.page.keyboard.type(longText.slice(0, 60));
+await s.page.evaluate('refreshAll()'); // the list is rebuilt from the server, as every poll does
+await wait(1200);
+const kept = await s.page.evaluate((key) => { const f = document.querySelector(`[data-draft="${key}"]`); return { value: f?.value, focused: document.activeElement === f, caret: f?.selectionStart }; }, draftKey);
+check('a half-written answer survives the list being rebuilt (text, focus and caret are still there)', kept.value === longText.slice(0, 60) && kept.focused && kept.caret === 60, JSON.stringify(kept));
+await s.page.keyboard.type(longText.slice(60));
+await s.page.evaluate((id2) => { [...document.querySelectorAll('#staff-messages .message-card')].find((c) => c.querySelector('h4')?.textContent === 'Poubelle renversée devant l’école').querySelectorAll('button').forEach((b) => { if (b.textContent === 'Envoyer la réponse') b.click(); }); }, id);
+await s.page.waitForFunction(() => /Réponse envoyée à l’habitant/.test(document.querySelector('#staff-reply-status')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+const replyStatus = await s.page.$eval('#staff-reply-status', (n) => ({ text: n.textContent.trim(), error: n.dataset.error }));
+await wait(500);
+const after = await s.page.evaluate((subject, key) => { const c = [...document.querySelectorAll('#staff-messages .message-card')].find((x) => x.querySelector('h4')?.textContent === subject); return { reply: c.querySelector('.reply-text')?.textContent, head: c.querySelector('.reply-head')?.textContent, status: c.querySelector('.message-status')?.textContent, draft: document.querySelector(`[data-draft="${key}"]`)?.value, focused: document.activeElement?.dataset?.draft === key }; }, 'Poubelle renversée devant l’école', draftKey);
+check('sending says so, names the request, says the state did not change; the thread shows the answer and who wrote it; the box is empty and has the focus', /Réponse envoyée à l’habitant \(demande M-\d+\)\. L’état de la demande n’a pas changé\./.test(replyStatus.text) && replyStatus.error === 'false' && after.reply === longText && /Réponse de agent Civic · \d{2}\/\d{2}\/\d{4}/.test(after.head) && /Reçue|À traiter|Reçu/i.test(after.status) && after.draft === '' && after.focused, JSON.stringify([replyStatus, after]));
+await s.page.screenshot({ path: join(shots, 'staff-reply.png') });
+await s.page.select('#staff-filter-reply', 'none');
+await wait(300);
+const unanswered = await s.page.evaluate(() => [...document.querySelectorAll('#staff-messages .message-card h4')].map((h) => h.textContent));
+await s.page.select('#staff-filter-reply', 'some');
+await wait(300);
+const answered = await s.page.evaluate(() => [...document.querySelectorAll('#staff-messages .message-card h4')].map((h) => h.textContent));
+check('the "Réponse" filter finds the requests without an answer and those with one (daily follow-up)', !unanswered.includes('Poubelle renversée devant l’école') && answered.includes('Poubelle renversée devant l’école'), JSON.stringify([unanswered, answered]));
+const emptySend = await s.page.evaluate((subject) => { const c = [...document.querySelectorAll('#staff-messages .message-card')].find((x) => x.querySelector('h4')?.textContent === subject); [...c.querySelectorAll('button')].find((b) => b.textContent === 'Envoyer la réponse').click(); return true; }, 'Poubelle renversée devant l’école');
+await wait(300);
+check('an empty answer is refused where the person is looking, with the error cue (nothing sent)', emptySend && /^⚠ Erreur : Écrivez d’abord la réponse\./.test(await text(s.page, '#staff-reply-status')) && s.log.dialogs.length === 0);
+await s.context.close();
+
+console.log('\n# F84. what the resident then sees');
+s = await open(zoe);
+await s.page.waitForSelector('#citizen-messages .message-card');
+const seen = await s.page.evaluate(() => { const c = document.querySelector('#citizen-messages .message-card'); return { reply: c.querySelector('.reply-text')?.textContent, head: c.querySelector('.reply-head')?.textContent, notice: document.querySelector('#notices-list')?.textContent }; });
+check('the answer is on the resident\'s card, signed "Réponse de la ville" (no staff name), and the news list says the city answered', seen.reply === longText && /^Réponse de la ville · \d{2}\/\d{2}\/\d{4}/.test(seen.head) && !/agent Civic/.test(seen.head) && /La ville a répondu à votre demande « Poubelle renversée devant l’école »/.test(seen.notice) && seen.notice.includes(longText), JSON.stringify(seen));
+await s.page.screenshot({ path: join(shots, 'resident-with-reply.png') });
+await s.context.close();
+
+await browser.close();
+server.kill();
+await wait(400);
+rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+console.log(failures ? `\n${failures} FAILED` : '\nall civic UI checks passed');
+process.exit(failures ? 1 : 0);

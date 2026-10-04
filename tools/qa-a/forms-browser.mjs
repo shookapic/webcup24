@@ -69,21 +69,21 @@ await wait(1700); // the token was asked for on focus and is now old enough: no 
 await fill(s.page, '#message-form', { subject: 'Lampadaire éteint rue des Dunes', body: 'Le lampadaire devant le numéro 12 est éteint depuis trois jours.' });
 const before = s.log.posts.filter((p) => p === '/api/messages').length;
 await Promise.all([s.page.click('#message-form button[type=submit]'), s.page.click('#message-form button[type=submit]'), s.page.keyboard.press('Enter')]);
-await s.page.waitForFunction(() => /Référence n°\d+/.test(document.querySelector('#message-status')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+await s.page.waitForFunction(() => /Référence M-\d+/.test(document.querySelector('#message-status')?.textContent || ''), { timeout: 8000 }).catch(() => {});
 const sent = await status(s.page, '#message-status');
-check('clicking twice and pressing Enter sends one request: one POST, one row, one confirmation with a reference', s.log.posts.filter((p) => p === '/api/messages').length - before === 1 && rows('messages', 'subject = ?', 'Lampadaire éteint rue des Dunes') === 1 && /Référence n°\d+/.test(sent?.text || ''), JSON.stringify([sent, s.log.posts]));
+check('clicking twice and pressing Enter sends one request: one POST, one row, one confirmation with a reference', s.log.posts.filter((p) => p === '/api/messages').length - before === 1 && rows('messages', 'subject = ?', 'Lampadaire éteint rue des Dunes') === 1 && /Référence M-\d+/.test(sent?.text || ''), JSON.stringify([sent, s.log.posts]));
 await fill(s.page, '#message-form', { subject: 'LAMPADAIRE éteint rue des Dunes', body: 'Le lampadaire devant le numéro 12 est éteint depuis trois jours.' });
 await s.page.click('#message-form button[type=submit]');
 await s.page.waitForFunction(() => /déjà été reçue/.test(document.querySelector('#message-status')?.textContent || ''), { timeout: 12000 }).catch(() => {});
 const dup = await status(s.page, '#message-status');
-check('sending the same request again (even in capitals) says it was already received, with the same reference, and creates nothing (F82)', /déjà été reçue : aucun doublon/.test(dup?.text || '') && /Référence n°\d+/.test(dup.text) && dup.error !== 'true' && rows('messages', 'user_id = (SELECT id FROM users WHERE email = ?)', 'rapide@ui.test') === 1, JSON.stringify(dup));
+check('sending the same request again (even in capitals) says it was already received, with the same reference, and creates nothing (F82)', /déjà été reçue : aucun doublon/.test(dup?.text || '') && /Référence M-\d+/.test(dup.text) && dup.error !== 'true' && rows('messages', 'user_id = (SELECT id FROM users WHERE email = ?)', 'rapide@ui.test') === 1, JSON.stringify(dup));
 await s.page.screenshot({ path: join(shots, 'duplicate-says-so.png') });
 
 console.log('\n# 3. quota: readable, keeps the typed text, English too');
 for (let i = 2; i <= 6; i++) {
   await fill(s.page, '#message-form', { subject: `Demande numéro ${i} pour le quota`, body: `Un texte assez long pour la demande numéro ${i}, envoyée pour atteindre le quota.` });
   await s.page.click('#message-form button[type=submit]');
-  await s.page.waitForFunction((n) => new RegExp(`Référence n°\\d+`).test(document.querySelector('#message-status')?.textContent || '') && document.querySelector('#message-form [name=subject]').value === '', { timeout: 12000 }, i).catch(() => {});
+  await s.page.waitForFunction((n) => new RegExp(`Référence M-\\d+`).test(document.querySelector('#message-status')?.textContent || '') && document.querySelector('#message-form [name=subject]').value === '', { timeout: 12000 }, i).catch(() => {});
 }
 check('six requests in ten minutes are accepted', rows('messages', 'user_id = (SELECT id FROM users WHERE email = ?)', 'rapide@ui.test') === 6, rows('messages', 'user_id = (SELECT id FROM users WHERE email = ?)', 'rapide@ui.test'));
 await fill(s.page, '#message-form', { subject: 'Septième demande refusée', body: 'Ce texte reste dans le formulaire quand le quota est atteint.' });

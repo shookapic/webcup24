@@ -56,7 +56,7 @@ export function requestRows(data, lang) {
     const notes = data.notices.filter((n) => n.code.startsWith('message.') && n.ref_id === m.id && n.note);
     const resolved = m.status === 'resolved';
     return {
-      reference: `${m.id}`,
+      reference: `M-${m.id}`,
       received: cityStamp(m.created_at, lang),
       kind: t.kind[m.kind] || m.kind,
       subject: m.subject,
@@ -85,6 +85,26 @@ caption{text-align:left;font-weight:700;padding:.3rem 0}.scroll{overflow-x:auto}
 const table = (caption, heads, rows, empty) => rows.length
   ? `<div class="scroll"><table><caption>${esc(caption)}</caption><thead><tr>${heads.map((h) => `<th scope="col">${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
   : `<p>${esc(empty)}</p>`;
+
+// F83: the receipt of one request: reference, the code that lets anyone check it, when the city received it (city time), what was asked. Only the owner gets it.
+export function receiptHtml(view, lang = 'fr') {
+  const fr = lang === 'fr';
+  const t = text[lang];
+  const row = (label, value) => (value ? `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>` : '');
+  const body = `<h1>${fr ? 'Accusé de réception' : 'Acknowledgement of receipt'}</h1>
+<p>${fr ? 'La ville de Terra Nova a bien reçu votre demande. Gardez cette page, ou notez la référence et le code : ils permettent de retrouver la demande et de vérifier cet accusé.' : 'The city of Terra Nova has received your request. Keep this page, or note the reference and the code: they let you find the request again and check this receipt.'} ${esc(t.print)}</p>
+<dl>
+<dt>${fr ? 'Référence' : 'Reference'}</dt><dd><strong>${esc(view.reference)}</strong></dd>
+<dt>${fr ? 'Code de vérification' : 'Verification code'}</dt><dd><strong>${esc(view.code)}</strong></dd>
+<dt>${fr ? 'Reçue le' : 'Received on'}</dt><dd>${esc(view.received)} ${t.tz}</dd>
+${row(fr ? 'Type' : 'Type', t.kind[view.kind] || view.kind)}${row(fr ? 'Sujet' : 'Subject', view.subject)}${row(fr ? 'Lieu' : 'Place', view.location)}${row(fr ? 'Service concerné' : 'Service concerned', view.service)}
+${row(fr ? 'État le jour de l’édition' : 'State on the day of printing', t.status[view.status] || view.status)}${row(fr ? 'Déposée par' : 'Sent by', view.name)}${row(fr ? 'Votre message' : 'Your message', view.body)}
+</dl>
+<h2>${fr ? 'Comment vérifier cet accusé' : 'How to check this receipt'}</h2>
+<p>${fr ? 'Sur le portail, ouvrez « Vérifier un accusé de réception », saisissez la référence et le code. Le portail confirme la date de réception, sans montrer le contenu de la demande.' : 'On the portal, open “Check a receipt”, enter the reference and the code. The portal confirms the date of receipt without showing what the request says.'}</p>
+<p class="note">${fr ? 'Page éditée le' : 'Page produced on'} ${esc(view.generated)} ${t.tz}.</p>`;
+  return page(lang, `${fr ? 'Accusé de réception' : 'Receipt'} ${view.reference}`, body);
+}
 
 export function recapHtml(data, lang = 'fr') {
   const t = text[lang];

@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +8,7 @@ import { db } from './store.mjs';
 import { clearSession, createSession, currentDeviceId, currentUser, hashPassword, publicUser, recognizeDevice, verifyPassword } from './security.mjs';
 import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from './throttle.mjs';
 import { begin, charge, formSummary, guarded, issue, minAgeMs, note as noteForm } from './guard.mjs';
-import { pickLang, personalHtml, recapCsv, recapHtml } from './recap.mjs';
+import { cityStamp, pickLang, personalHtml, receiptHtml, recapCsv, recapHtml } from './recap.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -101,6 +101,36 @@ function nextPassages(passages, now) {
 const deletions = new Limiter(5);
 // F82: what a resident sent, reduced to a stable fingerprint (case, accents and spacing ignored) so the same text sent again within minutes is recognised.
 const DUPLICATE_WINDOW = '-10 minutes';
+
+// F83: every request has a reference (M-12) and a verification code derived from a persistent key, so a receipt a resident kept still checks out after a
+// restart. The code carries no content; anyone holding the reference and the code can ask whether the city received it and when.
+db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('receipt_key', ?)").run(randomBytes(32).toString('hex'));
+const receiptKey = Buffer.from(db.prepare("SELECT value FROM settings WHERE key = 'receipt_key'").get().value, 'hex');
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0, O, 1, I: easy to read out loud
+const referenceOf = (id) => `M-${id}`;
+function receiptCode(message) {
+  const mac = createHmac('sha256', receiptKey).update(`${message.id}|${message.user_id}|${message.created_at}`).digest();
+  let code = '';
+  for (let i = 0; i < 10; i++) code += CODE_ALPHABET[mac[i] % 32];
+  return `${code.slice(0, 5)}-${code.slice(5)}`;
+}
+const verifies = new Limiter(60, 10 * 60_000);
+function receiptView(message, user, lang) {
+  const service = message.service_id ? db.prepare('SELECT title, title_en FROM services WHERE id = ?').get(message.service_id) : null;
+  return {
+    reference: referenceOf(message.id), code: receiptCode(message), received: cityStamp(message.created_at, lang), kind: message.kind, subject: message.subject, location: message.location,
+    service: service ? (lang === 'en' && service.title_en) || service.title : null, status: message.status, body: message.body, name: user.name,
+    generated: cityStamp(new Date().toISOString().slice(0, 19).replace('T', ' '), lang),
+  };
+}
+// F84: the replies of the given requests in one query (residents see "Un agent de la ville", staff see who wrote).
+function repliesOf(ids) {
+  const byMessage = new Map();
+  if (!ids.length) return byMessage;
+  const rows = db.prepare(`SELECT r.id, r.message_id, r.body, r.created_at, users.name AS author_name FROM message_replies r LEFT JOIN users ON users.id = r.author_id WHERE r.message_id IN (${ids.map(() => '?').join(',')}) ORDER BY r.id`).all(...ids);
+  for (const row of rows) byMessage.set(row.message_id, [...(byMessage.get(row.message_id) || []), row]);
+  return byMessage;
+}
 const fingerprintOf = (...parts) => createHash('sha256').update(parts.map((part) => String(part ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()).join('\u0001')).digest('hex');
 let cachedFeed;
 let pendingFeed;
@@ -962,7 +992,63 @@ async function route(request, response) {
     const messages = all
       ? db.prepare(`SELECT messages.*, users.name AS citizen_name, users.email AS citizen_email, users.district AS citizen_district, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages JOIN users ON users.id = messages.user_id LEFT JOIN services ON services.id = messages.service_id ORDER BY messages.created_at DESC, messages.id DESC`).all()
       : db.prepare('SELECT messages.id, subject, body, kind, location, status, created_at, updated_at, service_id, (SELECT id FROM public_requests WHERE message_id = messages.id) AS public_id, (SELECT public_title FROM public_requests WHERE message_id = messages.id) AS public_title, (SELECT COUNT(*) FROM supports JOIN public_requests ON public_requests.id = supports.public_request_id WHERE public_requests.message_id = messages.id) AS support_count, services.title AS service_title, services.title_en AS service_title_en FROM messages LEFT JOIN services ON services.id = messages.service_id WHERE user_id = ? ORDER BY created_at DESC, messages.id DESC').all(user.id);
-    return sendJson(response, 200, { messages });
+    const replies = repliesOf(messages.map((message) => message.id));
+    return sendJson(response, 200, {
+      messages: messages.map(({ fingerprint, ...message }) => ({
+        ...message,
+        reference: referenceOf(message.id),
+        replies: (replies.get(message.id) || []).map((reply) => ({ id: reply.id, body: reply.body, created_at: reply.created_at, author: all ? reply.author_name || 'Agent' : 'Un agent de la ville' })),
+      })),
+    });
+  }
+  // F83: the receipt of one of the resident's own requests (a page to read, print or save), and a public check of a reference and its code.
+  const receiptMatch = /^\/api\/messages\/(\d+)\/receipt$/.exec(path);
+  if (receiptMatch && method === 'GET') {
+    const user = requireUser(request, ['citizen']);
+    const message = db.prepare('SELECT id, user_id, subject, body, kind, location, status, service_id, created_at FROM messages WHERE id = ? AND user_id = ?').get(Number(receiptMatch[1]), user.id);
+    if (!message) fail(404, 'Demande introuvable.');
+    const params = new URL(request.url, 'http://localhost').searchParams;
+    const lang = pickLang(params.get('lang'));
+    const view = receiptView(message, user, lang);
+    if (params.get('format') === 'json') return sendJson(response, 200, view);
+    return sendDocument(response, receiptHtml(view, lang), 'text/html; charset=utf-8', params.has('download') ? `accuse-de-reception-${view.reference}-${lang}.html` : null);
+  }
+  if (path === '/api/receipts/verify' && method === 'GET') {
+    const params = new URL(request.url, 'http://localhost').searchParams;
+    const address = clientIp(request);
+    const wait = verifies.waitMs(address);
+    if (wait) fail(429, `Trop de vérifications. Réessayez dans ${Math.max(1, Math.ceil(wait / 60_000))} min.`, { retryAfter: Math.ceil(wait / 1000) });
+    verifies.add(address);
+    const lang = pickLang(params.get('lang'));
+    const match = /^M-(\d{1,12})$/.exec(String(params.get('reference') || '').trim().toUpperCase());
+    const given = String(params.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const message = match ? db.prepare('SELECT id, user_id, kind, status, created_at FROM messages WHERE id = ?').get(Number(match[1])) : null;
+    const expected = message ? Buffer.from(receiptCode(message).replace('-', '')) : null;
+    const valid = Boolean(expected) && given.length === expected.length && timingSafeEqual(Buffer.from(given), expected);
+    // Nothing but "yes, and when" is said: no content, no name, and the same answer shape whether the reference exists or not.
+    return sendJson(response, 200, valid ? { valid: true, reference: referenceOf(message.id), received: cityStamp(message.created_at, lang), kind: message.kind, status: message.status } : { valid: false });
+  }
+  // F84: an agent answers a request directly, without changing its state. The resident gets a notice carrying the answer; the journal records who answered.
+  const replyMatch = /^\/api\/messages\/(\d+)\/replies$/.exec(path);
+  if (replyMatch && method === 'POST') {
+    const staff = requireUser(request, ['agent', 'admin']);
+    const body = await readJson(request);
+    const content = text(body.body, 5, 2000, 'La réponse');
+    const item = db.prepare('SELECT id, user_id, subject FROM messages WHERE id = ?').get(Number(replyMatch[1]));
+    if (!item) fail(404, 'Message introuvable.');
+    const same = db.prepare("SELECT id FROM message_replies WHERE message_id = ? AND author_id = ? AND body = ? AND created_at > datetime('now', ?) ORDER BY id DESC LIMIT 1").get(item.id, staff.id, content, DUPLICATE_WINDOW);
+    if (same) {
+      noteForm('duplicate', 'reply');
+      return sendJson(response, 200, { id: same.id, duplicate: true });
+    }
+    charge('reply', { account: String(staff.id) });
+    const result = tx(() => {
+      const inserted = db.prepare('INSERT INTO message_replies (message_id, author_id, body) VALUES (?, ?, ?)').run(item.id, staff.id, content);
+      db.prepare('INSERT INTO notices (user_id, code, ref_id, label, note) VALUES (?, ?, ?, ?, ?)').run(item.user_id, 'message.reply', item.id, item.subject, content);
+      audit(staff, { category: 'message', action: 'message.reply', target: { type: 'message', id: item.id, label: item.subject }, summary: `a répondu à la demande « ${item.subject} »`, details: { characters: content.length } });
+      return inserted;
+    });
+    return sendJson(response, 201, { id: Number(result.lastInsertRowid), reference: referenceOf(item.id) });
   }
   if (path === '/api/messages' && method === 'POST') {
     const user = requireUser(request, ['citizen']);

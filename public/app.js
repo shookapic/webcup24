@@ -514,6 +514,7 @@ function clearIdentity() {
   $('#requests-list').replaceChildren();
   for (const list of [$('#citizen-messages'), $('#staff-messages'), $('#dashboard-todo')]) forgetLoaded(list);
   formTokens.clear();
+  drafts.clear();
   citizens = [];
   pendingDelete = null;
   pendingCitizen = null;
@@ -553,13 +554,60 @@ function clearIdentity() {
 
 // F50: the staff list can be narrowed by state, type and the resident's profile district; the dashboard numbers open it already filtered.
 let staffMessages = [];
-const staffFilter = () => ({ status: $('#staff-filter-status').value, kind: $('#staff-filter-kind').value, district: $('#staff-filter-district').value });
-const staffMatches = (item, { status, kind, district }) => (!status || item.status === status) && (!kind || item.kind === kind) && (!district || (district === 'none' ? !item.citizen_district : item.citizen_district === district));
-for (const id of ['#staff-filter-status', '#staff-filter-kind', '#staff-filter-district']) $(id).addEventListener('change', () => renderMessages(staffMessages));
+const staffFilter = () => ({ status: $('#staff-filter-status').value, kind: $('#staff-filter-kind').value, district: $('#staff-filter-district').value, reply: $('#staff-filter-reply').value });
+const staffMatches = (item, { status, kind, district, reply }) => (!status || item.status === status) && (!kind || item.kind === kind) && (!district || (district === 'none' ? !item.citizen_district : item.citizen_district === district))
+  && (!reply || (reply === 'none' ? !(item.replies || []).length : (item.replies || []).length > 0));
+for (const id of ['#staff-filter-status', '#staff-filter-kind', '#staff-filter-district', '#staff-filter-reply']) $(id).addEventListener('change', () => renderMessages(staffMessages));
+
+// Stored times are UTC; the city lives at UTC+4 and the receipts, the summary and the journal say so, so the cards say the same.
+function cityTime(utc) {
+  const date = new Date(`${String(utc).replace(' ', 'T')}Z`);
+  if (Number.isNaN(date.getTime())) return String(utc || '');
+  const city = new Date(date.getTime() + 4 * 3600_000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return t('{date} à {time} (heure de la cité)', { date: `${pad(city.getUTCDate())}/${pad(city.getUTCMonth() + 1)}/${city.getUTCFullYear()}`, time: `${pad(city.getUTCHours())}:${pad(city.getUTCMinutes())}` });
+}
+// F83: the receipt of a request (a page to read, print or save), opened in a new tab and announced as such.
+function receiptLink(id) {
+  const link = element('a', 'receipt-link', t('Accusé de réception (à imprimer ou enregistrer)'));
+  link.href = `/api/messages/${id}/receipt?lang=${lang}`;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.append(element('span', 'visually-hidden', ` ${t('(s’ouvre dans un nouvel onglet)')}`));
+  return link;
+}
+// F84: one answer of the town hall (residents read "la ville", staff read who wrote it).
+function replyBox(reply, staffView) {
+  const box = element('div', 'reply');
+  box.setAttribute('role', 'group');
+  box.setAttribute('aria-label', t('Réponse de la ville'));
+  box.append(element('p', 'reply-head', `${staffView ? t('Réponse de {author}', { author: reply.author }) : t('Réponse de la ville')} · ${cityTime(reply.created_at)}`), element('p', 'reply-text', reply.body));
+  return box;
+}
+// A half-written answer or note survives the list being rebuilt (every poll, every filter change): drafts are kept by request and field, and the focus and
+// the caret come back where they were.
+const drafts = new Map();
+function keepDraft(field, key) {
+  field.dataset.draft = key;
+  field.value = drafts.get(key) || '';
+  field.addEventListener('input', () => drafts.set(key, field.value));
+}
+const focusSnapshot = () => {
+  const active = document.activeElement;
+  return active?.dataset?.draft ? { key: active.dataset.draft, start: active.selectionStart, end: active.selectionEnd } : null;
+};
+function restoreFocus(snapshot) {
+  if (!snapshot) return;
+  const field = document.querySelector(`[data-draft="${CSS.escape(snapshot.key)}"]`);
+  if (!field) return;
+  field.focus();
+  try { field.setSelectionRange(snapshot.start, snapshot.end); } catch { /* not a text field */ }
+}
 
 function renderMessages(messages) {
   const staff = ['agent', 'admin'].includes(user?.role);
   const list = staff ? $('#staff-messages') : $('#citizen-messages');
+  const snapshot = focusSnapshot();
   list.replaceChildren();
   messageCount = messages.length;
   renderGuide();
@@ -598,11 +646,16 @@ function renderMessages(messages) {
         steps.append(step);
       });
       card.append(steps);
+      for (const reply of item.replies || []) card.append(replyBox(reply, false));
+      const receiptRow = element('p', 'receipt-row');
+      receiptRow.append(receiptLink(item.id));
+      card.append(receiptRow);
     }
     card.dataset.message = item.id;
     if (staff && item.public_id) card.append(element('p', 'message-public', t(item.support_count === 1 ? 'Publié pour les habitants : 1 soutien.' : 'Publié pour les habitants : {n} soutiens.', { n: item.support_count })));
     if (!staff && item.kind === 'incident') card.append(publicControls(item));
-    card.append(element('p', 'message-dates', t('Reçu le {created} · Dernière mise à jour le {updated}', { created: item.created_at, updated: item.updated_at })));
+    card.append(element('p', 'message-reference', t('Référence {reference}', { reference: item.reference || `M-${item.id}` })));
+    card.append(element('p', 'message-dates', t('Reçu le {created} · Dernière mise à jour le {updated}', { created: cityTime(item.created_at), updated: cityTime(item.updated_at) })));
     if (staff) {
       const label = element('label', 'status-field', t('État '));
       const select = element('select');
@@ -617,6 +670,7 @@ function renderMessages(messages) {
       const note = element('input');
       note.maxLength = 300;
       note.setAttribute('aria-label', t('Message pour l’habitant, demande {id}', { id: item.id }));
+      keepDraft(note, `note:${item.id}`);
       noteField.append(note);
       const failure = element('p', 'status-failure');
       failure.setAttribute('role', 'alert');
@@ -626,6 +680,7 @@ function renderMessages(messages) {
         select.disabled = true;
         try {
           await api(`/api/messages/${item.id}`, 'PATCH', note.value.trim() ? { status: select.value, note: note.value.trim() } : { status: select.value });
+          drafts.delete(`note:${item.id}`);
           await loadMessages();
         } catch (error) {
           if (error.status === 401) return clearIdentity();
@@ -640,9 +695,43 @@ function renderMessages(messages) {
       });
       label.append(select);
       card.append(label, noteField, failure);
+      // F84: answer the resident directly; the state of the request does not change.
+      for (const reply of item.replies || []) card.append(replyBox(reply, true));
+      const replyField = element('label', 'status-field', t('Répondre directement à l’habitant '));
+      const answer = element('textarea');
+      answer.rows = 3;
+      answer.maxLength = 2000;
+      answer.setAttribute('aria-label', t('Réponse à l’habitant, demande {id}', { id: item.id }));
+      keepDraft(answer, `reply:${item.id}`);
+      replyField.append(answer);
+      const sendReply = element('button', 'button', t('Envoyer la réponse'));
+      sendReply.type = 'button';
+      sendReply.addEventListener('click', async () => {
+        const body = answer.value.trim();
+        if (!body) {
+          setFormStatus('#staff-reply-status', t('Écrivez d’abord la réponse.'), true);
+          answer.focus();
+          return;
+        }
+        sendReply.disabled = true;
+        try {
+          await api(`/api/messages/${item.id}/replies`, 'POST', { body });
+          drafts.delete(`reply:${item.id}`);
+          setFormStatus('#staff-reply-status', t('Réponse envoyée à l’habitant (demande {reference}). L’état de la demande n’a pas changé.', { reference: item.reference || `M-${item.id}` }));
+          await loadMessages();
+          document.querySelector(`[data-draft="reply:${item.id}"]`)?.focus();
+        } catch (error) {
+          if (error.status === 401) return clearIdentity();
+          setFormStatus('#staff-reply-status', error.message, true);
+          sendReply.disabled = false;
+          answer.focus();
+        }
+      });
+      card.append(replyField, sendReply);
     }
     list.append(card);
   }
+  restoreFocus(snapshot);
 }
 
 // ---- F49: notices. The server writes one for the owner when a request really changes state; we poll and show them.
@@ -652,6 +741,7 @@ let noticeKey = null;
 const noticeLines = {
   'message.in_progress': ['Votre demande « {label} » est en cours de traitement.', 'Vous n’avez rien à faire pour le moment.'],
   'message.resolved': ['Votre demande « {label} » est résolue.', 'Si le problème persiste, envoyez-nous un nouveau message.'],
+  'message.reply': ['La ville a répondu à votre demande « {label} ».', 'Lisez la réponse dans « Mes messages » ou ci-dessous.'],
   'message.new': ['Votre demande « {label} » est de nouveau à traiter.', 'Vous n’avez rien à faire : un agent la reprendra.'],
   'public.in_progress': ['La demande « {label} » que vous soutenez est en cours de traitement.', 'Vous n’avez rien à faire. Merci de votre soutien.'],
   'public.resolved': ['La demande « {label} » que vous soutenez est résolue.', 'Merci de votre soutien.'],
@@ -735,6 +825,7 @@ $('#dashboard-panel').addEventListener('click', (event) => {
   $('#staff-filter-status').value = filter.status || '';
   $('#staff-filter-kind').value = filter.kind || '';
   $('#staff-filter-district').value = filter.district || '';
+  $('#staff-filter-reply').value = filter.reply || '';
   renderMessages(staffMessages);
   $('#staff-messages-panel').focus();
 });
@@ -2127,6 +2218,20 @@ async function afterAuthentication(nextUser) {
   renderEmergency();
 }
 
+// F83: anyone holding a reference and its code can ask whether the city received the request, and when. The answer never carries the content.
+const requestKinds = { incident: 'Signalement de problème', contact: 'Question aux services' };
+$('#verify-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    const data = await api(`/api/receipts/verify?reference=${encodeURIComponent(formValue(form, 'reference'))}&code=${encodeURIComponent(formValue(form, 'code'))}&lang=${lang}`);
+    if (data.valid) setFormStatus('#verify-status', t('Accusé valide : la ville a bien reçu la demande {reference} le {received} (heure de la cité). Type : {kind}. État actuel : {state}.', { reference: data.reference, received: data.received, kind: t(requestKinds[data.kind] || data.kind), state: t(statusLabels[data.status] || data.status) }));
+    else setFormStatus('#verify-status', t('Cette référence et ce code ne correspondent à aucune demande reçue. Vérifiez-les ou demandez de l’aide à un agent.'), true);
+  } catch (error) {
+    reportError('#verify-status', error);
+  }
+});
+
 $('#register-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -2180,7 +2285,8 @@ $('#message-form').addEventListener('submit', async (event) => {
     updateLocationField();
     dismissTip('message');
     dismissTip('report');
-    setFormStatus('#message-status', t('{confirmation} Référence n°{id}.', { confirmation: t(data.confirmation), id: data.id }));
+    setFormStatus('#message-status', t('{confirmation} Référence {reference}.', { confirmation: t(data.confirmation), reference: `M-${data.id}` }));
+    $('#message-status').append(' ', receiptLink(data.id));
     await loadMessages();
   } catch (error) {
     reportError('#message-status', error);
