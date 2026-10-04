@@ -1,0 +1,24 @@
+PASS admin login {"status":200}
+PASS open {}
+PASS reopened during lowering stays up in first person {"cam":0.01}
+PASS input still locked after rapid reopen {}
+FAIL final close lowers and restores third person {"cam":"0.01"}
+PASS reopen 20 ms before the lowering timer: still up {}
+FAIL then closes cleanly {}
+PASS alert shown inside the manually opened phone {}
+FAIL acknowledge keeps a manual phone open {}
+FAIL manual phone closes afterwards, third person restored {}
+PASS alert raised the phone {}
+file:///C:/Users/shookapic/Documents/webcup/webcup24-B/node_modules/puppeteer-core/lib/puppeteer/common/WaitTask.js:46
+            this.#timeoutError = new TimeoutError(`Waiting failed: ${options.timeout}ms exceeded`);
+                                 ^
+
+TimeoutError: Waiting failed: 25000ms exceeded
+    at new WaitTask (file:///C:/Users/shookapic/Documents/webcup/webcup24-B/node_modules/[4mpuppeteer-core[24m/lib/puppeteer/common/WaitTask.js:46:34)
+    at IsolatedWorld.waitForFunction (file:///C:/Users/shookapic/Documents/webcup/webcup24-B/node_modules/[4mpuppeteer-core[24m/lib/puppeteer/api/Realm.js:49:26)
+    at CdpFrame.waitForFunction (file:///C:/Users/shookapic/Documents/webcup/webcup24-B/node_modules/[4mpuppeteer-core[24m/lib/puppeteer/api/Frame.js:585:43)
+    at CdpFrame.<anonymous> (file:///C:/Users/shookapic/Documents/webcup/webcup24-B/node_modules/[4mpuppeteer-core[24m/lib/puppeteer/util/decorators.js:101:27)
+    at CdpPage.waitForFunction (file:///C:/Users/shookapic/Documents/webcup/webcup24-B/node_modules/[4mpuppeteer-core[24m/lib/puppeteer/api/Page.js:1537:37)
+    at [90mfile:///C:/Users/shookapic/Documents/webcup/webcup24-B-finalqa/[39mtools/qa/phone-race.mjs:77:12
+
+Node.js v22.23.2

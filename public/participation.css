@@ -30,7 +30,7 @@
 .tp-root :focus-visible { outline: 2px solid var(--tn-focus, #0b5f59); outline-offset: 3px; }
 .tp-status { min-height: 1.4rem; margin: var(--tn-s1, 4px) 0; font-weight: 600; }
 .tp-status.tp-error, .tp-error { border-left: 6px solid var(--tn-bad, #9f1d16); padding-left: var(--tn-s2, 8px); color: var(--tn-bad, #9f1d16); }
-.tp-status.tp-error::before, p.tp-error::before { content: "Erreur : "; }
+.tp-status.tp-error::before, p.tp-error::before { content: "\26a0\00a0"; } /* language-neutral warning glyph; the error word itself is already in the DOM text (FR or EN) */
 .tp-receipt { border-left: 6px solid var(--tn-done, #1c6b3a); padding-left: var(--tn-s2, 8px); font-weight: 600; }
 .tp-list { padding-left: var(--tn-s4, 24px); }
 .tp-list li { margin: var(--tn-s2, 8px) 0; }

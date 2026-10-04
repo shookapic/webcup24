@@ -10,7 +10,7 @@
 .to-button { font: inherit; font-weight: 600; padding: .55rem 1rem; min-height: 44px; border-radius: var(--tn-radius, 2px); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; border: 1.5px solid var(--tn-action, #0b5f59); background: var(--tn-action, #0b5f59); color: var(--tn-action-text, #fff); }
 .to-secondary { background: transparent; color: var(--tn-action, #0b5f59); }
 .to-chips { list-style: none; padding: 0; margin: var(--tn-s2, 8px) 0; display: flex; flex-wrap: wrap; gap: var(--tn-s2, 8px); }
-.to-chip { font: inherit; padding: .45rem .85rem; min-height: 44px; border-radius: 999px; background: transparent; border: 1.5px solid var(--tn-line, #b8c4cd); color: var(--tn-text, #0e1b27); cursor: pointer; }
+.to-chip { font: inherit; padding: .45rem .85rem; min-height: 44px; border-radius: var(--tn-radius, 2px); background: transparent; border: 1.5px solid var(--tn-line, #b8c4cd); color: var(--tn-text, #0e1b27); cursor: pointer; }
 .to-examples { margin: var(--tn-s3, 16px) 0; }
 .to-status { min-height: 1.4rem; font-weight: 600; }
 .to-grid { display: grid; gap: var(--tn-s3, 16px); grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); margin: var(--tn-s3, 16px) 0; }
