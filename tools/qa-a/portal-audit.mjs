@@ -68,7 +68,7 @@ try {
   let guest = await open();
   const crumbs = $$(guest, 'nav.breadcrumb');
   check('D15 breadcrumbs: one on every section (services, places, transport, news, space, plain words), each labelled and linking back to the top', crumbs.length >= 6 && crumbs.every((c) => c.getAttribute('aria-label') && c.querySelector('a[href="#haut"]') && c.querySelector('span:last-child').textContent.trim().length > 2), crumbs.map((c) => c.textContent).join('|'));
-  check('D07 home page: skip link, one h1, main navigation to every section, primary action to the services', $(guest, 'a.skip-link[href="#contenu"]') && $$(guest, 'h1').length === 1 && ['#services', '#lieux', '#transports', '#actualites', '#espace', '#mots'].every((h) => $(guest, `nav[aria-label="Navigation principale"] a[href="${h}"]`)) && $(guest, '.hero a[href="#services"]'));
+  check('D07 home page: skip link, one h1, main navigation to every section, primary action to the services', $(guest, 'a.skip-link[href="#contenu"]') && $$(guest, 'h1').length === 1 && ['#services', '#lieux', '#transports', '#actualites', '#mots'].every((h) => $(guest, `nav[aria-label="Navigation principale"] a[href="${h}"]`)) && $(guest, 'header a[href="#espace"]') && $(guest, '.hero a[href="#services"]'));
   check('D05/D06 services and publications are shown to a visitor before any account', $$(guest, '#services-list .service-card').length >= 6 && $$(guest, '#news-list .news-card').length >= 3);
   check('D08/D09 a visitor sees neither the member area nor the staff tools', $(guest, '#member-area').hidden && $(guest, '#staff-area').hidden && $(guest, '#admin-area').hidden && !$(guest, '#guest-area').hidden);
   const data = $(guest, '#donnees');
