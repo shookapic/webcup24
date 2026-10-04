@@ -469,7 +469,7 @@ html[data-contrast=high] .place-kind,html[data-contrast=high] .place-emergency .
 .notice-banner a{color:#0b2a44;font-weight:700}
 .notice-list,.dashboard-todo,.dashboard-recent{margin:0;padding:0;list-style:none;display:grid;gap:10px}
 .notice-item{padding:10px 12px;border:1px solid var(--line,#c9d3dc);border-left-width:4px;border-radius:4px;display:grid;gap:4px;overflow-wrap:anywhere}
-.notice-unread{border-left-color:#1a5a8a;background:#eef6fc;font-weight:600}
+.notice-unread{border-left-color:#1a5a8a;background:#eef6fc;color:#0b2a44;font-weight:600}
 .notice-action,.notice-note{font-weight:400}
 .notice-time{font-size:.8125rem;font-weight:400;opacity:.8}
 .dashboard-time{font-size:.8125rem}
@@ -546,3 +546,8 @@ html[data-light=true] *,html[data-light=true] *::before,html[data-light=true] *:
 .lazy-card{border:1px solid #ffffff33;padding:20px;max-width:62rem}
 .requests-section .lazy-card{border-color:#10253933}
 .lazy-card h2{margin:0 0 8px}
+
+/* orientation module (B) in high contrast: the section is black, the module paints its own light-theme colours */
+html[data-contrast=high] #orientation-root,html[data-contrast=high] #orientation-root *{color:#fff;background-color:transparent}
+html[data-contrast=high] #orientation-root button,html[data-contrast=high] #orientation-root input,html[data-contrast=high] #orientation-root select{background-color:#000;border:2px solid #ffeb00}
+html[data-contrast=high] #orientation-root button{color:#ffeb00}
