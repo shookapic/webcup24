@@ -1,15 +1,19 @@
 # Terra Nova — contest request snapshot
 
-Source: existing authorized official API watcher snapshot copied on 2026-10-03 at approximately 16:28 Europe/Paris. The publisher timestamp, wave and count appear below. This is a request inventory, not a declaration of completion; FEATURE_MATRIX.md and PM_STATUS.md record the handoff and acceptance state.
+Source: existing authorized official API watcher snapshot copied on 2026-10-03 at17:27 Europe/Paris. Latest inventory: Wave8,50 requests, publisher timestamp17:25:27. This inventory is not a completion declaration; FEATURE_MATRIX.md and PM_STATUS.md record implementation/evidence.
 
 Endpoint: https://24h.webcup.fr/wp-json/webcup/v1/requests. Credentials remain server/local environment only; none are included here.
 
 # Terra Nova — demandes API
 
-Mis à jour : 03/10/2026 16:29:00 · vague 7 · 46 demandes · H+8h04 · prochaine vague (8) dans 56 min
+Mis à jour : 03/10/2026 17:25:27 · vague 8 · 50 demandes · H+9h00 · prochaine vague (9) dans 60 min
 
 | Code | Vu le | Vague | Difficulté | XP | Demandeur | Demande |
 |---|---|---|---|---|---|---|
+| F52 | 17:25 | 8 | Moyenne | 660 | Citoyen | Peut-on soutenir une demande déjà déposée par d’autres habitants ? Cette participation doit être simple à comprendre et laisser une trace suffisamment claire pour que l’habitant sache que sa contribution a bien été prise en compte. |
+| F51 | 17:25 | 8 | Difficile | 990 | Citoyen | Plusieurs habitants disent ne pas comprendre comment leurs données sont utilisées par la plateforme et souhaitent pouvoir faire remonter leurs inquiétudes. Cette participation doit être simple à comprendre et laisser une trace suffisamment claire pour que l’habitant sache que sa contribution a bien été prise en compte. |
+| F50 | 17:25 | 8 | Difficile | 990 | Institution | Un tableau de bord simplifié serait utile pour suivre l’activité de la plateforme. Dans l’espace de travail des agents, cette information doit être facile à retrouver et suffisamment claire pour faciliter le suivi quotidien. |
+| F49 | 17:25 | 8 | Facile | 330 | Citoyen | J’aimerais être informée quand ma demande change d’état. L’information doit être visible au bon moment et permettre aux personnes concernées de comprendre immédiatement ce qu’elles doivent savoir ou faire. |
 | F48 | 16:25 | 7 | Moyenne | 640 | Institution | Les agents doivent savoir qui a modifié quoi dans l’administration. Dans l’espace de travail des agents, cette information doit être facile à retrouver et suffisamment claire pour faciliter le suivi quotidien. |
 | F47 | 16:25 | 7 | Difficile | 960 | Institution | La ville doit pouvoir justifier clairement les actions réalisées sur la plateforme. Certaines opérations doivent rester consultables et traçables dans le temps. Dans l’espace de travail des agents, cette information doit être facile à retrouver et suffisamment claire pour faciliter le suivi quotidien. |
 | F46 | 16:25 | 7 | Facile | 320 | Citoyen | Où se trouvent les hôpitaux et services d’urgence ? L’habitant doit pouvoir comprendre rapidement l’information utile à sa situation et agir sans devoir parcourir plusieurs écrans. |

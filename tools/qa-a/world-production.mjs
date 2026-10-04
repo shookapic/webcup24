@@ -1,6 +1,6 @@
 // Session A: the world UI exactly as production serves it: `npm run build`, then Node serving dist/monde (CSP, gzip,
 // cache headers, real App.jsx wiring). Seeds a citizen, an urgent alert (store default) and a service outage.
-// Modes: `physical` (default; desktop, B's PhoneRig: DOM screen under a CSS matrix3d) and `flat` (/monde/?flatphone, the accessible dialog).
+// Modes: `physical` (default; desktop, B's PhoneRig: the A-owned DOM screen, placed on the projected 3D screen by a CSS transform: 2D translate+scale in the released build, full matrix3d only with the ?phoneproj diagnostic) and `flat` (/monde/?flatphone, the accessible dialog).
 // Needs: npm i --no-save puppeteer-core axe-core. Env: CHROME_PATH, SHOTS_DIR. Usage: node tools/qa-a/world-production.mjs [physical|flat]
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -91,10 +91,16 @@ try {
       if (!h) return null;
       const r = h.getBoundingClientRect();
       const cs = getComputedStyle(h);
-      return { matrix3d: cs.transform.startsWith('matrix3d'), opacity: cs.opacity, role: h.getAttribute('role'), modal: h.getAttribute('aria-modal'), label: h.getAttribute('aria-label'), dialogs: document.querySelectorAll('[role=dialog]').length, flatSheets: document.querySelectorAll('.phone-sheet').length, w: Math.round(r.width), h: Math.round(r.height), onScreen: r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1, focusInside: Boolean(document.activeElement?.closest('.phone-host')) };
+      // Computed transforms: translate+scale reads back as matrix(a,b,c,d,e,f); a projective placement as matrix3d(...).
+      // 'affine' also requires no rotation or skew (b = c = 0) and a positive scale on both axes, i.e. an upright, unmirrored screen.
+      const parsed = /^matrix(3d)?\((.*)\)$/.exec(cs.transform);
+      const v = parsed ? parsed[2].split(',').map(Number) : [];
+      const placement = !parsed ? 'none' : parsed[1] ? 'projective' : Math.abs(v[1]) < 1e-6 && Math.abs(v[2]) < 1e-6 && v[0] > 0 && v[3] > 0 ? 'affine' : 'affine-rotated';
+      return { placement, transform: cs.transform.slice(0, 80), opacity: cs.opacity, role: h.getAttribute('role'), modal: h.getAttribute('aria-modal'), label: h.getAttribute('aria-label'), dialogs: document.querySelectorAll('[role=dialog]').length, flatSheets: document.querySelectorAll('.phone-sheet').length, w: Math.round(r.width), h: Math.round(r.height), onScreen: r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1, focusInside: Boolean(document.activeElement?.closest('.phone-host')) };
     });
-    check('physical phone: the screen is the DOM host under a CSS matrix3d, lit, labelled, modal', Boolean(host) && host.matrix3d && host.opacity === '1' && host.role === 'dialog' && host.modal === 'true' && Boolean(host.label), JSON.stringify(host));
+    check('physical phone: the screen is the DOM host placed by an upright affine (translate+scale) or a projective (matrix3d) transform, lit, labelled, modal', Boolean(host) && ['affine', 'projective'].includes(host.placement) && host.opacity === '1' && host.role === 'dialog' && host.modal === 'true' && Boolean(host.label), JSON.stringify(host));
     check('physical phone: exactly one focusable screen instance, no flat sheet beside it, and it is on the viewport', host.dialogs === 1 && host.flatSheets === 0 && host.onScreen, JSON.stringify(host));
+    console.log(`NOTE  placement: ${host.placement} (${host.transform})`);
     console.log(`NOTE  physical screen drawn ${host.w}x${host.h}px for a 360x740 layout: text scale about ${(host.w / 360).toFixed(2)} (16px body text reads as about ${(16 * host.w / 360).toFixed(1)}px)`);
     // click alignment: a real mouse click at each tab's on-screen centre (after the 3D transform) must hit that tab
     const tabs = await page.$$eval(".phone-nav button", (nodes) => nodes.map((n) => { const r = n.getBoundingClientRect(); return { label: n.textContent.trim(), x: r.left + r.width / 2, y: r.top + r.height / 2, hit: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('button') === n }; }));

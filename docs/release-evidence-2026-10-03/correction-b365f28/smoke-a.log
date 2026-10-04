@@ -1,0 +1,142 @@
+(node:43284) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS  server boots
+PASS  GET /api/me anonymous
+PASS  announcements expose urgent/audience/title_en
+PASS  services featured first
+PASS  transports: 2 lines, stops/districts/3 departures
+PASS  transport stop→district mapping
+PASS  transport T1 disrupted with message
+PASS  anonymous cannot POST presence
+PASS  anonymous cannot read requests feed
+PASS  citizen registers
+PASS  short password rejected
+PASS  avatar rejects bad colour
+PASS  avatar saved
+PASS  /api/me returns avatar
+PASS  profile district saved
+PASS  presence post 204
+PASS  presence rejects NaN-like
+PASS  incident requires location
+PASS  incident submitted with confirmation
+PASS  citizen cannot patch message
+PASS  citizen cannot publish news
+PASS  citizen cannot reach admin citizens
+PASS  admin logs in
+PASS  agent logs in
+PASS  wrong password rejected
+PASS  agent sees all messages
+PASS  agent updates status
+PASS  citizen sees updated status
+PASS  requests feed without key → 503 for staff
+PASS  admin publishes urgent alert
+PASS  alert listed urgent with audience
+PASS  admin lifts alert (a reason is required)
+PASS  admin publishes featured service
+PASS  agent updates traffic
+PASS  traffic message required when disrupted
+PASS  F33 wrong password refused
+PASS  F33 staff cannot self-delete
+PASS  F33 deletes with password and logs out
+PASS  F33 deleted account cannot log in
+PASS  F34 list + search
+PASS  F34 search finds nobody for junk / escapes wildcard
+PASS  F34 anonymous refused
+PASS  F34 staff account protected (patch/reset/delete)
+PASS  F34 unknown id → 404
+PASS  F34 invalid status body → 400
+PASS  F34 deactivate needs a reason, then revokes the session
+PASS  F34 deactivated cannot log in
+PASS  F34 reactivate allows login
+PASS  F34 reset needs a reason
+PASS  F34 reset returns one-time password, ends sessions, old password dead
+PASS  F34 new password works
+PASS  F34 delete needs a reason, then removes the account
+PASS  F38 anonymous 401, citizen 403
+PASS  F38 validation: reason required, past/invalid return date, bad status, unknown service
+PASS  F38 agent marks a service unavailable with reason, return time and alternative
+PASS  F38 public list exposes availability, reason, return time, alternative (FR + EN)
+PASS  F38 an outage whose return time has passed stops showing as unavailable by itself
+PASS  F38 a request can name its service; citizen and staff see it
+PASS  F38 unknown service id refused
+PASS  F38 back to available clears the details
+PASS  F39 citizens cannot publish slots, anonymous refused
+PASS  F39 slot validation: past, count, duration, midnight, > 90 days, bad format
+PASS  F39 agent publishes consecutive slots
+PASS  F39 the same slots cannot be published twice
+PASS  F39 citizens list open slots in order with agent, place, preparation info and the time zone
+PASS  F39 staff do not use the citizen booking list
+PASS  F39 two people booking the same slot at once: exactly one wins, the other gets a clear 409
+PASS  F39 booking returns/lists the full details
+PASS  F39 booked slot disappears from the open list
+PASS  F39 cannot book an overlapping or a third upcoming appointment
+PASS  F40 calendar file: text/calendar, correct UTC start (city time − 4 h), two alarms (1 day, 1 hour), place + preparation info
+PASS  F40 calendar file only for its owner
+PASS  F39 a citizen cannot cancel someone else's appointment
+PASS  F39 citizen cancels: the slot is offered again, second cancel 404
+PASS  F39 staff see who booked what and why
+PASS  F39 citizens cannot read the staff list
+PASS  F39 staff cancel a booking (reason required): the citizen sees it cancelled, it is not offered again
+PASS  F39 staff remove an open slot
+PASS  F39/F33 deleting an account frees its booked slot
+PASS  F37 wrong passwords return 401 with a falling attemptsLeft
+PASS  F37 6th attempt is blocked even with the right password: 429 + Retry-After + retryAfter
+PASS  F37 the real owner from another address still signs in, and is told about the failed attempts
+PASS  F37 the blocked address stays blocked
+PASS  F37 unknown address answers exactly like a wrong password
+PASS  F37 normal use: a few typos then the right password signs in with no notice
+PASS  F37 a success resets the own counter of that person
+PASS  F37 guessing spread over 20 addresses still locks the account (even for a new address)
+PASS  F37 one address sweeping many accounts gets blocked for every account
+PASS  F37 other addresses are not affected by that sweep
+PASS  F37 security overview refused to anonymous and citizens
+PASS  F37 staff overview counts failures/blocks and names targeted accounts masked
+PASS  F37 window: blocked until the failure over the limit leaves the 15 min window
+PASS  F37 window: free again after 15 min, and memory is released
+PASS  F37 account deletion confirmation is also rate limited
+PASS  F45 public places list: >= 7 places with address, hours, nearest stop and district
+PASS  F46 emergency services and hospitals come first, 24 h flagged, with the 112 number
+PASS  F46 ?kind=care returns only hospitals and emergency services (incl. the nearest-stop mapping)
+PASS  F45 ?district filter works
+PASS  F45 the health centre place links to the health service
+PASS  F45 role isolation on place writes: anonymous 401, citizen 403, agent 403 (admin only)
+PASS  F45 place validation: kind, stop, district, phone, unknown service, name
+PASS  F48 a rejected action leaves no audit entry (nothing happened)
+PASS  F45 admin creates a place; a second one with the same name gets its own code
+PASS  F45 admin edits a place; the public list shows it with a newer updated_at
+PASS  F45 agents and citizens cannot edit or delete places
+PASS  F45 deleting a place needs a reason
+PASS  F48 the journal is for staff only: anonymous 401, citizen 403 (list, verify, csv)
+PASS  F47 every kind of admin and sensitive action is in the journal
+PASS  F48 actor, action, target and time come from the session: the spoofed actor fields and header were ignored
+PASS  F47 a citizen deleting their own account is recorded with the citizen as actor
+PASS  F47 sensitive actions all carry their reason
+PASS  F47 data handling: no raw citizen e-mail, no password, no temporary password in the journal; citizens appear masked
+PASS  F47 entries are ordered newest first and times never go backwards
+PASS  F48 before/after values are kept (service outage: before available, after unavailable)
+PASS  F48 who changed what: filter by actor, by category, by target, by dump
+PASS  F47 date filters (city day) and an empty result for a past period
+PASS  F47 history is paginated without gaps or repeats, and the first page lists the actors and categories to filter by
+PASS  F47 CSV export for the city: text/csv attachment, spreadsheet-safe cells, header and rows
+PASS  F47 the hash chain verifies over the whole journal
+PASS  F47 privacy: citizen actors (self-deletion, booking, cancelling) are stored masked: first name, initial, masked e-mail, id
+PASS  F47 privacy: after self-deletion no full citizen name or e-mail remains in rows, actor filter list or CSV; staff names are kept
+PASS  F47 robustness: 17 malformed filters (impossible dates, non-integer limit/before/actor, reversed range) each return a clear 400 message
+PASS  F47 robustness: the CSV export validates the same way
+PASS  F47 robustness: the server is still healthy after the bad requests
+PASS  F47 robustness: valid edge inputs are accepted (limit above the maximum is clamped to 200, limit=1 gives one row, 29 February of a leap year)
+PASS  F47 the journal is append-only at the database level: UPDATE and DELETE are refused
+PASS  F47 tampering (even with the trigger removed) is detected and the first broken entry is named
+PASS  /monde model MIME + revalidated cache
+PASS  /monde ETag → 304
+PASS  /monde fingerprinted asset immutable
+PASS  /monde gzip for large text assets, body intact, Vary set
+PASS  /monde small files are not compressed
+PASS  /monde missing .glb → 404 not HTML
+PASS  /monde navigation falls back to index
+PASS  /monde path traversal blocked
+PASS  /monde CSP per contract
+PASS  /monde redirects without slash
+PASS  portal CSP stays strict
+
+138/138 checks passed
