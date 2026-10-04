@@ -783,3 +783,11 @@ html[data-contrast=high] .dashboard-todo li{background:#000;color:#fff}
 }
 .panel-title-row{flex-wrap:wrap}
 .panel-title-row>*{min-width:0}
+/* mobile: a visible account shortcut beside the brand (hidden, so out of the Tab order, on wide screens where the nav shows it) */
+.mobile-account{display:none}
+@media(max-width:850px){
+  .mobile-account{display:inline-flex;align-items:center;min-height:44px;margin-left:auto;padding:0 var(--tn-s3);border:1.5px solid var(--tn-action);border-radius:var(--tn-radius);color:var(--tn-action);font-weight:600;text-decoration:none}
+  .mobile-account:hover{background:#ffffff1a}
+  .site-header{align-items:center}
+}
+html[data-contrast=high] .mobile-account{color:#ffeb00;border-color:#ffeb00}
