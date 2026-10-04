@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Participation (hôte de test)</title>
+<link rel="stylesheet" href="/participation.css"></head>
+<body><main><h1>Hôte de test</h1><div id="root"></div></main>
+<script src="/participation.js"></script>
+<script>
+  // Mimics the portal adapter: same-origin fetch, errors with .status and the French message.
+  async function api(path, method = 'GET', body) {
+    const response = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(data.error || 'Une erreur est survenue.'), { status: response.status, code: data.code });
+    return data;
+  }
+  const params = new URLSearchParams(location.search);
+  window.__mount = async () => {
+    const { user } = await api('/api/me');
+    window.__handle?.unmount();
+    window.__handle = TerraParticipation.mount(document.getElementById('root'), { user, lang: params.get('lang') === 'en' ? 'en' : 'fr', api });
+    document.documentElement.lang = params.get('lang') === 'en' ? 'en' : 'fr';
+  };
+  window.__mount();
+</script></body></html>
