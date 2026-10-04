@@ -11,11 +11,16 @@ import { begin, charge, formSummary, guarded, issue, minAgeMs, note as noteForm 
 import { cityStamp, pickLang, personalHtml, receiptHtml, recapCsv, recapHtml } from './recap.mjs';
 import { groupSimilar } from './similar.mjs';
 import { eraseParticipationUser, handleParticipation, initParticipation } from './participation.mjs';
-import { checkTotp, groupSecret, hashRecovery, looksLikeRecovery, newChallenge, newRecoveryCodes, newSecret, otpauthUri, rpIdOf, verifyAssertion, verifyRegistration } from './factors.mjs';
+import { checkTotp, groupSecret, hashRecovery, looksLikeRecovery, newChallenge, newRecoveryCodes, newSecret, otpauthUri, legacyToCose, rpIdOf, verifyAssertion, verifyRegistration } from './factors.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
 
 // F65-F68 / F76 (B's module): additive part_* tables. Demo rows are labelled "Exemple (démonstration)" and carry no votes; TN_PARTICIPATION_DEMO=0 starts with empty tables.
 initParticipation(db, { seedDemo: process.env.TN_PARTICIPATION_DEMO !== '0' });
+
+// passkeys stored before the switch to the maintained verifier: add the library's key encoding next to the old one (additive, idempotent)
+for (const row of db.prepare('SELECT id, public_key, alg FROM passkeys WHERE cose_key IS NULL').all()) {
+  try { db.prepare('UPDATE passkeys SET cose_key = ? WHERE id = ?').run(legacyToCose(row.public_key, row.alg), row.id); } catch { /* an unreadable legacy key simply cannot sign in; the password path is untouched */ }
+}
 
 const root = dirname(fileURLToPath(import.meta.url));
 const apiUrl = 'https://24h.webcup.fr/wp-json/webcup/v1/requests';
@@ -186,7 +191,7 @@ const clientChallenge = (response) => { try { return JSON.parse(Buffer.from(Stri
 const passkeyView = (row) => ({ id: row.id, label: row.label, created_at: row.created_at, last_used_at: row.last_used_at });
 const credentialShape = (value, keys) => value && typeof value === 'object' && keys.every((key) => typeof value.response?.[key] === 'string' && value.response[key].length < 20_000) && typeof value.id === 'string' && value.id.length < 1100;
 const noPasskeyMessage = 'Clé d’accès non reconnue. Réessayez, ou connectez-vous autrement.';
-const safeVerify = (fn) => { try { return fn(); } catch (error) { if (error.webauthn) fail(400, error.message); throw error; } };
+const safeVerify = async (fn) => { try { return await fn(); } catch (error) { if (error.webauthn) fail(400, error.message); throw error; } };
 function receiptView(message, user, lang) {
   const service = message.service_id ? db.prepare('SELECT title, title_en FROM services WHERE id = ?').get(message.service_id) : null;
   return {
@@ -539,7 +544,7 @@ async function requireProof(request, row, body, me) {
   const stored = entry.userId === me.id ? db.prepare('SELECT * FROM passkeys WHERE credential_id = ? AND user_id = ?').get(proof.id, me.id) : null;
   if (!stored) fail(403, noPasskeyMessage);
   let counter;
-  try { counter = verifyAssertion(proof.response, stored, { challenge, origin, rpId: rpIdOf(origin) }); } catch (error) { if (error.webauthn) fail(403, error.message); throw error; }
+  try { counter = await verifyAssertion(proof, stored, { challenge, origin, rpId: rpIdOf(origin) }); } catch (error) { if (error.webauthn) fail(403, error.message); throw error; }
   db.prepare('UPDATE passkeys SET sign_count = ?, last_used_at = CURRENT_TIMESTAMP WHERE id = ?').run(counter, stored.id);
 }
 
@@ -994,7 +999,7 @@ async function route(request, response) {
     authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
     excludeCredentials: exclude.map((id) => ({ type: 'public-key', id })),
   });
-  const credentialRow = (userId, info, label) => db.prepare('INSERT INTO passkeys (user_id, credential_id, public_key, alg, sign_count, label) VALUES (?, ?, ?, ?, ?, ?)').run(userId, info.credentialId, info.publicKey, info.alg, info.counter, label);
+  const credentialRow = (userId, info, label) => db.prepare('INSERT INTO passkeys (user_id, credential_id, public_key, alg, cose_key, sign_count, label) VALUES (?, ?, ?, ?, ?, ?, ?)').run(userId, info.credentialId, info.publicKey, 0, info.publicKey, info.counter, label);
   if (path === '/api/auth/passkey/options' && method === 'POST') {
     const wait = passkeyFailures.waitMs(clientIp(request));
     if (wait) fail(429, 'Trop de tentatives. Réessayez plus tard.', { retryAfter: Math.ceil(wait / 1000) });
@@ -1013,7 +1018,7 @@ async function route(request, response) {
     const stored = db.prepare('SELECT * FROM passkeys WHERE credential_id = ?').get(body.id);
     if (!stored) { passkeyFailures.add(ip); fail(401, noPasskeyMessage); }
     let counter;
-    try { counter = verifyAssertion(body.response, stored, { challenge, origin, rpId: rpIdOf(origin) }); } catch (error) { if (error.webauthn) { passkeyFailures.add(ip); fail(401, error.message); } throw error; }
+    try { counter = await verifyAssertion(body, stored, { challenge, origin, rpId: rpIdOf(origin) }); } catch (error) { if (error.webauthn) { passkeyFailures.add(ip); fail(401, error.message); } throw error; }
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(stored.user_id);
     if (!user.active) fail(403, 'Ce compte est désactivé. Contactez les services municipaux.');
     db.prepare('UPDATE passkeys SET sign_count = ?, last_used_at = CURRENT_TIMESTAMP WHERE id = ?').run(counter, stored.id);
@@ -1048,7 +1053,7 @@ async function route(request, response) {
     const challenge = clientChallenge(body.response);
     const entry = takeChallenge(challenge, 'register', origin);
     if (entry.userId !== me.id) fail(400, 'La vérification a expiré ou a déjà été utilisée. Recommencez.', { code: 'challenge-expired' });
-    const info = safeVerify(() => verifyRegistration(body.response, { challenge, origin, rpId: rpIdOf(origin) }));
+    const info = await safeVerify(() => verifyRegistration(body, { challenge, origin, rpId: rpIdOf(origin) }));
     if (info.credentialId !== body.id) fail(400, 'Réponse de l’appareil invalide.');
     let label = typeof body.label === 'string' && body.label.trim() ? text(body.label, 1, 60, 'Le nom de la clé') : deviceLabel(request);
     // two keys with the same name could not be told apart in the list: the second one is numbered
@@ -1104,7 +1109,7 @@ async function route(request, response) {
       if (!credentialShape(body, ['clientDataJSON', 'attestationObject'])) fail(400, 'Réponse de l’appareil invalide.');
       const challenge = clientChallenge(body.response);
       const entry = takeChallenge(challenge, 'signup', origin);
-      const info = safeVerify(() => verifyRegistration(body.response, { challenge, origin, rpId: rpIdOf(origin) }));
+      const info = await safeVerify(() => verifyRegistration(body, { challenge, origin, rpId: rpIdOf(origin) }));
       if (info.credentialId !== body.id) fail(400, 'Réponse de l’appareil invalide.');
       charge('register', { address: ip });
       const identity = entry.email || newAccessCode();

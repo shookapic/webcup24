@@ -299,8 +299,11 @@
         user.role === 'admin' ? h('button', { type: 'button', class: 'tp-button tp-danger', onclick: () => { if (globalThis.confirm?.(T('confirmDelete', { t: item.title }))) act(api(`/api/participation/admin/${kind}/${item.id}`, 'DELETE')); } }, T('deleteIt')) : null);
       if (admin) {
         sec.append(h('h4', null, T('decisions')), h('ul', { class: 'tp-list' }, admin.decisions.map((d) => row('decisions', d, ` ${T('participants', { n: d.participants })}`))));
-        sec.append(h('h4', null, T('consultations')), h('ul', { class: 'tp-list' }, admin.consultations.map((c) => h('li', null, ...Array.from(row('consultations', c, ` ${T('staffOpinions', { n: c.opinionCount ?? 0, a: c.averageRating ?? '–' })}`).childNodes),
-          (c.comments ?? []).length ? h('ul', null, c.comments.slice(0, 20).map((x) => h('li', null, x.rating ? `${T('ratingN', { n: x.rating })} — ` : '', x.comment))) : null))));
+        sec.append(h('h4', null, T('consultations')), h('ul', { class: 'tp-list' }, admin.consultations.map((c) => {
+          const li = row('consultations', c, ` ${T('staffOpinions', { n: c.opinionCount ?? 0, a: c.averageRating ?? '–' })}`); // row() already returns an <li>: append the comments into it, never nest <li> in <li>
+          if ((c.comments ?? []).length) li.append(h('ul', null, c.comments.slice(0, 20).map((x) => h('li', null, x.rating ? `${T('ratingN', { n: x.rating })} — ` : '', x.comment))));
+          return li;
+        })));
         sec.append(h('h4', null, T('projects')), h('ul', { class: 'tp-list' }, admin.projects.map((p) => {
           const range = h('input', { type: 'number', min: 0, max: 100, value: p.progress, 'aria-label': `${T('progress')} ${p.title}`, class: 'tp-small' });
           const status = h('select', { 'aria-label': `${T('fStatus')} ${p.title}` }, ['planned', 'in_progress', 'done'].map((s) => h('option', { value: s, selected: s === p.status }, T(`p${s[0].toUpperCase()}${s.slice(1)}`))));

@@ -344,6 +344,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS passkeys (
   last_used_at TEXT
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys(user_id)');
+// the verification library's own key encoding (COSE bytes, base64); rows written before it keep public_key (SPKI) and are converted at start (server.mjs), never rewritten
+{
+  const columns = new Set(db.prepare('PRAGMA table_info(passkeys)').all().map((column) => column.name));
+  if (!columns.has('cose_key')) db.exec('ALTER TABLE passkeys ADD COLUMN cose_key TEXT');
+}
 
 // F70: the perimeter of an agent: the services whose requests they handle. No row = no restriction (every agent that existed before keeps everything).
 db.exec(`CREATE TABLE IF NOT EXISTS agent_scopes (

@@ -1,9 +1,11 @@
+// D02 (sign in without a password, verified by the maintained @simplewebauthn/server; malformed CBOR is refused promptly; keys stored before the switch still sign in)
 // D02 (sign in without a password, with a passkey / WebAuthn) and the F71 access code, counter-opened accounts and password change, protocol level on a disposable server and database, with a software authenticator that can
 // also send every kind of WRONG answer: bad signature, wrong site, wrong challenge, missing user verification, copied credential, replay. A ports 3200-3209.
 // Usage: node tools/qa-a/passkeys.mjs
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { createPublicKey } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -92,7 +94,7 @@ for (const [label, authenticator, extra] of cases) {
   check(`refused: ${label}`, out.done.status === 400 && !out.done.setCookie, out.done.text);
 }
 const wrongOrigin = await (async () => { const o = await call('/api/auth/passkey/signup-options', 'POST', { name: 'Sam Clé' }); const a = new SoftwareAuthenticator(); return call('/api/auth/passkey/signup', 'POST', a.create(o.data, 'http://localhost:9999')); })();
-check('refused: the device says it was created for another origin', wrongOrigin.status === 400 && /pas été créée pour ce site/.test(wrongOrigin.data.error), wrongOrigin.text);
+check('refused: the device says it was created for another origin', wrongOrigin.status === 400 && /invalide ou refusée/.test(wrongOrigin.data.error), wrongOrigin.text);
 const garbageOpts = await call('/api/auth/passkey/signup-options', 'POST', { name: 'Sam Clé' });
 const garbage = await call('/api/auth/passkey/signup', 'POST', { id: 'abc', response: { clientDataJSON: Buffer.from(JSON.stringify({ type: 'webauthn.create', challenge: garbageOpts.data.challenge, origin: base })).toString('base64url'), attestationObject: 'AAAA' } });
 const notObject = await call('/api/auth/passkey/signup', 'POST', { id: 'abc', response: 'x' });
@@ -263,11 +265,47 @@ let lastCreate;
 for (let i = 0; i < 61; i++) lastCreate = await call('/api/admin/citizens', 'POST', { name: `Habitant numéro ${i}` }, agent);
 check('an agent cannot open more than 60 accounts an hour (429)', lastCreate.status === 429 && lastCreate.data.retryAfter > 0, lastCreate.text);
 
+console.log('\n# malformed CBOR (the release blocker): bounded inputs, refused promptly with a controlled answer');
+const hostile = [
+  ['the 5-byte array header declaring 10 000 items', [0x9a, 0, 0, 0x27, 0x10]],
+  ['an array header declaring 4 294 967 295 items, no payload', [0x9a, 0xff, 0xff, 0xff, 0xff]],
+  ['a map header with no content', [0xbf]],
+  ['a byte-string header declaring 2 GB', [0x5a, 0x7f, 0xff, 0xff, 0xff]],
+  ['nested array headers', Array(200).fill(0x81)],
+  ['empty', []],
+];
+const timings = [];
+const usersBefore = usersCount();
+for (const [label, bytesList] of hostile) {
+  const o = await call('/api/auth/passkey/signup-options', 'POST', { name: 'Cible Hostile' });
+  const bad = new SoftwareAuthenticator().create(o.data, base);
+  bad.response.attestationObject = Buffer.from(bytesList).toString('base64url');
+  const started = Date.now();
+  const r = await call('/api/auth/passkey/signup', 'POST', bad);
+  timings.push(Date.now() - started);
+  check(`refused (400, no session, no account): ${label}`, r.status === 400 && !r.setCookie && usersCount() === usersBefore, r.text);
+}
+check(`each of them answered within 500 ms (${timings.join(', ')} ms) and the server still answers normally afterwards`, timings.every((ms) => ms < 500) && (await call('/api/me')).status === 200, timings);
+
+console.log('\n# keys stored by the first version (SPKI) are converted once, additively, and still sign in');
+{
+  const legacyKey = new SoftwareAuthenticator();
+  const out = await signUp(legacyKey, { name: 'Ancienne Clé' });
+  const db = new DatabaseSync(dbPath);
+  const spki = createPublicKey({ key: legacyKey.publicJwk, format: 'jwk' }).export({ type: 'spki', format: 'der' }).toString('base64');
+  db.prepare('UPDATE passkeys SET public_key = ?, alg = -7, cose_key = NULL WHERE credential_id = ?').run(spki, legacyKey.id);
+  db.close();
+  globalThis.__legacy = { legacyKey, spki };
+  check('a passkey row in the old format (SPKI, no library key) is set up', out.done.status === 201 && query('SELECT cose_key FROM passkeys WHERE credential_id = ?', legacyKey.id)[0].cose_key === null);
+}
+
 console.log('\n# restart, deletion');
 await stop();
 await start();
 const afterRestartRsa = await signIn(addSecond, {});
 check('the remaining (RS256) passkey signs in after a restart, and the desk keeps increasing', afterRestartRsa.done.status === 200 && query("SELECT sign_count FROM passkeys WHERE label = 'Clé de sécurité'")[0].sign_count >= 2, afterRestartRsa.done.text);
+const legacyAfter = await signIn(globalThis.__legacy.legacyKey, {});
+check('after the restart the old-format key was converted (library key stored, old columns untouched) and signs in', legacyAfter.done.status === 200 && query('SELECT cose_key, public_key FROM passkeys WHERE credential_id = ?', globalThis.__legacy.legacyKey.id).every((r) => r.cose_key && r.public_key === globalThis.__legacy.spki), legacyAfter.done.text);
 const reauth4 = await call('/api/me/reauth-options', 'POST', {}, afterRestartRsa.done.cookie);
 const samId = query('SELECT user_id FROM passkeys WHERE label = ?', 'Clé de sécurité')[0].user_id;
 const noProofDelete = await call('/api/me', 'DELETE', {}, afterRestartRsa.done.cookie);

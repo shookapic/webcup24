@@ -1,5 +1,5 @@
 // F53 (a second verification step: authenticator-app codes and single-use recovery codes) and D02 (passkeys, WebAuthn) without any dependency: node:crypto only.
-import { createHash, createHmac, createPublicKey, randomBytes, randomInt, timingSafeEqual, verify } from 'node:crypto';
+import { createHash, createHmac, createPublicKey, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 
 const sha256 = (value) => createHash('sha256').update(value).digest();
 
@@ -68,98 +68,52 @@ export function newRecoveryCodes(count = 8) {
   });
 }
 
-// ---- D02: WebAuthn (passkeys). Minimal CBOR reader for the attestation object and the COSE key, then the checks of the W3C "verifying" algorithms that matter
-//      for a passkey with no attestation: challenge, origin, relying-party id, user presence AND user verification, signature, signature counter.
-export function cbor(buffer, start = 0) {
-  let position = start;
-  const read = () => {
-    const initial = buffer[position++];
-    const major = initial >> 5;
-    const info = initial & 31;
-    const length = () => {
-      if (info < 24) return info;
-      if (info === 24) return buffer[position++];
-      if (info === 25) { const value = buffer.readUInt16BE(position); position += 2; return value; }
-      if (info === 26) { const value = buffer.readUInt32BE(position); position += 4; return value; }
-      throw new Error('cbor: length not supported');
-    };
-    if (major === 0) return length();
-    if (major === 1) return -1 - length();
-    if (major === 2) { const size = length(); const out = buffer.subarray(position, position + size); position += size; return out; }
-    if (major === 3) { const size = length(); const out = buffer.toString('utf8', position, position + size); position += size; return out; }
-    if (major === 4) { const size = length(); return Array.from({ length: size }, read); }
-    if (major === 5) { const size = length(); const out = new Map(); for (let i = 0; i < size; i++) { const key = read(); out.set(key, read()); } return out; }
-    if (major === 7) { if (info === 20) return false; if (info === 21) return true; if (info === 22) return null; }
-    throw new Error('cbor: unsupported item');
-  };
-  const value = read();
-  return { value, end: position };
-}
+// ---- D02: WebAuthn (passkeys). The CBOR / attestation / signature verification is done by the maintained @simplewebauthn/server (exact version pinned in package.json);
+// nothing in this repository parses CBOR. What stays here: the single-use challenge and origin policy of the server, the mapping of the library's answer to this
+// application, and the conversion of keys stored before the switch.
+import { verifyAuthenticationResponse, verifyRegistrationResponse } from '@simplewebauthn/server';
 
-const b64u = (value) => Buffer.from(value, 'base64url');
 const fail = (message) => { const error = new Error(message); error.webauthn = true; return error; };
+const unusable = 'Réponse de l’appareil invalide ou refusée.';
+const forLibrary = (credential) => ({ id: credential.id, rawId: credential.id, type: 'public-key', clientExtensionResults: {}, response: credential.response });
 
-/** The credential key (COSE) as a Node public key: ES256 (-7) and RS256 (-257) are what authenticators produce. */
-export function keyFromCose(cose) {
-  const kty = cose.get(1);
-  const alg = cose.get(3);
-  if (kty === 2 && alg === -7 && cose.get(-1) === 1) return { alg, key: createPublicKey({ key: { kty: 'EC', crv: 'P-256', x: cose.get(-2).toString('base64url'), y: cose.get(-3).toString('base64url') }, format: 'jwk' }) };
-  if (kty === 3 && alg === -257) return { alg, key: createPublicKey({ key: { kty: 'RSA', n: cose.get(-1).toString('base64url'), e: cose.get(-2).toString('base64url') }, format: 'jwk' }) };
-  throw fail('Cette clé d’accès n’est pas prise en charge.');
+/** navigator.credentials.create() answer -> { credentialId, publicKey (library key format, base64), counter }; throws an Error with a message safe to show. User verification is required. */
+export async function verifyRegistration(credential, { challenge, origin, rpId }) {
+  let result;
+  try {
+    result = await verifyRegistrationResponse({ response: forLibrary(credential), expectedChallenge: challenge, expectedOrigin: origin, expectedRPID: rpId, requireUserVerification: true, supportedAlgorithmIDs: [-7, -257] });
+  } catch { throw fail(unusable); }
+  if (result.verified !== true || !result.registrationInfo) throw fail(unusable);
+  const { credential: created } = result.registrationInfo;
+  return { credentialId: created.id, publicKey: Buffer.from(created.publicKey).toString('base64'), counter: created.counter };
 }
 
-function parseAuthData(authData) {
-  if (authData.length < 37) throw fail('Réponse de l’appareil invalide.');
-  return { rpIdHash: authData.subarray(0, 32), flags: authData[32], counter: authData.readUInt32BE(33), rest: authData.subarray(37) };
-}
-function checkClient(clientDataJSON, type, challenge, origin) {
-  let client;
-  try { client = JSON.parse(Buffer.from(clientDataJSON, 'base64url').toString('utf8')); } catch { throw fail('Réponse de l’appareil invalide.'); }
-  if (client.type !== type) throw fail('Réponse de l’appareil invalide.');
-  if (typeof client.challenge !== 'string' || !same(client.challenge, challenge)) throw fail('La vérification a expiré ou a déjà été utilisée. Recommencez.');
-  if (client.origin !== origin) throw fail('Cette clé d’accès n’a pas été créée pour ce site.');
-  return b64u(clientDataJSON);
-}
-
-/** navigator.credentials.create() answer -> { credentialId, publicKey (SPKI, base64), alg, counter } or throws an Error with a message safe to show. */
-export function verifyRegistration({ clientDataJSON, attestationObject }, { challenge, origin, rpId }) {
-  checkClient(clientDataJSON, 'webauthn.create', challenge, origin);
-  let attestation;
-  try { attestation = cbor(b64u(attestationObject)).value; } catch { throw fail('Réponse de l’appareil invalide.'); }
-  const authData = attestation instanceof Map ? attestation.get('authData') : null;
-  if (!Buffer.isBuffer(authData)) throw fail('Réponse de l’appareil invalide.');
-  const parsed = parseAuthData(authData);
-  if (!same(parsed.rpIdHash.toString('hex'), sha256(rpId).toString('hex'))) throw fail('Cette clé d’accès n’a pas été créée pour ce site.');
-  if (!(parsed.flags & 0x01)) throw fail('La présence de la personne n’a pas été vérifiée.');
-  if (!(parsed.flags & 0x04)) throw fail('L’appareil n’a pas vérifié l’identité de la personne (empreinte, visage ou code de l’appareil exigés).');
-  if (!(parsed.flags & 0x40)) throw fail('Réponse de l’appareil invalide.');
-  const rest = parsed.rest;
-  if (rest.length < 18) throw fail('Réponse de l’appareil invalide.');
-  const idLength = rest.readUInt16BE(16);
-  const credentialId = rest.subarray(18, 18 + idLength);
-  if (!idLength || idLength > 1023 || credentialId.length !== idLength) throw fail('Réponse de l’appareil invalide.');
-  let cose;
-  try { cose = cbor(rest, 18 + idLength).value; } catch { throw fail('Réponse de l’appareil invalide.'); }
-  if (!(cose instanceof Map)) throw fail('Réponse de l’appareil invalide.');
-  const { alg, key } = keyFromCose(cose);
-  return { credentialId: credentialId.toString('base64url'), publicKey: key.export({ type: 'spki', format: 'der' }).toString('base64'), alg, counter: parsed.counter };
+/** navigator.credentials.get() answer, checked against the stored key (library key format). Returns the new signature counter; a counter that does not move forward is refused. */
+export async function verifyAssertion(credential, stored, { challenge, origin, rpId }) {
+  let result;
+  try {
+    result = await verifyAuthenticationResponse({
+      response: forLibrary(credential), expectedChallenge: challenge, expectedOrigin: origin, expectedRPID: rpId, requireUserVerification: true,
+      credential: { id: stored.credential_id, publicKey: new Uint8Array(Buffer.from(stored.cose_key, 'base64')), counter: stored.sign_count },
+    });
+  } catch { throw fail(unusable); }
+  // a failed signature can come back as verified:false instead of an exception: it is checked explicitly
+  if (result.verified !== true) throw fail('La vérification de la clé d’accès a échoué.');
+  return result.authenticationInfo.newCounter;
 }
 
-/** navigator.credentials.get() answer, checked against the stored key. Returns the new signature counter. */
-export function verifyAssertion({ clientDataJSON, authenticatorData, signature }, stored, { challenge, origin, rpId }) {
-  const clientData = checkClient(clientDataJSON, 'webauthn.get', challenge, origin);
-  const authData = b64u(authenticatorData);
-  const parsed = parseAuthData(authData);
-  if (!same(parsed.rpIdHash.toString('hex'), sha256(rpId).toString('hex'))) throw fail('Cette clé d’accès n’a pas été créée pour ce site.');
-  if (!(parsed.flags & 0x01)) throw fail('La présence de la personne n’a pas été vérifiée.');
-  if (!(parsed.flags & 0x04)) throw fail('L’appareil n’a pas vérifié l’identité de la personne (empreinte, visage ou code de l’appareil exigés).');
-  const key = createPublicKey({ key: Buffer.from(stored.public_key, 'base64'), format: 'der', type: 'spki' });
-  const signed = Buffer.concat([authData, sha256(clientData)]);
-  const ok = verify('sha256', signed, key, b64u(signature)); // ES256 signatures are DER here; RSA is PKCS#1 v1.5 (RS256)
-  if (!ok) throw fail('La vérification de la clé d’accès a échoué.');
-  // A counter that does not move forward means the credential may have been cloned (authenticators that never count keep it at 0)
-  if ((parsed.counter !== 0 || stored.sign_count !== 0) && parsed.counter <= stored.sign_count) throw fail('Cette clé d’accès semble avoir été copiée : elle est refusée.');
-  return parsed.counter;
+// Keys stored by the first version of this feature are SPKI (DER) + an algorithm id. The library wants its own COSE key bytes: converted here once, losslessly, into a new
+// column (the old columns are left untouched). This only ENCODES a fixed small structure; nothing is parsed.
+const head = (major, value) => (value < 24 ? Buffer.from([(major << 5) | value]) : value < 256 ? Buffer.from([(major << 5) | 24, value]) : Buffer.from([(major << 5) | 25, value >> 8, value & 255]));
+const int = (n) => (n >= 0 ? head(0, n) : head(1, -1 - n));
+const bytes = (b) => Buffer.concat([head(2, b.length), b]);
+export function legacyToCose(spkiBase64, alg) {
+  const jwk = createPublicKey({ key: Buffer.from(spkiBase64, 'base64'), format: 'der', type: 'spki' }).export({ format: 'jwk' });
+  const b64u = (v) => Buffer.from(v, 'base64url');
+  const entries = alg === -7
+    ? [[1, int(2)], [3, int(-7)], [-1, int(1)], [-2, bytes(b64u(jwk.x))], [-3, bytes(b64u(jwk.y))]]
+    : [[1, int(3)], [3, int(-257)], [-1, bytes(b64u(jwk.n))], [-2, bytes(b64u(jwk.e))]];
+  return Buffer.concat([head(5, entries.length), ...entries.flatMap(([k, v]) => [int(k), v])]).toString('base64');
 }
 export const rpIdOf = (origin) => new URL(origin).hostname;
 export const newChallenge = () => randomBytes(32).toString('base64url');

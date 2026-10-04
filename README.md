@@ -8,7 +8,7 @@ Portail citoyen pour le 24H By Webcup 2026, construit à partir des demandes act
 
 ## Démarrer
 
-Node.js 22.15 ou plus récent est requis (Hodifly utilise Node 24). Le serveur (`server.mjs`, `store.mjs`, `security.mjs`) n’a aucune dépendance d’exécution : seulement `node:http` et `node:sqlite`, qui affiche un avertissement expérimental avec certaines versions de Node. Le monde 3D (`world/`) est une application Vite + React + React Three Fiber ; ses paquets sont des `devDependencies` utilisées uniquement à la compilation (`npm run build` → `dist/monde/`, servi sous `/monde/`).
+Node.js 22.15 ou plus récent est requis (Hodifly utilise Node 24). Le serveur (`server.mjs`, `store.mjs`, `security.mjs`) n’a qu’une dépendance d’exécution, `@simplewebauthn/server` (version exacte dans `package.json`, vérification des clés d’accès WebAuthn : rien n’est analysé à la main) ; le reste utilise `node:http`, `node:crypto` et `node:sqlite`, qui affiche un avertissement expérimental avec certaines versions de Node. Le monde 3D (`world/`) est une application Vite + React + React Three Fiber ; ses paquets sont des `devDependencies` utilisées uniquement à la compilation (`npm run build` → `dist/monde/`, servi sous `/monde/`).
 
 1. `npm ci` pour installer les outils de compilation du monde.
 2. Copier `.env.example` vers `.env` et placer la clé API de l’équipe dans `TERRA_NOVA_API_KEY`. Ne jamais publier ce fichier.
