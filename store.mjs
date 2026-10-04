@@ -80,6 +80,8 @@ if (db.prepare('SELECT COUNT(*) AS count FROM announcements').get().count === 0)
 }
 
 const announcementColumns = new Set(db.prepare('PRAGMA table_info(announcements)').all().map((column) => column.name));
+// F73: the official sender of a message (only "Haut Conseil" today); NULL for the town hall's ordinary news
+if (!announcementColumns.has('sender')) db.exec('ALTER TABLE announcements ADD COLUMN sender TEXT');
 if (!announcementColumns.has('audience')) db.exec("ALTER TABLE announcements ADD COLUMN audience TEXT NOT NULL DEFAULT 'Tous'");
 if (!announcementColumns.has('urgent')) {
   db.exec('ALTER TABLE announcements ADD COLUMN urgent INTEGER NOT NULL DEFAULT 0 CHECK (urgent IN (0, 1))');
@@ -362,6 +364,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS agent_scopes (
 {
   const columns = new Set(db.prepare('PRAGMA table_info(messages)').all().map((column) => column.name));
   if (!columns.has('emergency')) db.exec('ALTER TABLE messages ADD COLUMN emergency INTEGER NOT NULL DEFAULT 0');
+}
+
+// F74: the place belongs to a partner of the city (association, company); every place that existed before is 0
+{
+  const columns = new Set(db.prepare('PRAGMA table_info(places)').all().map((column) => column.name));
+  if (!columns.has('partner')) db.exec('ALTER TABLE places ADD COLUMN partner INTEGER NOT NULL DEFAULT 0');
 }
 
 // F82: a durable fingerprint of what a resident sent (messages and concerns), so the same text sent again within minutes (a retry, a script) is recognised

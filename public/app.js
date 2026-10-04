@@ -328,12 +328,15 @@ async function loadNews() {
     // Announcements without an English version stay in French, marked so screen readers pronounce them right.
     const announcements = (await api('/api/announcements')).announcements.map((item) =>
       lang === 'en' && item.title_en ? { ...item, title: item.title_en, body: item.body_en || item.body, lang: 'en' } : { ...item, lang: 'fr' });
-    renderAlerts(announcements.filter((item) => item.urgent));
+    // an official message is shown in the banner on every page for two days, besides the alerts
+    const recent = (item) => Date.now() - Date.parse(`${item.published_at.replace(' ', 'T')}Z`) < 2 * 86_400_000;
+    renderAlerts(announcements.filter((item) => item.urgent || (item.sender && recent(item))));
     const list = $('#news-list');
     list.replaceChildren();
     for (const item of announcements) {
-      const card = element('article', item.urgent ? 'news-card news-urgent' : 'news-card');
+      const card = element('article', item.urgent ? 'news-card news-urgent' : item.sender ? 'news-card news-official' : 'news-card');
       const date = item.published_at ? new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'long' }).format(new Date(`${item.published_at.replace(' ', 'T')}Z`)) : '';
+      if (item.sender) card.append(element('strong', 'news-badge news-badge-official', `★ ${t('Message officiel · {sender}', { sender: item.sender })}`));
       if (item.urgent) card.append(element('strong', 'news-badge', t('Alerte en cours')));
       card.append(element('time', 'news-date', date));
       const title = element('h3', '', item.title);
@@ -374,7 +377,7 @@ function renderAlerts(alerts) {
   $('#alert-banner').replaceChildren(...alerts.map((item) => {
     const box = element('div', 'alert-item');
     box.lang = item.lang;
-    box.append(Object.assign(element('p', 'alert-label', t('Alerte · {audience}', { audience: t(item.audience) })), { lang }), element('p', 'alert-title', item.title), element('p', 'alert-body', item.body));
+    box.append(Object.assign(element('p', 'alert-label', item.sender ? t('Message officiel · {sender}', { sender: item.sender }) : t('Alerte · {audience}', { audience: t(item.audience) })), { lang }), element('p', 'alert-title', item.title), element('p', 'alert-body', item.body));
     return box;
   }));
 }
@@ -2190,7 +2193,7 @@ function placeCard(place) {
   title.lang = name.lang;
   const where = element('p', 'place-where', address.text);
   where.lang = address.lang;
-  card.append(element('p', 'place-kind', kindLabel(place.kind)), title, element('p', 'place-district', `${place.district} · ${t('Arrêt de tram : {stop}', { stop: place.stop })}`), where);
+  card.append(element('p', 'place-kind', `${kindLabel(place.kind)}${place.partner ? ` · ${t('Partenaire de la ville')}` : ''}`), title, element('p', 'place-district', `${place.district} · ${t('Arrêt de tram : {stop}', { stop: place.stop })}`), where);
   const trams = placeTransport(place);
   if (trams) card.append(element('p', 'place-trams', `${t('Prochains passages')} ${trams}`));
   const opening = place.open_24h ? t('Ouvert 24 h sur 24') : hours.text;
@@ -2214,7 +2217,7 @@ function placeCard(place) {
 
 function renderPlaces() {
   const needle = fold($('#place-search').value.trim());
-  const shown = sortedPlaces(places).filter((place) => (placeKind === 'all' || (placeKind === 'care' ? place.kind !== 'service' : place.kind === 'service'))
+  const shown = sortedPlaces(places).filter((place) => (placeKind === 'all' || (placeKind === 'partner' ? place.partner : placeKind === 'care' ? place.kind !== 'service' : place.kind === 'service'))
     && fold(['name', 'address'].map((field) => pickText(place, field).text).join(' ')).includes(needle));
   $('#places-list').replaceChildren(...shown.map(placeCard));
   $('#places-status').textContent = !places.length ? t('Aucun lieu publié pour le moment.') : !shown.length ? t('Aucun lieu ne correspond à votre recherche.')
@@ -2280,6 +2283,7 @@ function editPlace(place) {
   editingPlace = place.id;
   for (const key of ['kind', 'name', 'name_en', 'district', 'stop', 'address', 'address_en', 'hours', 'hours_en', 'phone', 'service_id']) form.elements[key].value = place[key] ?? '';
   form.elements.open_24h.checked = Boolean(place.open_24h);
+  form.elements.partner.checked = Boolean(place.partner);
   $('#place-submit').textContent = t('Enregistrer les changements');
   $('#place-cancel').hidden = false;
   form.elements.name.focus();
@@ -2297,6 +2301,7 @@ $('#place-form').addEventListener('submit', async (event) => {
   const form = event.currentTarget;
   const body = Object.fromEntries(['kind', 'name', 'name_en', 'district', 'stop', 'address', 'address_en', 'hours', 'hours_en', 'phone', 'service_id'].map((key) => [key, formValue(form, key)]));
   body.open_24h = form.elements.open_24h.checked;
+  body.partner = form.elements.partner.checked;
   try {
     await (editingPlace ? api(`/api/places/${editingPlace}`, 'PATCH', body) : api('/api/places', 'POST', body));
     setFormStatus('#place-status', t(editingPlace ? 'Lieu modifié.' : 'Lieu ajouté.'));
@@ -3099,7 +3104,7 @@ $('#news-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    await api('/api/announcements', 'POST', { title: formValue(form, 'title'), body: formValue(form, 'body'), title_en: formValue(form, 'title_en'), body_en: formValue(form, 'body_en'), audience: formValue(form, 'audience'), urgent: form.elements.urgent.checked });
+    await api('/api/announcements', 'POST', { title: formValue(form, 'title'), body: formValue(form, 'body'), title_en: formValue(form, 'title_en'), body_en: formValue(form, 'body_en'), audience: formValue(form, 'audience'), sender: formValue(form, 'sender'), urgent: form.elements.urgent.checked });
     form.reset();
     setFormStatus('#news-form-status', t('Actualité publiée.'));
     await loadNews();

@@ -403,6 +403,24 @@ await s.page.waitForFunction(() => document.querySelector('#ops-title')?.textCon
 check('in English the panel and the last-verification line read in English', await s.page.$eval('#ops-title', (n) => n.textContent) === 'Exports and backup' && /Last verification: .*successful/.test(await textOf(s.page, '#backup-last')), await textOf(s.page, '#backup-last'));
 await s.context.close();
 
+console.log('\n# F73 official message and F74 partner place, seen by a visitor who never signed in');
+await call('/api/announcements', 'POST', { title: 'Séance publique avancée', body: 'Le Haut Conseil avance la séance publique à demain 9 h pour tous les habitants.', sender: 'Haut Conseil' }, adminCookie);
+await call('/api/places', 'POST', { kind: 'service', name: 'Association Les Mains Tendues', district: 'Quartier est', stop: 'Santé', address: '12 rue des Lilas, derrière la pharmacie', hours: 'Du mardi au samedi, de 9 h à 17 h', partner: true }, adminCookie);
+s = await open(null);
+await s.page.waitForFunction(() => document.querySelector('#alert-banner .alert-item'), { timeout: 10000 }).catch(() => {});
+const banner = await s.page.evaluate(() => ({ role: document.querySelector('#alert-banner').getAttribute('role'), label: document.querySelector('#alert-banner .alert-label')?.textContent, title: document.querySelector('#alert-banner .alert-title')?.textContent, badge: document.querySelector('#news-list .news-badge-official')?.textContent, first: document.querySelector('#news-list article h3')?.textContent }));
+check('a visitor sees the official message at once in the banner of the page (label with the sender, announced as an alert) and first in the news with the sender badge', banner.role === 'alert' && /^Message officiel · Haut Conseil$/.test(banner.label) && banner.title === 'Séance publique avancée' && /^★ Message officiel · Haut Conseil$/.test(banner.badge) && banner.first === 'Séance publique avancée', JSON.stringify(banner));
+await s.page.evaluate(() => document.querySelector('#lieux').scrollIntoView());
+await s.page.click('input[name=place-kind][value=partner]');
+await wait(300);
+const partnerCards = await s.page.$$eval('#places-list .place-card', (cs) => cs.map((c) => c.textContent));
+check('the "Partenaires" filter lists the partner with the badge, its hours and where to find it, on one card', partnerCards.length === 1 && /Partenaire de la ville/.test(partnerCards[0]) && /Du mardi au samedi, de 9 h à 17 h/.test(partnerCards[0]) && /12 rue des Lilas/.test(partnerCards[0]), JSON.stringify(partnerCards));
+await axe(s.page, 'official message and partner');
+await s.page.click('#lang-toggle');
+await s.page.waitForFunction(() => /^Official message · Haut Conseil$/.test(document.querySelector('#alert-banner .alert-label')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+check('in English the banner label reads in English', /^Official message · Haut Conseil$/.test(await textOf(s.page, '#alert-banner .alert-label')), await textOf(s.page, '#alert-banner .alert-label'));
+await s.context.close();
+
 await browser.close();
 server.kill();
 await wait(400);

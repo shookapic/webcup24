@@ -526,3 +526,6 @@ html[data-contrast=high] #participation .tp-root :focus-visible{outline-color:#f
 html[data-contrast=high] #participation .tp-card{background:#000;color:#fff}
 html[data-contrast=high] #participation .tp-button{background:#ffeb00;color:#000}
 html[data-contrast=high] #participation .tp-secondary,html[data-contrast=high] #participation .tp-danger{background:transparent;color:#fff}
+
+.news-official{border:3px double #0b4f4a}
+.news-badge-official{background:#0b4f4a;color:#fff}

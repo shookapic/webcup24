@@ -100,6 +100,32 @@ let last;
 for (let i = 0; i < 4; i++) last = await call('/api/admin/backup/verify', 'POST', {}, admin);
 check('it is rate-limited (429 after 3 in 10 minutes): a heavy operation cannot be looped', last.status === 429 && last.data.retryAfter > 0, last.text);
 
+console.log('\n# F73. an official message from the Haut Conseil, visible to everyone at once');
+const official = { title: 'Message du Haut Conseil', body: 'Le Haut Conseil informe tous les habitants que la séance publique est avancée à demain 9 h.', sender: 'Haut Conseil', audience: 'Quartier sud' };
+const asAgent = await call('/api/announcements', 'POST', official, agent);
+const asResident = await call('/api/announcements', 'POST', official, zoe);
+const badSender = await call('/api/announcements', 'POST', { ...official, sender: 'Le Maire' }, admin);
+check('only an administrator can publish; an unknown sender is refused (400); nothing is stored by the refusals', asAgent.status === 403 && asResident.status === 403 && badSender.status === 400 && query("SELECT COUNT(*) AS n FROM announcements WHERE title = 'Message du Haut Conseil'")[0].n === 0, [asAgent.status, asResident.status, badSender.status]);
+await call('/api/announcements', 'POST', { title: 'Une actualité ordinaire', body: 'Une actualité ordinaire publiée par la mairie, sans émetteur.' }, admin);
+const posted = await call('/api/announcements', 'POST', official, admin);
+const again = await call('/api/announcements', 'POST', official, admin);
+check('the official message is published once (a second identical send within minutes is 200 duplicate), and its audience becomes "Tous" whatever was typed', posted.status === 201 && again.status === 200 && again.data.duplicate === true && query('SELECT audience, sender FROM announcements WHERE id = ?', posted.data.id)[0].audience === 'Tous' && query('SELECT sender FROM announcements WHERE id = ?', posted.data.id)[0].sender === 'Haut Conseil', [posted.text, again.text]);
+const publicNews = (await call('/api/announcements')).data.announcements;
+check('everyone, without signing in, receives it right away, first in the list, with the sender; the ordinary news has no sender', publicNews[0].title === 'Message du Haut Conseil' && publicNews[0].sender === 'Haut Conseil' && publicNews.find((a) => a.title === 'Une actualité ordinaire').sender === null, JSON.stringify(publicNews.map((a) => [a.title, a.sender])));
+check('the journal records an official message as such (who, which)', ((await call('/api/admin/audit', 'GET', null, admin)).data.entries || []).some((e) => e.action === 'announcement.official' && /Message du Haut Conseil/.test(JSON.stringify(e))));
+
+console.log('\n# F74. a partner shows its hours and where to find it');
+const partnerBody = { kind: 'service', name: 'Association Les Mains Tendues', district: 'Quartier est', stop: 'Santé', address: '12 rue des Lilas, derrière la pharmacie', hours: 'Du mardi au samedi, de 9 h à 17 h', phone: '01 23 45 67', partner: true };
+const asRes = await call('/api/places', 'POST', partnerBody, zoe);
+const badPartner = await call('/api/places', 'POST', { ...partnerBody, partner: 'oui' }, admin);
+check('only an administrator adds a place (resident 403); a non-boolean partner flag is 400', asRes.status === 403 && badPartner.status === 400, [asRes.status, badPartner.status]);
+const partner = await call('/api/places', 'POST', partnerBody, admin);
+const partners = (await call('/api/places?kind=partner')).data.places;
+check('a partner place is created, listed publicly with its hours and address, and can be listed alone; the places that existed before are not partners', partner.status === 201 && partners.length === 1 && partners[0].name === 'Association Les Mains Tendues' && partners[0].hours === 'Du mardi au samedi, de 9 h à 17 h' && partners[0].partner === 1 && (await call('/api/places')).data.places.filter((p) => p.partner === 0).length >= 5, JSON.stringify(partners));
+const unflag = await call(`/api/places/${partner.data.id}`, 'PATCH', { ...partnerBody, partner: false }, admin);
+check('the flag can be removed by an update; the list of partners is then empty', unflag.status === 200 && (await call('/api/places?kind=partner')).data.places.length === 0, unflag.text);
+await call(`/api/places/${partner.data.id}`, 'PATCH', partnerBody, admin);
+
 console.log('\n# F85. unusual activity and consistency');
 const calmSecurity = (await call('/api/admin/security', 'GET', null, agent)).data;
 check('on a calm platform the anomaly list is empty', Array.isArray(calmSecurity.anomalies) && calmSecurity.anomalies.length === 0, JSON.stringify(calmSecurity.anomalies));

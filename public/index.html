@@ -77,6 +77,7 @@
           <label class="chip"><input type="radio" name="place-kind" value="all" checked><span>Tous</span></label>
           <label class="chip"><input type="radio" name="place-kind" value="care"><span>Urgences et soins</span></label>
           <label class="chip"><input type="radio" name="place-kind" value="service"><span>Services de la ville</span></label>
+          <label class="chip"><input type="radio" name="place-kind" value="partner"><span>Partenaires</span></label>
         </fieldset>
         <div id="places-list" class="place-grid" data-content></div>
         <p id="places-status" class="section-status" role="status"></p>
@@ -444,6 +445,7 @@
                 <label>Horaires <input name="hours" minlength="3" maxlength="120" placeholder="Ex. Du lundi au vendredi, de 8 h à 17 h"></label>
                 <label>Horaires en anglais (facultatif) <input name="hours_en" minlength="3" maxlength="120"></label>
                 <label class="check-field"><input type="checkbox" name="open_24h"> Ouvert 24 h sur 24</label>
+                <label class="check-field"><input type="checkbox" name="partner"> Lieu d’un partenaire de la ville (association, entreprise)</label>
                 <label>Téléphone (facultatif) <input name="phone" inputmode="tel" maxlength="20" placeholder="Ex. 112"></label>
                 <label>Service lié (facultatif) <select name="service_id" id="place-service"><option value="">Aucun</option></select></label>
                 <div class="audit-buttons"><button class="button button-primary" type="submit" id="place-submit">Enregistrer le lieu</button><button id="place-cancel" type="button" hidden>Annuler la modification</button></div>
@@ -451,7 +453,7 @@
               </form>
               <ul id="places-admin-list" class="appointment-list" data-content></ul>
             </section>
-            <form id="news-form" class="panel" tabindex="-1"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="120"></label><label>Contenu en anglais (facultatif) <textarea name="body_en" minlength="10" maxlength="4000" rows="4"></textarea></label><label>Public concerné <input name="audience" list="audiences" minlength="2" maxlength="80" placeholder="Tous"></label><datalist id="audiences"><option value="Tous"></option><option value="Quartier sud"></option><option value="Personnes vulnérables"></option></datalist><label class="check-field"><input name="urgent" type="checkbox"> Alerte urgente : afficher en bandeau sur toutes les pages et notifier les habitants</label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
+            <form id="news-form" class="panel" tabindex="-1"><h3>Publier une actualité</h3><label>Titre <input name="title" required minlength="3" maxlength="120"></label><label>Contenu <textarea name="body" required minlength="10" maxlength="4000" rows="6"></textarea></label><label>Titre en anglais (facultatif) <input name="title_en" minlength="3" maxlength="120"></label><label>Contenu en anglais (facultatif) <textarea name="body_en" minlength="10" maxlength="4000" rows="4"></textarea></label><label>Émetteur <select name="sender"><option value="">Mairie (actualité ordinaire)</option><option value="Haut Conseil">Haut Conseil (message officiel pour tous)</option></select></label><label>Public concerné <input name="audience" list="audiences" minlength="2" maxlength="80" placeholder="Tous"></label><datalist id="audiences"><option value="Tous"></option><option value="Quartier sud"></option><option value="Personnes vulnérables"></option></datalist><label class="check-field"><input name="urgent" type="checkbox"> Alerte urgente : afficher en bandeau sur toutes les pages et notifier les habitants</label><button class="button button-primary" type="submit">Publier l’actualité</button><p id="news-form-status" class="form-status" role="status" aria-live="polite"></p></form>
           </div>
           <section id="factors-panel" class="panel factors-panel" aria-labelledby="factors-title" tabindex="-1">
             <h3 id="factors-title">Sécurité de mon compte</h3>

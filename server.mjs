@@ -144,6 +144,8 @@ const inScope = (user, serviceId) => { const ids = scopeOf(user); return !ids ||
 const scopedMessages = (user) => { const ids = scopeOf(user); return ids ? `(SELECT * FROM messages WHERE service_id IS NULL OR service_id IN (${ids.join(',')})) AS messages` : 'messages'; };
 // F86: wording that reports a medical emergency (FR / EN), checked on the subject and the text. It only raises the flag: the platform never judges a state of health.
 const emergencyWords = /(urgence m[ée]dicale|inconscient|ne respire (plus|pas)|respire plus|arr[êe]t cardiaque|crise cardiaque|infarctus|h[ée]morragie|saigne beaucoup|empoisonn|overdose|convulsion|malaise grave|accident grave|medical emergency|unconscious|not breathing|can'?t breathe|cannot breathe|heart attack|cardiac arrest|bleeding (heavily|badly)|poisoned|seizure|stroke|avc\b)/i;
+// F73: who may sign an official message
+const officialSenders = ['Haut Conseil'];
 // F80: how soon agents should look at a request. Set only by staff; residents never see it.
 const priorities = { urgent: 'urgente', high: 'prioritaire', normal: 'normale' };
 
@@ -587,6 +589,7 @@ function placeFields(body) {
   if (!placeDistricts.includes(body.district)) fail(400, 'Quartier invalide.');
   if (!Object.hasOwn(stopDistricts, body.stop)) fail(400, 'Arrêt invalide.');
   if (body.open_24h !== undefined && typeof body.open_24h !== 'boolean') fail(400, 'Le champ « ouvert 24 h sur 24 » est invalide.');
+  if (body.partner !== undefined && typeof body.partner !== 'boolean') fail(400, 'Le champ « partenaire » est invalide.');
   const phone = body.phone ? String(body.phone).trim() : null;
   if (phone && !/^[0-9 +().-]{3,20}$/.test(phone)) fail(400, 'Le numéro de téléphone est invalide.');
   let serviceId = null;
@@ -598,7 +601,7 @@ function placeFields(body) {
     kind: body.kind, name: text(body.name, 3, 100, 'Le nom'), name_en: body.name_en ? text(body.name_en, 3, 100, 'Le nom') : null,
     district: body.district, stop: body.stop, address: text(body.address, 5, 240, 'L’adresse'), address_en: body.address_en ? text(body.address_en, 5, 240, 'L’adresse') : null,
     hours: body.hours ? text(body.hours, 3, 120, 'Les horaires') : null, hours_en: body.hours_en ? text(body.hours_en, 3, 120, 'Les horaires') : null,
-    open_24h: body.open_24h ? 1 : 0, phone, service_id: serviceId,
+    open_24h: body.open_24h ? 1 : 0, phone, service_id: serviceId, partner: body.partner ? 1 : 0,
   };
 }
 const placeChanges = (before, after) => Object.fromEntries(Object.keys(after).filter((key) => before[key] !== after[key]).map((key) => [key, { avant: before[key] ?? null, apres: after[key] ?? null }]));
@@ -1421,7 +1424,7 @@ async function route(request, response) {
   }
 
   if (path === '/api/announcements' && method === 'GET') {
-    return sendJson(response, 200, { announcements: db.prepare('SELECT * FROM announcements ORDER BY published_at DESC, id DESC').all() });
+    return sendJson(response, 200, { announcements: db.prepare('SELECT * FROM announcements ORDER BY (sender IS NOT NULL) DESC, published_at DESC, id DESC').all() });
   }
   if (path === '/api/announcements' && method === 'POST') {
     const admin = requireUser(request, ['admin']);
@@ -1429,19 +1432,22 @@ async function route(request, response) {
     const title = text(body.title, 3, 120, 'Le titre');
     const content = text(body.body, 10, 4000, 'Le contenu');
     if (body.urgent !== undefined && typeof body.urgent !== 'boolean') fail(400, 'Le niveau d’urgence est invalide.');
-    const audience = body.audience ? text(body.audience, 2, 80, 'Le public concerné') : 'Tous';
+    if (body.sender !== undefined && body.sender !== null && body.sender !== '' && !officialSenders.includes(body.sender)) fail(400, 'Émetteur inconnu.');
+    const sender = officialSenders.includes(body.sender) ? body.sender : null;
+    // an official message is for everyone: whatever audience is typed, it is "Tous"
+    const audience = sender ? 'Tous' : body.audience ? text(body.audience, 2, 80, 'Le public concerné') : 'Tous';
     const titleEn = body.title_en ? text(body.title_en, 3, 120, 'Le titre') : null;
     const contentEn = body.body_en ? text(body.body_en, 10, 4000, 'Le contenu') : null;
     // F82: the same notice sent twice within minutes (a double click, a retry) is published once.
-    const sameNotice = db.prepare("SELECT id FROM announcements WHERE title = ? AND body = ? AND audience = ? AND urgent = ? AND published_at > datetime('now', ?) ORDER BY id DESC LIMIT 1").get(title, content, audience, body.urgent ? 1 : 0, DUPLICATE_WINDOW);
+    const sameNotice = db.prepare("SELECT id FROM announcements WHERE title = ? AND body = ? AND audience = ? AND urgent = ? AND COALESCE(sender, '') = ? AND published_at > datetime('now', ?) ORDER BY id DESC LIMIT 1").get(title, content, audience, body.urgent ? 1 : 0, sender || '', DUPLICATE_WINDOW);
     if (sameNotice) {
       noteForm('duplicate', 'announcement');
       return sendJson(response, 200, { id: sameNotice.id, duplicate: true });
     }
     const result = tx(() => {
-      const inserted = db.prepare('INSERT INTO announcements (title, body, audience, urgent, title_en, body_en) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(title, content, audience, body.urgent ? 1 : 0, titleEn, contentEn);
-      audit(admin, { category: 'announcement', action: body.urgent ? 'announcement.alert' : 'announcement.create', target: { type: 'announcement', id: inserted.lastInsertRowid, label: title }, summary: body.urgent ? `a diffusé l’alerte « ${title} »` : `a publié l’actualité « ${title} »`, details: { public: audience, urgent: Boolean(body.urgent) } });
+      const inserted = db.prepare('INSERT INTO announcements (title, body, audience, urgent, title_en, body_en, sender) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(title, content, audience, body.urgent ? 1 : 0, titleEn, contentEn, sender);
+      audit(admin, { category: 'announcement', action: sender ? 'announcement.official' : body.urgent ? 'announcement.alert' : 'announcement.create', target: { type: 'announcement', id: inserted.lastInsertRowid, label: title }, summary: body.urgent ? `a diffusé l’alerte « ${title} »` : `a publié l’actualité « ${title} »`, details: { public: audience, urgent: Boolean(body.urgent) } });
       return inserted;
     });
     return sendJson(response, 201, { id: Number(result.lastInsertRowid) });
@@ -1915,6 +1921,7 @@ async function route(request, response) {
     const where = [];
     const args = [];
     if (kind === 'care') where.push("kind IN ('hospital', 'emergency')");
+    else if (kind === 'partner') where.push('partner = 1');
     else if (placeKinds.includes(kind)) { where.push('kind = ?'); args.push(kind); }
     if (placeDistricts.includes(params.get('district'))) { where.push('district = ?'); args.push(params.get('district')); }
     const rows = db.prepare(`SELECT * FROM places ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
@@ -1928,8 +1935,8 @@ async function route(request, response) {
     let code = body.code ? slug(String(body.code)) : slug(fields.name);
     for (let n = 2; db.prepare('SELECT 1 FROM places WHERE code = ?').get(code); n += 1) code = `${slug(fields.name)}-${n}`;
     const created = tx(() => {
-      const inserted = db.prepare('INSERT INTO places (code, kind, name, name_en, district, stop, address, address_en, hours, hours_en, open_24h, phone, service_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(code, fields.kind, fields.name, fields.name_en, fields.district, fields.stop, fields.address, fields.address_en, fields.hours, fields.hours_en, fields.open_24h, fields.phone, fields.service_id);
+      const inserted = db.prepare('INSERT INTO places (code, kind, name, name_en, district, stop, address, address_en, hours, hours_en, open_24h, phone, service_id, partner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(code, fields.kind, fields.name, fields.name_en, fields.district, fields.stop, fields.address, fields.address_en, fields.hours, fields.hours_en, fields.open_24h, fields.phone, fields.service_id, fields.partner);
       audit(admin, { category: 'place', action: 'place.create', target: { type: 'place', id: inserted.lastInsertRowid, label: fields.name }, summary: `a ajouté le lieu « ${fields.name} »`, details: { type: fields.kind, quartier: fields.district, arret: fields.stop } });
       return inserted;
     });
@@ -1946,8 +1953,8 @@ async function route(request, response) {
       const fields = placeFields(body);
       const changes = placeChanges(before, fields);
       tx(() => {
-        db.prepare('UPDATE places SET kind = ?, name = ?, name_en = ?, district = ?, stop = ?, address = ?, address_en = ?, hours = ?, hours_en = ?, open_24h = ?, phone = ?, service_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-          .run(fields.kind, fields.name, fields.name_en, fields.district, fields.stop, fields.address, fields.address_en, fields.hours, fields.hours_en, fields.open_24h, fields.phone, fields.service_id, id);
+        db.prepare('UPDATE places SET kind = ?, name = ?, name_en = ?, district = ?, stop = ?, address = ?, address_en = ?, hours = ?, hours_en = ?, open_24h = ?, phone = ?, service_id = ?, partner = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(fields.kind, fields.name, fields.name_en, fields.district, fields.stop, fields.address, fields.address_en, fields.hours, fields.hours_en, fields.open_24h, fields.phone, fields.service_id, fields.partner, id);
         audit(admin, { category: 'place', action: 'place.update', target: { type: 'place', id, label: fields.name }, summary: Object.keys(changes).length ? `a modifié le lieu « ${fields.name} » (${Object.keys(changes).join(', ')})` : `a ré-enregistré le lieu « ${fields.name} » sans changement`, details: changes });
       });
       return sendJson(response, 200, { ok: true });
