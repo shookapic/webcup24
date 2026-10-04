@@ -10,6 +10,7 @@ import { AlertAnnouncer, PhoneFallback, useAnnouncements, useServices, useTransp
 import { WorldHud } from './ui/WorldHud.jsx';
 import { getLocale, t } from './ui/i18n.js';
 import { defaultAvatar } from './Avatar.jsx';
+import { ACCESSORY_IDS, LOOK_IDS, normalizeAvatar } from './avatarCatalog.js';
 import { SPAWN, nearestStop, playerPos } from './layout.js';
 import { Sun } from './Sun.jsx';
 import { PhoneHost, PhoneRig } from './PhoneRig.jsx';
@@ -131,7 +132,7 @@ export function App() {
     api('/api/me').then(({ user: me }) => {
       setUser(me);
       try { if (me) localStorage.setItem('tn.world', '1'); else localStorage.removeItem('tn.world'); } catch { /* storage unavailable */ }
-      if (me?.avatar) setAvatar(me.avatar);
+      if (me?.avatar) setAvatar(normalizeAvatar(me.avatar));
       else if (me) setEditing(true);
     }, () => setUser(null));
   }, []);
@@ -239,7 +240,7 @@ export function App() {
           ? phoneUp && <PhoneHost screenProps={{ ...screenProps, dialogLabel: t(locale, 'phone.label') }} />
           : <PhoneFallback open={phoneUp} {...screenProps} />;
       })()}
-      {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} locale={locale} preview={editing ? <AvatarPreview avatar={avatar} /> : null} />}
+      {user && <AvatarEditor open={editing} avatar={avatar} onChange={setAvatar} onClose={() => setEditing(false)} locale={locale} looks={LOOK_IDS} accessories={ACCESSORY_IDS} preview={editing ? <AvatarPreview avatar={avatar} /> : null} />}
       {user && help && <p className="controls-help">{t(locale, 'help.controls')}</p>}
     </>
   );
