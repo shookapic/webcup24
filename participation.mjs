@@ -313,8 +313,12 @@ export async function handleParticipation(ctx) {
       const note = clean(input.note, 2, 500, 'La réponse', true);
       const row = db.prepare('SELECT * FROM part_ideas WHERE id = ?').get(ideaId);
       if (!row) fail(404, 'Idée introuvable.', { code: 'not_found' });
-      db.prepare('UPDATE part_ideas SET status = ?, staff_note = ?, updated_at = ? WHERE id = ?').run(input.status, note, iso(), ideaId);
-      audit({ action: 'participation.idea.answer', target: { type: 'idea', id: ideaId, label: row.title }, summary: `a répondu à l’idée « ${row.title.slice(0, 60)} » (${input.status})` });
+      // Mutation and its audit trail commit or fail together: a host whose audit write fails (e.g. the hash-chain append) must not leave the status
+      // change persisted without the trace F47/F48 require.
+      tx(() => {
+        db.prepare('UPDATE part_ideas SET status = ?, staff_note = ?, updated_at = ? WHERE id = ?').run(input.status, note, iso(), ideaId);
+        audit({ action: 'participation.idea.answer', target: { type: 'idea', id: ideaId, label: row.title }, summary: `a répondu à l’idée « ${row.title.slice(0, 60)} » (${input.status})` });
+      });
       return sendJson(ctx.response, 200, { idea: ideaView(db.prepare('SELECT * FROM part_ideas WHERE id = ?').get(ideaId)) }), true;
     }
     const kinds = { decisions: 'part_decisions', consultations: 'part_consultations', projects: 'part_projects' };
@@ -324,28 +328,32 @@ export async function handleParticipation(ctx) {
       const input = await body();
       const at = iso();
       const common = { title: clean(input.title, 4, 120, 'Le titre'), title_en: clean(input.title_en, 4, 120, 'Le titre anglais', true), demo: input.demo ? 1 : 0 };
-      let rowId;
+      let choiceLabels;
       if (a === 'decisions') {
-        const summary = clean(input.summary, 10, 1000, 'Le résumé');
         const choices = Array.isArray(input.choices) ? input.choices : [];
         if (choices.length < 2 || choices.length > 6) fail(400, 'Une décision a entre 2 et 6 choix.', { code: 'invalid' });
-        const labels = choices.map((choice) => ({ label: clean(choice?.label, 1, 80, 'Le choix'), label_en: clean(choice?.label_en, 1, 80, 'Le choix anglais', true) }));
-        rowId = tx(() => {
-          const newId = db.prepare('INSERT INTO part_decisions (title, title_en, summary, summary_en, status, closes_at, demo, created_by_label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-            .run(common.title, common.title_en, summary, clean(input.summary_en, 10, 1000, 'Le résumé anglais', true), input.publish ? 'open' : 'draft', when(input.closesAt), common.demo, staffLabel(), at).lastInsertRowid;
-          for (const choice of labels) db.prepare('INSERT INTO part_choices (decision_id, label, label_en) VALUES (?, ?, ?)').run(newId, choice.label, choice.label_en);
-          return newId;
-        });
-      } else if (a === 'consultations') {
-        rowId = db.prepare('INSERT INTO part_consultations (title, title_en, body, body_en, status, closes_at, demo, created_by_label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(common.title, common.title_en, clean(input.body, 10, 2000, 'Le texte'), clean(input.body_en, 10, 2000, 'Le texte anglais', true), input.publish ? 'open' : 'draft', when(input.closesAt), common.demo, staffLabel(), at).lastInsertRowid;
-      } else {
-        const status = STATUS_PROJECT.includes(input.status) ? input.status : 'planned';
-        const progress = input.progress === undefined ? 0 : integer(input.progress, 0, 100, 'L’avancement');
-        rowId = db.prepare('INSERT INTO part_projects (title, title_en, summary, summary_en, district, status, progress, starts_on, ends_on, demo, created_by_label, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(common.title, common.title_en, clean(input.summary, 10, 1000, 'Le résumé'), clean(input.summary_en, 10, 1000, 'Le résumé anglais', true), clean(input.district, 2, 80, 'Le quartier', true), status, progress, clean(input.startsOn, 4, 10, 'La date de début', true), clean(input.endsOn, 4, 10, 'La date de fin', true), common.demo, staffLabel(), at, at).lastInsertRowid;
+        choiceLabels = choices.map((choice) => ({ label: clean(choice?.label, 1, 80, 'Le choix'), label_en: clean(choice?.label_en, 1, 80, 'Le choix anglais', true) }));
       }
-      audit({ action: `participation.${a.slice(0, -1)}.create`, target: { type: a.slice(0, -1), id: rowId, label: common.title }, summary: `a créé « ${common.title.slice(0, 60)} »${common.demo ? ' (démonstration)' : ''}` });
+      const summary = a === 'decisions' ? clean(input.summary, 10, 1000, 'Le résumé') : null;
+      const status = a === 'projects' ? (STATUS_PROJECT.includes(input.status) ? input.status : 'planned') : null;
+      const progress = a === 'projects' ? (input.progress === undefined ? 0 : integer(input.progress, 0, 100, 'L’avancement')) : null;
+      // insert + its audit trail commit or fail together (see the idea-answer comment above)
+      const rowId = tx(() => {
+        let newId;
+        if (a === 'decisions') {
+          newId = db.prepare('INSERT INTO part_decisions (title, title_en, summary, summary_en, status, closes_at, demo, created_by_label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(common.title, common.title_en, summary, clean(input.summary_en, 10, 1000, 'Le résumé anglais', true), input.publish ? 'open' : 'draft', when(input.closesAt), common.demo, staffLabel(), at).lastInsertRowid;
+          for (const choice of choiceLabels) db.prepare('INSERT INTO part_choices (decision_id, label, label_en) VALUES (?, ?, ?)').run(newId, choice.label, choice.label_en);
+        } else if (a === 'consultations') {
+          newId = db.prepare('INSERT INTO part_consultations (title, title_en, body, body_en, status, closes_at, demo, created_by_label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(common.title, common.title_en, clean(input.body, 10, 2000, 'Le texte'), clean(input.body_en, 10, 2000, 'Le texte anglais', true), input.publish ? 'open' : 'draft', when(input.closesAt), common.demo, staffLabel(), at).lastInsertRowid;
+        } else {
+          newId = db.prepare('INSERT INTO part_projects (title, title_en, summary, summary_en, district, status, progress, starts_on, ends_on, demo, created_by_label, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(common.title, common.title_en, clean(input.summary, 10, 1000, 'Le résumé'), clean(input.summary_en, 10, 1000, 'Le résumé anglais', true), clean(input.district, 2, 80, 'Le quartier', true), status, progress, clean(input.startsOn, 4, 10, 'La date de début', true), clean(input.endsOn, 4, 10, 'La date de fin', true), common.demo, staffLabel(), at, at).lastInsertRowid;
+        }
+        audit({ action: `participation.${a.slice(0, -1)}.create`, target: { type: a.slice(0, -1), id: newId, label: common.title }, summary: `a créé « ${common.title.slice(0, 60)} »${common.demo ? ' (démonstration)' : ''}` });
+        return newId;
+      });
       return sendJson(ctx.response, 201, { id: rowId }), true;
     }
     if (table && b && !c && method === 'PATCH') {
@@ -353,7 +361,7 @@ export async function handleParticipation(ctx) {
       const rowId = id(b);
       const input = await body();
       // Fresh row inside the write transaction (after the body arrived): a delayed PATCH never acts on a stale row and never reopens what another request closed.
-      const row = tx(() => {
+      tx(() => {
         const current = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(rowId);
         if (!current) fail(404, 'Introuvable.', { code: 'not_found' });
         if (a === 'projects') {
@@ -361,6 +369,7 @@ export async function handleParticipation(ctx) {
           const progress = input.progress === undefined ? current.progress : integer(input.progress, 0, 100, 'L’avancement');
           db.prepare('UPDATE part_projects SET status = ?, progress = ?, summary = ?, summary_en = ?, updated_at = ? WHERE id = ?')
             .run(status, progress, input.summary === undefined ? current.summary : clean(input.summary, 10, 1000, 'Le résumé'), input.summary_en === undefined ? current.summary_en : clean(input.summary_en, 10, 1000, 'Le résumé anglais', true), iso(), rowId);
+          audit({ action: 'participation.project.update', target: { type: 'project', id: rowId, label: current.title }, summary: `a modifié « ${current.title.slice(0, 60)} »` }); // same transaction: a failing audit rolls back the update
           return current;
         }
         const next = input.status === undefined ? current.status : input.status;
@@ -372,9 +381,9 @@ export async function handleParticipation(ctx) {
         const closesAt = input.closesAt === undefined ? current.closes_at : when(input.closesAt);
         if (a === 'decisions') db.prepare('UPDATE part_decisions SET status = ?, closes_at = ?, closed_at = ?, outcome_note = ? WHERE id = ?').run(next, closesAt, closedAt, input.outcomeNote === undefined ? current.outcome_note : clean(input.outcomeNote, 2, 500, 'La note de décision', true), rowId);
         else db.prepare('UPDATE part_consultations SET status = ?, closes_at = ?, closed_at = ? WHERE id = ?').run(next, closesAt, closedAt, rowId);
+        audit({ action: `participation.${a.slice(0, -1)}.update`, target: { type: a.slice(0, -1), id: rowId, label: current.title }, summary: `a modifié « ${current.title.slice(0, 60)} »` }); // same transaction: a failing audit rolls back the update
         return current;
       });
-      audit({ action: `participation.${a.slice(0, -1)}.update`, target: { type: a.slice(0, -1), id: rowId, label: row.title }, summary: `a modifié « ${row.title.slice(0, 60)} »` });
       return sendJson(ctx.response, 200, { ok: true }), true;
     }
     if (table && b && !c && method === 'DELETE') {
@@ -386,8 +395,8 @@ export async function handleParticipation(ctx) {
         if (a === 'decisions') { db.prepare('DELETE FROM part_voters WHERE decision_id = ?').run(rowId); db.prepare('DELETE FROM part_choices WHERE decision_id = ?').run(rowId); }
         if (a === 'consultations') db.prepare('DELETE FROM part_opinions WHERE consultation_id = ?').run(rowId);
         db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(rowId);
+        audit({ action: `participation.${a.slice(0, -1)}.delete`, target: { type: a.slice(0, -1), id: rowId, label: row.title }, summary: `a supprimé « ${row.title.slice(0, 60)} »` }); // same transaction: a failing audit rolls back the delete
       });
-      audit({ action: `participation.${a.slice(0, -1)}.delete`, target: { type: a.slice(0, -1), id: rowId, label: row.title }, summary: `a supprimé « ${row.title.slice(0, 60)} »` });
       return sendJson(ctx.response, 200, { ok: true }), true;
     }
   }
