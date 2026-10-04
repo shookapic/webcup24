@@ -9,7 +9,7 @@ import { JSDOM } from 'jsdom';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const dataDir = mkdtempSync(join(tmpdir(), 'terra-portal-'));
-const port = 3700 + Math.floor(Math.random() * 200);
+const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const base = `http://127.0.0.1:${port}`;
 const env = { ...process.env, DATA_PATH: join(dataDir, 'p.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TRUST_PROXY: '1' };
 let failures = 0;

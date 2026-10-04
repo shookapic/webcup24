@@ -17,7 +17,7 @@ const axeSource = readFileSync(req.resolve('axe-core/axe.min.js'), 'utf8');
 const shots = process.env.SHOTS_DIR || join(tmpdir(), 'terra-a11y-shots');
 mkdirSync(shots, { recursive: true });
 const dataDir = mkdtempSync(join(tmpdir(), 'terra-a11y-'));
-const port = 3400 + Math.floor(Math.random() * 300);
+const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const base = `http://127.0.0.1:${port}`;
 const env = { ...process.env, DATA_PATH: join(dataDir, 'a.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TRUST_PROXY: '1' };
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

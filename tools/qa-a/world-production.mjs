@@ -18,7 +18,7 @@ const DIALOG = '.phone-sheet, .phone-host'; // flat dialog | physical host
 const shots = process.env.SHOTS_DIR || join(tmpdir(), 'terra-prod-shots');
 mkdirSync(shots, { recursive: true });
 const dataDir = mkdtempSync(join(tmpdir(), 'terra-prod-'));
-const port = 3600 + Math.floor(Math.random() * 300);
+const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const base = `http://127.0.0.1:${port}`;
 const env = { ...process.env, DATA_PATH: join(dataDir, 'prod.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '' };
 console.log(`mode: ${mode}`);

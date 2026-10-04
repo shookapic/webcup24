@@ -13,7 +13,7 @@ const puppeteer = (await import(pathToFileURL(req.resolve('puppeteer-core')).hre
 const shots = process.env.SHOTS_DIR || join(tmpdir(), 'terra-portal-shots');
 mkdirSync(shots, { recursive: true });
 const dataDir = mkdtempSync(join(tmpdir(), 'terra-browser-'));
-const port = 3300 + Math.floor(Math.random() * 300);
+const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const base = `http://127.0.0.1:${port}`;
 const env = { ...process.env, DATA_PATH: join(dataDir, 'b.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TRUST_PROXY: '1' };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

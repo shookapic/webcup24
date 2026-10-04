@@ -22,7 +22,7 @@ const browserPath = arg('browser', firefox ? 'C:/Program Files/Mozilla Firefox/f
 const shots = process.env.SHOTS_DIR || join(tmpdir(), 'terra-gpu-shots');
 mkdirSync(shots, { recursive: true });
 const dataDir = mkdtempSync(join(tmpdir(), 'terra-gpu-'));
-const port = 3500 + Math.floor(Math.random() * 300);
+const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const base = `http://127.0.0.1:${port}`;
 const env = { ...process.env, DATA_PATH: join(dataDir, 'g.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '' };
 const server = spawn(process.execPath, ['server.mjs'], { cwd: root, env, stdio: 'ignore' });

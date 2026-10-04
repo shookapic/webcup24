@@ -17,7 +17,7 @@ const label = process.argv[2] || 'run';
 const outIndex = process.argv.indexOf('--out');
 const outFile = outIndex > 0 ? process.argv[outIndex + 1] : null;
 const dataDir = mkdtempSync(join(tmpdir(), 'terra-perf-'));
-const port = 3700 + Math.floor(Math.random() * 200);
+const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const base = `http://127.0.0.1:${port}`;
 const env = { ...process.env, DATA_PATH: join(dataDir, 'a.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TRUST_PROXY: '1' };
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 const envFile = join(root, '.env');
 const key = process.env.TERRA_NOVA_API_KEY || (existsSync(envFile) ? /^TERRA_NOVA_API_KEY=(.+)$/m.exec(readFileSync(envFile, 'utf8'))?.[1]?.trim() : '') || '';
 const dataDir = mkdtempSync(join(tmpdir(), 'terra-audit-'));
-const port = 3300 + Math.floor(Math.random() * 300);
+const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const base = `http://127.0.0.1:${port}`;
 const env = { ...process.env, DATA_PATH: join(dataDir, 'a.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: key, TRUST_PROXY: '1' };
 let failures = 0;

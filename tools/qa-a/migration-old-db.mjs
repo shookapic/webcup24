@@ -26,7 +26,7 @@ let failures = 0;
 const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  -> ' + detail}`); };
 check(`old schema (${oldCommit}) database created with a user and a message`, seed.status === 0, seed.stderr);
 
-const port = 3900 + Math.floor(Math.random() * 90);
+const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const server = spawn(process.execPath, ['server.mjs'], { cwd: root, env: { ...process.env, DATA_PATH: dataPath, PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '' }, stdio: 'ignore' });
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 await wait(2000);
