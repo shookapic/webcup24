@@ -576,9 +576,9 @@ html[data-contrast=high] .site-header,html[data-contrast=high] .emergency-strip,
 .brand-name small,.eyebrow,.hero-footnote,.header-indicator{text-transform:lowercase;letter-spacing:0;font-size:.8125rem;font-weight:400;color:var(--tn-muted)}
 .brand-name small::first-letter,.hero-footnote::first-letter{text-transform:uppercase}
 .site-header nav{gap:0 var(--tn-s3)}
-.header-tools,.accessibility-tools{flex-wrap:nowrap}
+.header-tools,.accessibility-tools{flex-wrap:wrap}
 .header-tools{gap:var(--tn-s2)}
-.site-header{flex-wrap:nowrap;gap:var(--tn-s3)}
+.site-header{flex-wrap:wrap;gap:var(--tn-s2) var(--tn-s3)}
 .account-link{display:none}
 .site-header nav a{color:var(--tn-text);font-size:var(--tn-t0);padding:0 2px;border-bottom:2px solid transparent}
 .site-header nav a:hover{color:#fff;border-bottom-color:var(--tn-action)}
@@ -783,14 +783,15 @@ html[data-contrast=high] .dashboard-todo li{background:#000;color:#fff}
 }
 .panel-title-row{flex-wrap:wrap}
 .panel-title-row>*{min-width:0}
-/* mobile: a visible account shortcut beside the brand (hidden, so out of the Tab order, on wide screens where the nav shows it) */
-.mobile-account{display:none}
+/* account shortcut right after the brand on every width: third Tab stop, so personal-space actions stay within the keystroke budget; the nav copy of the link is hidden */
+.mobile-account{display:inline-flex;align-items:center;min-height:44px;padding:0 var(--tn-s3);border:1.5px solid var(--tn-action);border-radius:var(--tn-radius);color:var(--tn-action);font-weight:600;text-decoration:none}
+.mobile-account:hover{background:#ffffff1a}
 @media(max-width:850px){
-  .mobile-account{display:inline-flex;align-items:center;min-height:44px;margin-left:auto;padding:0 var(--tn-s3);border:1.5px solid var(--tn-action);border-radius:var(--tn-radius);color:var(--tn-action);font-weight:600;text-decoration:none}
-  .mobile-account:hover{background:#ffffff1a}
+  .mobile-account{margin-left:auto}
   .site-header{align-items:center}
 }
 html[data-contrast=high] .mobile-account{color:#ffeb00;border-color:#ffeb00}
+@media(min-width:1200px){.site-header,.header-tools,.accessibility-tools{flex-wrap:nowrap}}
 /* orientation module (B) in high contrast: the section is black, the module paints its own light-theme colours */
 html[data-contrast=high] #orientation-root,html[data-contrast=high] #orientation-root *{color:#fff;background-color:transparent}
 html[data-contrast=high] #orientation-root button,html[data-contrast=high] #orientation-root input,html[data-contrast=high] #orientation-root select{background-color:#000;border:2px solid #ffeb00}
