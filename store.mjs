@@ -306,6 +306,13 @@ db.exec(`
   db.exec('CREATE INDEX IF NOT EXISTS messages_topic ON messages(topic)');
 }
 
+// F80: the priority an agent gives a request (internal: residents never see it). Every request that existed before is "normal".
+{
+  const columns = new Set(db.prepare('PRAGMA table_info(messages)').all().map((column) => column.name));
+  if (!columns.has('priority')) db.exec("ALTER TABLE messages ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'");
+  db.exec('CREATE INDEX IF NOT EXISTS messages_priority ON messages(priority)');
+}
+
 // F82: a durable fingerprint of what a resident sent (messages and concerns), so the same text sent again within minutes (a retry, a script) is recognised
 // even after a restart. Additive: old rows keep an empty fingerprint and are never matched.
 for (const table of ['messages', 'concerns']) {

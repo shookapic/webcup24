@@ -1,6 +1,6 @@
 // F83 (receipt with a reference) and F84 (agents answer directly) in real Chrome on a disposable server: the resident's confirmation, card, receipt page and
 // the public check; the staff reply box with a draft that survives list refreshes, the answered / not answered filter, and what the resident then sees.
-// F79 (themes: form, cards, filters for residents, reports and staff). Later sections of this file cover the other triage features. A ports 3200-3209. Usage: node tools/qa-a/civic-browser.mjs
+// F79 (themes: form, cards, filters for residents, reports and staff), F80 (priorities for agents: selector, badge, order, filter, dashboard). Later sections of this file cover the other triage features. A ports 3200-3209. Usage: node tools/qa-a/civic-browser.mjs
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -196,6 +196,53 @@ await wait(300);
 const staffNone = await text(s.page, '#staff-messages');
 check('staff narrow the list by theme (the follow-up by theme), and the no-theme choice finds nothing when every request has one', staffWater.length === 2 && staffWater.some((h) => /Pression/.test(h)) && staffWater.some((h) => /Fuite/.test(h)) && /Aucun message ne correspond à ces filtres/.test(staffNone), JSON.stringify([staffWater, staffNone]));
 await s.page.screenshot({ path: join(shots, 'staff-topic-filter.png') });
+
+console.log('\n# F80. priorities in the staff workspace');
+await s.page.select('#staff-filter-topic', '');
+await wait(300);
+const titles = () => s.page.$$eval('#staff-messages .message-card h4', (h) => h.map((x) => x.textContent));
+const before = await titles();
+check('without priorities, the unresolved requests come newest first', /Pression/.test(before[0]) && /Poubelle/.test(before[before.length - 1]) , JSON.stringify(before));
+const picked = await s.page.evaluate(() => { const c = [...document.querySelectorAll('#staff-messages .message-card')].find((x) => /Lampadaire/.test(x.querySelector('h4').textContent)); const select = c.querySelector('[data-priority-for]'); select.focus(); return { id: select.dataset.priorityFor, options: [...select.options].map((o) => o.textContent), label: select.getAttribute('aria-label') }; });
+check('each staff card has a labelled priority selector (Urgente / Prioritaire / Normale), at "Normale" by default', JSON.stringify(picked.options) === JSON.stringify(['Urgente', 'Prioritaire', 'Normale']) && /^Priorité de la demande \d+$/.test(picked.label), JSON.stringify(picked));
+await s.page.select(`[data-priority-for="${picked.id}"]`, 'urgent');
+await s.page.waitForFunction(() => /Priorité de la demande M-\d+ : urgente\./.test(document.querySelector('#staff-reply-status')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+await wait(500);
+const afterUrgent = await s.page.evaluate((id) => ({ first: document.querySelector('#staff-messages .message-card h4')?.textContent, badge: document.querySelector('#staff-messages .message-card .message-priority')?.textContent, focused: document.activeElement?.dataset?.priorityFor === id, status: document.querySelector('#staff-reply-status')?.textContent.trim(), value: document.querySelector(`[data-priority-for="${id}"]`)?.value }), picked.id);
+check('setting "Urgente" says so in words, moves the request to the top, shows a badge with a symbol and text, and keeps the focus on the selector', /Lampadaire/.test(afterUrgent.first) && afterUrgent.badge === '⚠ Urgente' && afterUrgent.focused && afterUrgent.value === 'urgent' && /Priorité de la demande M-\d+ : urgente\./.test(afterUrgent.status), JSON.stringify(afterUrgent));
+await s.page.screenshot({ path: join(shots, 'staff-priority.png') });
+await s.page.select('#staff-filter-priority', 'urgent');
+await wait(300);
+const urgentOnly = await titles();
+await s.page.select('#staff-filter-priority', '');
+await s.page.select('#staff-sort', 'oldest');
+await wait(300);
+const oldest = await titles();
+await s.page.select('#staff-sort', 'recent');
+await wait(300);
+const recent = await titles();
+await s.page.select('#staff-sort', '');
+check('staff filter by priority, and sort by oldest or newest first when they prefer to follow the waiting time', urgentOnly.length === 1 && /Lampadaire/.test(urgentOnly[0]) && /Poubelle/.test(oldest[0]) && /Pression/.test(recent[0]), JSON.stringify([urgentOnly, oldest, recent]));
+const tile = await s.page.evaluate(() => { const link = [...document.querySelectorAll('#dashboard-tiles a')].find((a) => /Demandes urgentes non résolues/.test(a.getAttribute('aria-label'))); const todo = document.querySelector('#dashboard-todo')?.textContent; return { count: link?.textContent, todo }; });
+await s.page.evaluate('refreshAll()');
+await wait(1500);
+const tile2 = await s.page.evaluate(() => { const link = [...document.querySelectorAll('#dashboard-tiles a')].find((a) => /Demandes urgentes non résolues/.test(a.getAttribute('aria-label'))); return { count: link?.textContent, todo: document.querySelector('#dashboard-todo')?.textContent }; });
+check('the dashboard counts the urgent requests that are not resolved and says it in the to-do list', tile2.count === '1' && /1 demande urgente n’est pas résolue\./.test(tile2.todo), JSON.stringify([tile, tile2]));
+await s.page.evaluate(() => [...document.querySelectorAll('#dashboard-tiles a')].find((a) => /Demandes urgentes non résolues/.test(a.getAttribute('aria-label'))).click());
+await wait(400);
+const viaDashboard = await s.page.evaluate(() => ({ priority: document.querySelector('#staff-filter-priority').value, status: document.querySelector('#staff-filter-status').value, shown: [...document.querySelectorAll('#staff-messages .message-card h4')].map((h) => h.textContent) }));
+check('opening that dashboard number lists exactly those requests (priority urgent, state "Non résolues")', viaDashboard.priority === 'urgent' && viaDashboard.status === 'open' && viaDashboard.shown.length === 1 && /Lampadaire/.test(viaDashboard.shown[0]), JSON.stringify(viaDashboard));
+await s.page.select('#staff-filter-priority', '');
+await s.page.select('#staff-filter-status', '');
+await s.page.click('#lang-toggle');
+await s.page.waitForFunction(() => /^⚠ Urgent$/.test(document.querySelector('#staff-messages .message-priority')?.textContent || ''), { timeout: 8000 }).catch(() => {});
+const staffEnglish = await s.page.evaluate(() => ({ badge: document.querySelector('#staff-messages .message-priority')?.textContent, options: [...document.querySelector('[data-priority-for]').options].map((o) => o.textContent), filter: document.querySelector('label:has(#staff-filter-priority)')?.firstChild?.textContent.trim(), sort: document.querySelector('#staff-sort option[value=oldest]')?.textContent }));
+check('in English the badge, the selector, the filter and the sort read in English', staffEnglish.badge === '⚠ Urgent' && JSON.stringify(staffEnglish.options) === JSON.stringify(['Urgent', 'High priority', 'Normal']) && staffEnglish.filter === 'Priority' && staffEnglish.sort === 'Oldest first', JSON.stringify(staffEnglish));
+await s.context.close();
+s = await open(zoe);
+await s.page.waitForSelector('#citizen-messages .message-card');
+const residentSees = await s.page.evaluate(() => document.querySelector('#citizen-area').textContent);
+check('the resident never sees the priority their request was given (it is internal)', !/Urgente|Prioritaire|Priorité/.test(residentSees), residentSees.match(/.{20}(Urgente|Prioritaire|Priorité).{20}/)?.[0]);
 await s.context.close();
 
 await browser.close();

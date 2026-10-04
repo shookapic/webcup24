@@ -140,6 +140,9 @@ button,a,input,select{-webkit-tap-highlight-color:transparent}
 .message-heading h4{font-size:.9375rem;margin:0;line-height:1.4;overflow-wrap:anywhere}
 .message-status{font-size:.6875rem;white-space:nowrap;padding:5px 7px;border-radius:3px;background:#e3a185;color:#102539;font-weight:800}
 .status-in_progress{background:#ffda87}.status-resolved{background:#8be7d1}
+.message-badges{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.message-priority{font-size:.6875rem;white-space:nowrap;padding:5px 7px;border-radius:3px;font-weight:800;background:#102539;color:#ffe4dc;border:2px solid #ffe4dc}
+.priority-urgent{background:#8a1f11;color:#fff;border-color:#fff}
 .message-author{font-size:.6875rem;color:#a7c2cc;overflow-wrap:anywhere}
 .message-kind,.message-location,.message-dates{font-size:.75rem;color:#a7c2cc;line-height:1.5;overflow-wrap:anywhere}
 .message-kind{color:#70e7d4;font-weight:700}

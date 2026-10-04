@@ -62,11 +62,43 @@ const published = await call(`/api/messages/${road.data.id}/public`, 'POST', { c
 const reports = (await call('/api/public-requests', 'GET', null, zoe)).data.requests;
 check('a published report shows the theme of the request it comes from', published.status === 201 && reports.length === 1 && reports[0].topic === 'voirie', JSON.stringify([published.status, reports]));
 
+console.log('\n# F80. priorities');
+const priorityOf = (id) => query('SELECT priority FROM messages WHERE id = ?', id)[0].priority;
+const staffView = async (cookie = agent) => (await call('/api/messages', 'GET', null, cookie)).data.messages;
+check('every request is "normal" at first, the legacy one included (additive column with a default), and the column cannot be empty', priorityOf(water.data.id) === 'normal' && priorityOf(legacy.data.id) === 'normal' && query("SELECT \"notnull\" AS nn, dflt_value AS d FROM pragma_table_info('messages') WHERE name = 'priority'")[0].nn === 1);
+const stamp = query('SELECT updated_at FROM messages WHERE id = ?', water.data.id)[0].updated_at;
+const noticesBefore = query('SELECT COUNT(*) AS n FROM notices')[0].n;
+const anonymous = await call(`/api/messages/${water.data.id}/priority`, 'PUT', { priority: 'urgent' });
+const asResident = await call(`/api/messages/${water.data.id}/priority`, 'PUT', { priority: 'urgent' }, zoe);
+check('only staff set a priority: anonymous gets 401, the resident who owns the request gets 403, nothing changes', anonymous.status === 401 && asResident.status === 403 && priorityOf(water.data.id) === 'normal', JSON.stringify([anonymous.status, asResident.status]));
+const invalid = [await call(`/api/messages/${water.data.id}/priority`, 'PUT', { priority: 'critical' }, agent), await call(`/api/messages/${water.data.id}/priority`, 'PUT', { priority: ['urgent'] }, agent), await call(`/api/messages/${water.data.id}/priority`, 'PUT', { priority: '__proto__' }, agent), await call(`/api/messages/${water.data.id}/priority`, 'PUT', {}, agent)];
+const unknown = await call('/api/messages/99999/priority', 'PUT', { priority: 'urgent' }, agent);
+check('an invalid priority (unknown word, array, "__proto__", missing) is 400 and an unknown request is 404, nothing changes', invalid.every((x) => x.status === 400) && unknown.status === 404 && priorityOf(water.data.id) === 'normal', JSON.stringify([invalid.map((x) => x.status), unknown.status]));
+const set = await call(`/api/messages/${water.data.id}/priority`, 'PUT', { priority: 'urgent' }, agent);
+check('an agent sets "urgent": 200, stored, the resident\'s last-update time and notices are untouched (the priority is internal)', set.status === 200 && set.data.changed === true && priorityOf(water.data.id) === 'urgent' && query('SELECT updated_at FROM messages WHERE id = ?', water.data.id)[0].updated_at === stamp && query('SELECT COUNT(*) AS n FROM notices')[0].n === noticesBefore, JSON.stringify(set.data));
+const again = await call(`/api/messages/${water.data.id}/priority`, 'PUT', { priority: 'urgent' }, agent);
+const journal = (await call('/api/admin/audit', 'GET', null, agent)).data;
+const entries = (journal.entries || []).filter((e) => e.action === 'message.priority');
+check('the same priority again changes nothing and is not journalled twice; the one entry says who, which request and from/to', again.status === 200 && again.data.changed === false && entries.length === 1 && /Agent Tri|agent Tri/.test(entries[0].actor_name || entries[0].actor || '') && /Coupure d’eau/.test(entries[0].summary) && /urgente/.test(entries[0].summary), JSON.stringify(entries).slice(0, 400));
+await call(`/api/messages/${road.data.id}/priority`, 'PUT', { priority: 'high' }, admin);
+const listed = await staffView();
+const stripped = await staffView(admin);
+const mineAfter = (await call('/api/messages', 'GET', null, zoe)).data.messages;
+const receiptJson = (await call(`/api/messages/${water.data.id}/receipt?format=json`, 'GET', null, zoe)).data;
+const publicList = (await call('/api/public-requests', 'GET', null, zoe)).data.requests;
+check('staff see the priority of every request; the resident list, the receipt and the public reports never carry it', listed.find((x) => x.id === water.data.id).priority === 'urgent' && stripped.find((x) => x.id === road.data.id).priority === 'high' && listed.find((x) => x.id === dflt.data.id).priority === 'normal'
+  && mineAfter.every((x) => !('priority' in x)) && !JSON.stringify(receiptJson).includes('priority') && publicList.every((x) => !('priority' in x)), JSON.stringify([mineAfter[0], publicList[0]]));
+const dash = (await call('/api/admin/dashboard', 'GET', null, agent)).data;
+check('the dashboard counts urgent and high-priority requests that are not resolved', dash.messages.urgent_open === 1 && dash.messages.high_open === 1, JSON.stringify(dash.messages).slice(0, 300));
+await call(`/api/messages/${water.data.id}`, 'PATCH', { status: 'resolved' }, agent);
+const dashResolved = (await call('/api/admin/dashboard', 'GET', null, agent)).data;
+check('a resolved request no longer counts as urgent work (but keeps its priority for the record)', dashResolved.messages.urgent_open === 0 && priorityOf(water.data.id) === 'urgent', JSON.stringify(dashResolved.messages).slice(0, 200));
+
 console.log('\n# existing data and restart');
 await stop();
 await start();
 const after = (await call('/api/messages', 'GET', null, zoe)).data.messages;
-check('themes survive a restart; the old request is still without theme (no data rewritten at startup)', after.find((x) => x.id === water.data.id).topic === 'eau' && after.find((x) => x.id === legacy.data.id).topic === null);
+check('themes and priorities survive a restart; the old request is still without theme (no data rewritten at startup)', after.find((x) => x.id === water.data.id).topic === 'eau' && after.find((x) => x.id === legacy.data.id).topic === null && priorityOf(road.data.id) === 'high');
 
 await stop();
 rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });

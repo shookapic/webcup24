@@ -575,13 +575,18 @@ async function loadTopics() {
   fillTopicSelects();
 }
 
+// F80: agents classify requests by priority (internal: residents never see it). A badge says it in words and with a symbol, never by colour alone.
+const priorityLabels = { urgent: 'Urgente', high: 'Prioritaire', normal: 'Normale' };
+const priorityRank = { urgent: 0, high: 1, normal: 2 };
+const priorityBadge = (priority) => element('span', `message-priority priority-${priority}`, `${priority === 'urgent' ? '⚠' : '▲'} ${t(priorityLabels[priority])}`);
+
 // F50: the staff list can be narrowed by state, type and the resident's profile district; the dashboard numbers open it already filtered.
 let staffMessages = [];
 let citizenMessages = [];
-const staffFilter = () => ({ status: $('#staff-filter-status').value, kind: $('#staff-filter-kind').value, district: $('#staff-filter-district').value, reply: $('#staff-filter-reply').value, topic: $('#staff-filter-topic').value });
-const staffMatches = (item, { status, kind, district, reply, topic }) => (!status || item.status === status) && (!kind || item.kind === kind) && (!district || (district === 'none' ? !item.citizen_district : item.citizen_district === district))
+const staffFilter = () => ({ status: $('#staff-filter-status').value, kind: $('#staff-filter-kind').value, district: $('#staff-filter-district').value, reply: $('#staff-filter-reply').value, topic: $('#staff-filter-topic').value, priority: $('#staff-filter-priority').value });
+const staffMatches = (item, { status, kind, district, reply, topic, priority }) => (!status || (status === 'open' ? item.status !== 'resolved' : item.status === status)) && (!priority || item.priority === priority) && (!kind || item.kind === kind) && (!district || (district === 'none' ? !item.citizen_district : item.citizen_district === district))
   && (!reply || (reply === 'none' ? !(item.replies || []).length : (item.replies || []).length > 0)) && topicMatches(item, topic);
-for (const id of ['#staff-filter-status', '#staff-filter-kind', '#staff-filter-district', '#staff-filter-reply', '#staff-filter-topic']) $(id).addEventListener('change', () => renderMessages(staffMessages));
+for (const id of ['#staff-filter-status', '#staff-filter-kind', '#staff-filter-district', '#staff-filter-reply', '#staff-filter-topic', '#staff-filter-priority', '#staff-sort']) $(id).addEventListener('change', () => renderMessages(staffMessages));
 for (const id of ['#mine-filter-topic', '#mine-filter-status']) $(id).addEventListener('change', () => renderMessages(citizenMessages));
 $('#public-filter-topic').addEventListener('change', renderPublic);
 $('#public-sort').addEventListener('change', renderPublic);
@@ -651,11 +656,18 @@ function renderMessages(messages) {
     return;
   }
   const priority = { new: 0, in_progress: 1, resolved: 2 };
-  for (const item of [...shown].sort((a, b) => priority[a.status] - priority[b.status] || b.id - a.id)) {
+  const order = staff ? $('#staff-sort').value : '';
+  // Staff: by default what is not resolved comes first, most urgent first, then by state and the newest; "recent" and "oldest" sort by date only.
+  const byPriority = (a, b) => (a.status === 'resolved') - (b.status === 'resolved') || priorityRank[a.priority || 'normal'] - priorityRank[b.priority || 'normal'] || priority[a.status] - priority[b.status] || b.id - a.id;
+  const sorter = !staff ? (a, b) => priority[a.status] - priority[b.status] || b.id - a.id : order === 'recent' ? (a, b) => b.id - a.id : order === 'oldest' ? (a, b) => a.id - b.id : byPriority;
+  for (const item of [...shown].sort(sorter)) {
     const card = element('article', 'message-card');
     const heading = element('div', 'message-heading');
     heading.append(element('h4', '', item.subject));
-    heading.append(element('span', `message-status status-${item.status}`, t(statusLabels[item.status] || item.status)));
+    const badges = element('span', 'message-badges');
+    if (staff && item.priority && item.priority !== 'normal' && item.status !== 'resolved') badges.append(priorityBadge(item.priority));
+    badges.append(element('span', `message-status status-${item.status}`, t(statusLabels[item.status] || item.status)));
+    heading.append(badges);
     card.append(heading);
     card.append(element('p', 'message-kind', t(item.kind === 'incident' ? 'Signalement de problème' : 'Message aux services')));
     card.append(element('p', 'message-topic', t('Thème : {topic}', { topic: topicLabel(item.topic) })));
@@ -723,7 +735,35 @@ function renderMessages(messages) {
         }
       });
       label.append(select);
-      card.append(label, noteField, failure);
+      const priorityLabel = element('label', 'status-field', t('Priorité '));
+      const prioritySelect = element('select');
+      prioritySelect.dataset.priorityFor = item.id;
+      prioritySelect.setAttribute('aria-label', t('Priorité de la demande {id}', { id: item.id }));
+      for (const [value, title] of Object.entries(priorityLabels)) {
+        const option = element('option', '', t(title));
+        option.value = value;
+        prioritySelect.append(option);
+      }
+      prioritySelect.value = item.priority || 'normal';
+      prioritySelect.addEventListener('change', async () => {
+        failure.hidden = true;
+        prioritySelect.disabled = true;
+        try {
+          await api(`/api/messages/${item.id}/priority`, 'PUT', { priority: prioritySelect.value });
+          setFormStatus('#staff-reply-status', t('Priorité de la demande {reference} : {priority}.', { reference: `M-${item.id}`, priority: t(priorityLabels[prioritySelect.value]).toLowerCase() }));
+          await loadMessages();
+          document.querySelector(`[data-priority-for="${item.id}"]`)?.focus();
+        } catch (error) {
+          if (error.status === 401) return clearIdentity();
+          prioritySelect.value = item.priority || 'normal';
+          prioritySelect.disabled = false;
+          failure.textContent = `⚠ ${t('Erreur :')} ${t('La priorité n’a pas été enregistrée : {error}', { error: error.message })} ${t('La priorité affichée est celle que la ville a enregistrée.')}`;
+          failure.hidden = false;
+          prioritySelect.focus();
+        }
+      });
+      priorityLabel.append(prioritySelect);
+      card.append(label, priorityLabel, noteField, failure);
       // F84: answer the resident directly; the state of the request does not change.
       for (const reply of item.replies || []) card.append(replyBox(reply, true));
       const replyField = element('label', 'status-field', t('Répondre directement à l’habitant '));
@@ -856,6 +896,8 @@ $('#dashboard-panel').addEventListener('click', (event) => {
   $('#staff-filter-district').value = filter.district || '';
   $('#staff-filter-reply').value = filter.reply || '';
   $('#staff-filter-topic').value = filter.topic || '';
+  $('#staff-filter-priority').value = filter.priority || '';
+  $('#staff-sort').value = '';
   renderMessages(staffMessages);
   $('#staff-messages-panel').focus();
 });
@@ -879,6 +921,7 @@ function renderDashboard() {
   $('#dashboard-time').textContent = t('Mis à jour à {time} (heure de la cité)', { time: when.slice(11) });
   const todo = [];
   const plural = (n, one, many, params = {}) => t(n === 1 ? one : many, { n, ...params });
+  if (d.messages.urgent_open) todo.push(plural(d.messages.urgent_open, '1 demande urgente n’est pas résolue.', '{n} demandes urgentes ne sont pas résolues.'));
   if (d.messages.new) todo.push(plural(d.messages.new, '1 message attend une réponse.', '{n} messages attendent une réponse.') + (d.messages.waiting_hours ? ` ${t('Le plus ancien attend depuis {h} h.', { h: d.messages.waiting_hours })}` : ''));
   if (d.messages.incidents_open) todo.push(plural(d.messages.incidents_open, '1 signalement de problème n’est pas résolu.', '{n} signalements de problèmes ne sont pas résolus.'));
   if (d.concerns.received) todo.push(plural(d.concerns.received, '1 inquiétude sur les données attend une lecture.', '{n} inquiétudes sur les données attendent une lecture.'));
@@ -890,6 +933,7 @@ function renderDashboard() {
   $('#dashboard-todo').replaceChildren(...(todo.length ? todo : [t('Rien d’urgent : aucune demande n’attend et rien n’est perturbé.')]).map((line) => element('li', '', line)));
   // Every number opens what it counts: the message ones open the staff list already filtered, the others jump to their panel.
   const tiles = [
+    ['Demandes urgentes non résolues', d.messages.urgent_open, { status: 'open', priority: 'urgent' }], ['Demandes prioritaires non résolues', d.messages.high_open, { status: 'open', priority: 'high' }],
     ['Messages à traiter', d.messages.new, { status: 'new' }], ['Messages en cours', d.messages.in_progress, { status: 'in_progress' }], ['Messages résolus', d.messages.resolved, { status: 'resolved' }],
     ['Inquiétudes à lire', d.concerns.received, '#concerns-panel'], ['Signalements publiés', d.public.requests], ['Soutiens donnés', d.public.supports],
     ['Messages reçus aujourd’hui', d.messages.received_today, {}], ['Messages reçus sur 7 jours', d.messages.received_week, {}],

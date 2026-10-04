@@ -116,6 +116,8 @@ const topics = [
   { code: 'autre', fr: 'Autre sujet', en: 'Other subject' },
 ];
 const topicCodes = topics.map((topic) => topic.code);
+// F80: how soon agents should look at a request. Set only by staff; residents never see it.
+const priorities = { urgent: 'urgente', high: 'prioritaire', normal: 'normale' };
 
 // F83: every request has a reference (M-12) and a verification code derived from a persistent key, so a receipt a resident kept still checks out after a
 // restart. The code carries no content; anyone holding the reference and the code can ask whether the city received it and when.
@@ -664,6 +666,8 @@ async function route(request, response) {
       messages: {
         new: byStatus.new || 0, in_progress: byStatus.in_progress || 0, resolved: byStatus.resolved || 0,
         waiting_hours: waitingHours,
+        urgent_open: one("SELECT COUNT(*) AS n FROM messages WHERE priority = 'urgent' AND status != 'resolved'").n,
+        high_open: one("SELECT COUNT(*) AS n FROM messages WHERE priority = 'high' AND status != 'resolved'").n,
         avg_resolution_hours: averageHours === null ? null : Math.round(averageHours * 10) / 10,
         incidents_by_district: incidentsByDistrict,
         received_today: one('SELECT COUNT(*) AS n FROM messages WHERE created_at >= ?', dayStart).n,
@@ -1272,6 +1276,22 @@ async function route(request, response) {
     let changed = 0;
     for (const id of ids) changed += Number(mark.run(id, user.id).changes);
     return sendJson(response, 200, { seen: changed });
+  }
+  const priorityMatch = /^\/api\/messages\/(\d+)\/priority$/.exec(path);
+  if (priorityMatch && method === 'PUT') {
+    const staff = requireUser(request, ['agent', 'admin']);
+    const { priority } = await readJson(request);
+    if (typeof priority !== 'string' || !Object.hasOwn(priorities, priority)) fail(400, 'Priorité invalide : urgent, high ou normal.');
+    const item = db.prepare('SELECT id, subject, priority FROM messages WHERE id = ?').get(Number(priorityMatch[1]));
+    if (!item) fail(404, 'Message introuvable.');
+    // The priority is internal: it does not touch updated_at (the resident's "last update" and the resolution times stay true) and notifies nobody.
+    if (priority !== item.priority) {
+      tx(() => {
+        db.prepare('UPDATE messages SET priority = ? WHERE id = ?').run(priority, item.id);
+        audit(staff, { category: 'message', action: 'message.priority', target: { type: 'message', id: item.id, label: item.subject }, summary: `a classé la demande « ${item.subject} » en priorité ${priorities[priority]} (avant : ${priorities[item.priority]})`, details: { from: item.priority, to: priority } });
+      });
+    }
+    return sendJson(response, 200, { ok: true, priority, changed: priority !== item.priority });
   }
   const messageMatch = /^\/api\/messages\/(\d+)$/.exec(path);
   if (messageMatch && method === 'PATCH') {

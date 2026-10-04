@@ -251,10 +251,12 @@
             <div class="workspace-grid">
               <div class="panel" id="staff-messages-panel" tabindex="-1"><div class="panel-title-row"><h3>Messages des habitants</h3><strong id="pending-count" class="pending-count">— à traiter</strong></div><p>Les demandes qui nécessitent une action apparaissent en premier.</p>
                 <div class="filter-row">
-                  <label>État <select id="staff-filter-status"><option value="">Tous</option><option value="new">À traiter</option><option value="in_progress">En cours</option><option value="resolved">Résolu</option></select></label>
+                  <label>État <select id="staff-filter-status"><option value="">Tous</option><option value="open">Non résolues</option><option value="new">À traiter</option><option value="in_progress">En cours</option><option value="resolved">Résolu</option></select></label>
                   <label>Type <select id="staff-filter-kind"><option value="">Tous</option><option value="incident">Signalements de problème</option><option value="contact">Questions aux services</option></select></label>
                   <label>Quartier de l’habitant <select id="staff-filter-district"><option value="">Tous</option><option>Centre-ville</option><option>Quartier nord</option><option>Quartier est</option><option>Quartier ouest</option><option>Quartier sud</option><option value="none">Non précisé</option></select></label>
                   <label>Thème <select id="staff-filter-topic" data-content></select></label>
+                  <label>Priorité <select id="staff-filter-priority"><option value="">Toutes</option><option value="urgent">Urgentes</option><option value="high">Prioritaires</option><option value="normal">Normales</option></select></label>
+                  <label>Trier par <select id="staff-sort"><option value="">Priorité d’abord</option><option value="recent">Les plus récentes d’abord</option><option value="oldest">Les plus anciennes d’abord</option></select></label>
                   <label>Réponse <select id="staff-filter-reply"><option value="">Toutes</option><option value="none">Sans réponse</option><option value="some">Avec réponse</option></select></label>
                 </div>
                 <p id="staff-reply-status" class="form-status" role="status" aria-live="polite"></p>
