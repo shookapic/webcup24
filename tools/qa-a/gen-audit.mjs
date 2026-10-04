@@ -21,7 +21,7 @@ const rows = [
   ['D16', 'PASS', 'confirmation + reference + receipt page + public verification; ' + L + ': receipts-replies 30; ' + P + ': receipt validated publicly', ''],
   ['D17', 'PASS', 'staff list with filters (state, type, district, theme, priority), dashboard; ' + L + ' + ' + P, ''],
   ['D18', 'PASS', 'urgent alert banner on every page, audience, official sender (F73); ' + L + ': auth-browser/smoke; ' + P + ': announcements', ''],
-  ['D19', 'PASS', 'admin publishes services (FR/EN), places, availability; ' + L + ': smoke; ' + P + ': services/places populated', ''],
+  ['D19', 'PASS', 'OFFICIAL wording: staff get their own workspace, distinct from the citizen space, showing the information sent by the Nova Terra API. Implementation: role-gated staff area (#staff-area, jump nav, dashboard) + GET /api/requests (agent/admin only) reading the official feed with the server-only X-Webcup-Api-Key, 15 s cache, errors 503 (key missing) / 502 (refused, unavailable, invalid); panels "Flux officiel Terra Nova" and "Demandes du concours". ' + L + ': smoke (401/403/200, error cases) + a11y/portal-browser staff pages; ' + P + ': anonymous 401, citizen 403, agent 200, admin 200, body = api_version, session, 100 requests, no key in the body', 'the key is never shown to any client (checked: absent from the body); a key-less deployment shows the 503 message in words'],
   ['D20', 'PARTIAL', 'axe 0 violations on portal states, keyboard, zoom, contrast, reduced motion; ' + L + ': a11y-browser 100', 'real screen readers UNVERIFIED'],
   ['F21', 'PARTIAL', 'labels, landmarks, live statuses, axe clean; ' + L + ': a11y-browser', 'NVDA/JAWS/VoiceOver not run: UNVERIFIED'],
   ['F22', 'PASS', 'staff receive and triage requests; ' + L + ' + ' + P, ''],

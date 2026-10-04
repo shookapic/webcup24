@@ -75,6 +75,8 @@ const backup = await adm.c.call('/api/admin/backup/verify', 'POST', {});
 check('F87', 'backup verification: ok with the important data identical in the copy (copy deleted, not downloadable)', backup.status === 200 && backup.data.ok === true && backup.data.important?.every((x) => x.same), backup.text);
 check('F87', 'backup status is admin-only', (await adm.c.call('/api/admin/backup/status')).data.last?.ok === true && (await ag.c.call('/api/admin/backup/status')).status === 403);
 
+const feedAgent = await ag.c.call('/api/requests');
+check('D19', 'the official request feed (server-held key) is for staff only: anonymous 401, citizen 403, agent and admin 200 with session + requests, and no key in the body', (await anon.call('/api/requests')).status === 401 && feedAgent.status === 200 && Array.isArray(feedAgent.data.requests) && feedAgent.data.requests.length > 0 && Boolean(feedAgent.data.session) && !/X-Webcup|api[_-]?key/i.test(feedAgent.text) && (await adm.c.call('/api/requests')).status === 200);
 console.log('\n# shared citizen Alice (read-only) and the seeded fixtures');
 const alice = await login('alice');
 check('D03', 'citizen signs in', alice.out.data.user?.role === 'citizen');
