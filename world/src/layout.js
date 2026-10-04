@@ -170,6 +170,26 @@ export const cameraBlockers = [];
 // Written by Player every frame, read by App (nearest stop, HUD district). Not React state on purpose.
 export const playerPos = { x: SPAWN[0], z: SPAWN[2] };
 
+
+// F45 / F46 wayfinding: where each official place (API code, GET /api/places) is reached in the world. `via` = path node to start from, `route` = extra
+// waypoints around obstacles, `x,z` = the entrance / approach point on walkable ground, `label` = height of the floating name. Places added later by staff
+// without an entry fall back to their stop shelter (placeSite). Data only: no gameplay or service logic lives in the 3D models.
+export const placeSites = {
+  mairie: { x: 0, z: -14.6, via: 'mairie', label: 14 },
+  'hopital-terra-nova': { x: 34.4, z: -6, via: 'sante', label: 9.5 }, // porch mouth, doors face the Santé stop
+  'urgences-hopital': { x: 48, z: -6, via: 'sante', route: [[32, -14.8], [48, -14.8]], label: 4.5 }, // ambulance bay at the back (east face), reached along the north side
+  'centre-sante': { x: 33.5, z: 9, via: 'sante', route: [[30, 8]], label: 5 }, // annex across from the stop
+  'secours-quartier-sud': { x: 17.5, z: 31, via: 'sud2', label: 4 },
+  'point-accueil-habitat': { x: -33.5, z: -30, via: 'habitatLane', label: 4 },
+  'marche-couvert': { x: -36, z: -2.5, via: 'marche', label: 4 },
+};
+export function placeSite(place) {
+  const known = placeSites[place.code];
+  if (known) return known;
+  const stop = stops.find((s) => s.name === place.stop) ?? stops[0];
+  return { x: stop.x + Math.sin(stop.facing) * 3, z: stop.z + Math.cos(stop.facing) * 3, via: null, label: 4 };
+}
+
 export function nearestStop({ x, z }) {
   let best = stops[0];
   for (const stop of stops) if (Math.hypot(stop.x - x, stop.z - z) < Math.hypot(best.x - x, best.z - z)) best = stop;

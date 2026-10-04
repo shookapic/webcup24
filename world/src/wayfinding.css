@@ -1,0 +1,16 @@
+/* F45/F46 wayfinding overlay (B-owned file). Labels follow 3D positions; the panel never covers the HUD; targets >= 44 px; colour is never the only cue. */
+.place-labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 4; }
+.place-label { position: absolute; left: 0; top: 0; padding: .2rem .55rem; border-radius: 999px; background: #1b2a33; color: #f4efe6; border: 2px solid #e9ba69; font: 600 .78rem/1.2 system-ui, sans-serif; white-space: nowrap; box-shadow: 0 2px 6px rgb(0 0 0 / .35); }
+.place-label-strong { border-color: #ff7a63; border-style: double; border-width: 3px; }
+.place-label-kind { text-transform: uppercase; letter-spacing: .04em; font-size: .68rem; opacity: .9; }
+.way-ui { position: fixed; left: 1rem; bottom: 1rem; z-index: 6; display: grid; gap: .5rem; max-width: min(26rem, calc(100vw - 2rem)); }
+.way-panel, .way-prompt { background: #1b2a33; color: #f4efe6; border: 2px solid #e9ba69; border-radius: .7rem; padding: .7rem .85rem; box-shadow: 0 4px 14px rgb(0 0 0 / .4); }
+.way-title { margin: 0 0 .2rem; font: 700 1rem/1.25 system-ui, sans-serif; }
+.way-meta, .way-hint { margin: .1rem 0; font: .88rem/1.35 system-ui, sans-serif; }
+.way-hint { opacity: .85; }
+.way-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; }
+.way-button { font: 600 .9rem/1 system-ui, sans-serif; min-height: 2.75rem; min-width: 2.75rem; padding: .5rem .9rem; border-radius: .5rem; border: 2px solid #f4efe6; background: #1d6fa5; color: #fff; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.way-secondary { background: transparent; color: #f4efe6; }
+.way-ui :focus-visible, .way-button:focus-visible { outline: 3px solid #ffd26a; outline-offset: 2px; }
+@media (max-width: 40rem) { .way-ui { left: .5rem; right: .5rem; bottom: 4.75rem; max-width: none; } .place-label { font-size: .7rem; } }
+@media (prefers-reduced-motion: reduce) { .way-button { transition: none; } }

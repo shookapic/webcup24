@@ -4,6 +4,7 @@ import { OrbitControls } from '@react-three/drei';
 import { Sky } from './Sky.jsx';
 import { City, Ground, Rocks } from './City.jsx';
 import { LabelLayer, LabelProjector } from './Labels.jsx';
+import { WayfindingScene, WayfindingUi, useWayfinding } from './Wayfinding.jsx';
 import { AvatarEditor } from './AvatarEditor.jsx';
 import { Npcs } from './Npcs.jsx';
 import { AlertAnnouncer, PhoneFallback, useAnnouncements, useServices, useTransports } from './Phone.jsx';
@@ -87,6 +88,10 @@ export function App() {
   const physical = Boolean(user) && !isNarrow && !flatQuery;
   const services = useServices(phoneUp);
   const transports = useTransports(true);
+  const way = useWayfinding({ locale, enabled: true });
+  const wayRef = useRef(way);
+  wayRef.current = way;
+  if (debug.enabled) debug.way = way; // QA only
 
   const later = (fn) => {
     clearTimeout(timer.current);
@@ -140,6 +145,8 @@ export function App() {
   const toggleView = () => {
     if (phoneRef.current.phase === 'closed') setView((v) => (v === 'tps' ? 'fps' : 'tps'));
   };
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
   const togglePhone = () => {
@@ -159,6 +166,8 @@ export function App() {
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable], dialog')) return;
       if (event.code === 'KeyV') toggleView();
       if (event.code === 'KeyT') togglePhone();
+      if (event.code === 'KeyG' && phoneRef.current.phase === 'closed' && !editingRef.current) wayRef.current.guideEmergency();
+      if (event.code === 'Escape' && phoneRef.current.phase === 'closed' && wayRef.current.guide) wayRef.current.stopGuide();
       if (event.code === 'Escape' && phoneRef.current.phase === 'open' && !pendingRef.current.length) closePhone(); // focus may have fallen to the page after a click
     };
     addEventListener('keydown', keys);
@@ -194,12 +203,25 @@ export function App() {
           </Suspense>
         ) : <City reducedMotion={reducedMotion} />}
         <LabelProjector />
+        <WayfindingScene places={way.places} guide={way.guide} reducedMotion={reducedMotion} />
         {physical && phoneUp && <PhoneRig phase={phone.phase} reducedMotion={reducedMotion} outfit={avatar.outfit} />}
         {/* Glow materials use toneMapped={false} and intensity > 1, so only they cross the bloom threshold. */}
         {!debug.simFps && settings.effects && <Suspense fallback={null}><Effects /></Suspense>}
         {!user && <OrbitControls target={[0, 4, 0]} maxPolarAngle={1.45} minDistance={15} maxDistance={140} autoRotate={!reducedMotion} autoRotateSpeed={0.3} />}
       </Canvas>
       <LabelLayer />
+      <WayfindingUi
+        locale={locale}
+        places={way.places}
+        guide={way.guide}
+        prompt={way.prompt}
+        announce={way.announce}
+        hidden={phoneUp || editing}
+        onEmergency={way.guideEmergency}
+        onStop={way.stopGuide}
+        onDismissPrompt={way.dismissPrompt}
+        onOpenPhone={() => { setPage('places'); openPhone('manual'); }}
+      />
       <WorldHud
         locale={locale}
         view={view}
@@ -234,6 +256,9 @@ export function App() {
           onRetry: retry,
           onAcknowledge: acknowledgeAlerts,
           onClose: closePhone,
+          // F45/F46 handoff (A's Phone.jsx renders a "guide me" button per place when this prop is present): starts the ground route and puts the phone away.
+          onLocate: (place) => { way.startGuide(place); closePhone(); },
+          guidedPlaceCode: way.guide?.place.code,
           locale,
         };
         return physical
