@@ -17,6 +17,7 @@ Object.assign(english, {
   'ensemble.': 'together.',
   'Découvrez les services de Terra Nova, restez informé et échangez avec les équipes municipales depuis un espace personnel.': 'Discover Terra Nova’s services, stay informed and talk with the city teams from your personal space.',
   'Explorer les services': 'Explore services',
+  'Explorer la ville en 3D': 'Explore the city in 3D',
   'Accéder à mon espace': 'Go to my space',
   'Les premiers services numériques de la cité.': 'The city’s first digital services.',
   'PORTAIL': 'PORTAL',

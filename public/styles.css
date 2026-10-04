@@ -635,6 +635,9 @@ html[data-contrast=high] #services,html[data-contrast=high] #lieux,html[data-con
 .button{border-radius:var(--tn-radius);font-size:var(--tn-t0);font-weight:600;min-height:44px;gap:var(--tn-s2)}
 .button-primary{background:var(--tn-action);color:var(--tn-action-text);box-shadow:none}
 .button-primary:hover{background:var(--tn-ink-2)}
+.button-world{margin-top:var(--tn-s2);background:transparent;color:var(--tn-action);border:1.5px solid var(--tn-action);box-shadow:none}
+.button-world:hover{background:#ffffff1a}
+html[data-contrast=high] .button-world{color:#ffeb00;border-color:#ffeb00}
 html[data-contrast=high] .button-primary:hover{background:#fff}
 .identity-bar button,.panel-title-row button,.feature-button,#guide-dismiss,.tip button,.citizen-actions button,.security-notice button,.button-link,.appointment-actions button,.audit-tools button,.audit-buttons button:not(.button),.audit-target button,#audit-more,.reason-form button,.audit-more summary,.jump-nav a,.notify-button{color:var(--tn-action);background:transparent;border:1.5px solid var(--tn-action);border-radius:var(--tn-radius);font-weight:600;font-size:var(--tn-t-1);min-height:44px}
 .identity-bar button:hover,.panel-title-row button:hover,.tip button:hover,.citizen-actions button:hover,.button-link:hover,.jump-nav a:hover,.security-notice button:hover,.appointment-actions button:hover{background:var(--tn-paper-2)}
