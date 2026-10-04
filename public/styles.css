@@ -232,7 +232,7 @@ html[data-contrast=high] .feature-button{color:#ffeb00;border-color:#ffeb00}
 .guide-steps a{font-weight:750;color:#70e7d4}
 .guide-steps span{display:block;font-size:.8125rem;color:#a8c1ca}
 .guide-check{font-size:.75rem;color:#8be7d1}
-.guide-steps li[data-done=true] a{color:#e4f5f4}
+.guide-steps li[data-done=true] a{color:var(--tn-muted)}
 #guide-dismiss{background:transparent;color:#70e7d4;border:1px solid #70e7d477;border-radius:3px;padding:9px 13px;font-size:.75rem;font-weight:700;cursor:pointer}
 .profile-form{margin-top:18px;max-width:560px}
 html[data-contrast=high] .guide-steps a,html[data-contrast=high] .guide-check,html[data-contrast=high] #guide-dismiss{color:#ffeb00;border-color:#ffeb00}
