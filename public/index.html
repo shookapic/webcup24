@@ -7,7 +7,9 @@
     <meta name="description" content="Terra Nova, les services numériques de la cité.">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/participation.css">
     <script src="/i18n.js" defer></script>
+    <script src="/participation.js" defer></script>
     <script src="/app.js" defer></script>
     <title>Terra Nova — Le portail de la cité</title>
   </head>
@@ -88,6 +90,10 @@
         <p class="notify-row"><button id="notify-button" class="notify-button" type="button" hidden>Me prévenir des alertes</button></p>
         <div id="news-list" class="news-grid" data-content></div>
         <p id="news-status" class="section-status" role="status"></p>
+      </section>
+
+      <section class="requests-section" id="participation" aria-labelledby="tp-title" tabindex="-1">
+        <div id="participation-root" data-content></div>
       </section>
 
       <section class="account-section" id="espace" aria-labelledby="account-title">
@@ -456,7 +462,7 @@
         <nav class="breadcrumb" aria-label="Fil d’Ariane des données"><a href="#haut">Accueil</a><span aria-hidden="true">›</span><span>Vos données</span></nav>
         <div class="section-heading"><div><span class="section-kicker">06 / VOS DONNÉES</span><h2 id="donnees-title">Vos données : ce que le portail garde et pourquoi</h2></div><p>Ce texte décrit ce que le portail fait réellement aujourd’hui.</p></div>
         <dl class="glossary-list">
-          <div><dt>Ce que le portail enregistre</dt><dd>Votre compte : nom affiché, adresse e-mail, mot de passe (gardé sous une forme brouillée que personne ne peut relire), quartier si vous le choisissez, couleurs de votre personnage et date d’inscription. Vos échanges avec la ville : messages et signalements avec le lieu indiqué, réponses des agents à vos demandes, rendez-vous réservés, inquiétudes envoyées et réponses, nouvelles sur vos demandes, signalements publiés et soutiens donnés. Votre connexion : un cookie de session valable 7 jours, dont la valeur n’est gardée que sous forme brouillée. Si vous activez la vérification en deux étapes : la clé secrète de votre application d’authentification et vos codes de secours (ceux-ci sous forme brouillée). Si vous ajoutez une clé d’accès : sa partie publique et le nom de l’appareil ; la partie privée ne quitte jamais votre appareil. Sans adresse e-mail, un code d’accès qui la remplace. Les appareils depuis lesquels vous vous êtes connecté : type de navigateur et de système, dates de première et de dernière connexion, reconnus par un cookie d’un an dont la valeur n’est gardée que sous forme brouillée ; ni votre adresse réseau ni le détail de votre navigateur ne sont gardés. Pour reconnaître un renvoi par erreur, une empreinte brouillée du texte de vos messages et de vos inquiétudes est gardée avec eux. Pour pouvoir vérifier vos accusés de réception, le serveur garde une clé technique qui ne contient aucune donnée d’habitant.</dd></div>
+          <div><dt>Ce que le portail enregistre</dt><dd>Votre compte : nom affiché, adresse e-mail, mot de passe (gardé sous une forme brouillée que personne ne peut relire), quartier si vous le choisissez, couleurs de votre personnage et date d’inscription. Vos échanges avec la ville : messages et signalements avec le lieu indiqué, réponses des agents à vos demandes, votre participation (que vous avez voté à une décision et quand, sans le choix ; vos avis, vos idées et leurs réponses), rendez-vous réservés, inquiétudes envoyées et réponses, nouvelles sur vos demandes, signalements publiés et soutiens donnés. Votre connexion : un cookie de session valable 7 jours, dont la valeur n’est gardée que sous forme brouillée. Si vous activez la vérification en deux étapes : la clé secrète de votre application d’authentification et vos codes de secours (ceux-ci sous forme brouillée). Si vous ajoutez une clé d’accès : sa partie publique et le nom de l’appareil ; la partie privée ne quitte jamais votre appareil. Sans adresse e-mail, un code d’accès qui la remplace. Les appareils depuis lesquels vous vous êtes connecté : type de navigateur et de système, dates de première et de dernière connexion, reconnus par un cookie d’un an dont la valeur n’est gardée que sous forme brouillée ; ni votre adresse réseau ni le détail de votre navigateur ne sont gardés. Pour reconnaître un renvoi par erreur, une empreinte brouillée du texte de vos messages et de vos inquiétudes est gardée avec eux. Pour pouvoir vérifier vos accusés de réception, le serveur garde une clé technique qui ne contient aucune donnée d’habitant.</dd></div>
           <div><dt>Ce qui n’est pas enregistré</dt><dd>Votre position dans le monde 3D reste en mémoire quelques secondes (15 secondes au plus) et n’est pas écrite dans la base. Les connexions ratées sont comptées en mémoire pendant 15 minutes pour limiter les attaques. Les jetons de formulaire et les compteurs de protection contre les envois automatiques ou répétés restent en mémoire (au plus deux heures), sans nom ni contenu. Vos réglages (langue, taille du texte, contraste, alertes) restent dans votre navigateur.</dd></div>
           <div><dt>Qui voit quoi</dt><dd>Les agents et les administrateurs de la ville voient vos messages, signalements, rendez-vous et inquiétudes, pour y répondre. Les autres habitants n’y ont pas accès, sauf si vous publiez un signalement : ils lisent alors seulement le titre, le résumé et le quartier que vous avez écrits pour cela, jamais votre nom, votre adresse e-mail, votre message ni le lieu précis. Vous et les agents voyez le nombre de soutiens, pas qui soutient. Vous pouvez retirer la publication à tout moment. Dans le monde 3D, votre nom affiché, les couleurs de votre personnage et votre position sont visibles des autres habitants connectés pendant que vous y êtes.</dd></div>
           <div><dt>Si vous supprimez votre compte</dt><dd>Sont effacés : votre compte, vos messages et signalements avec les réponses des agents, vos inquiétudes, vos nouvelles, vos publications et vos soutiens ; vos rendez-vous réservés sont libérés. Reste : le journal des actions du personnel. Il garde les lignes qui vous concernent (par exemple la suppression du compte ou un rendez-vous) avec seulement votre prénom, l’initiale de votre nom, votre adresse e-mail masquée et votre numéro de compte. Ce n’est pas anonyme : ces éléments peuvent permettre de vous reconnaître. Aucune durée de conservation n’est fixée pour l’instant, et le journal ne peut être ni modifié ni effacé. Seuls les agents et les administrateurs peuvent le lire.</dd></div>
@@ -473,6 +479,6 @@
           <p id="verify-status" class="form-status" role="status" aria-live="polite"></p>
         </form>
       </section>
-    <footer class="site-footer"><span>TERRA <strong>NOVA</strong></span><span>Une cité qui grandit avec ses habitants.</span><a href="#mots">Mots simples</a><a href="#donnees">Vos données</a><a href="#verifier">Vérifier un accusé</a><a href="#haut">Retour en haut ↑</a></footer>
+    <footer class="site-footer"><span>TERRA <strong>NOVA</strong></span><span>Une cité qui grandit avec ses habitants.</span><a href="#participation">Participation</a><a href="#mots">Mots simples</a><a href="#donnees">Vos données</a><a href="#verifier">Vérifier un accusé</a><a href="#haut">Retour en haut ↑</a></footer>
   </body>
 </html>

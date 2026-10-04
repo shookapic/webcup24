@@ -133,7 +133,7 @@ async function tabThrough(page, label) {
     if (info.behind) problems.invisible.push(`${info.name} hidden behind the sticky reminder`);
   }
   const reached = new Set(visited.map((v) => v.id));
-  const missing = await page.evaluate((ids) => [...document.querySelectorAll('[data-qa-id]')].filter((e) => !ids.includes(e.dataset.qaId)).map((e) => window.qa.describe(e)), [...reached]);
+  const missing = await page.evaluate((ids) => [...document.querySelectorAll('[data-qa-id]')].filter((e) => !ids.includes(e.dataset.qaId) && !(e.type === 'radio' && [...document.getElementsByName(e.name)].some((r) => ids.includes(r.dataset.qaId)))).map((e) => window.qa.describe(e)), [...reached]);
   check(`${label}: every visible control is reachable with Tab (${reached.size}/${total})`, missing.length === 0, missing.join(' | '));
   check(`${label}: tab order follows the page order (no positive tabindex)`, await page.evaluate(() => ![...document.querySelectorAll('[tabindex]')].some((e) => Number(e.getAttribute('tabindex')) > 0)));
   check(`${label}: a visible focus indicator with >= 3:1 contrast on every stop`, problems.ring.length === 0, problems.ring.join(' | '));
@@ -245,10 +245,10 @@ try {
   check('F41: each main action of the personal space takes at most 16 keystrokes (header link + jump links; it was 38-44 Tab presses)', Object.values(reach).every((n) => n > 0 && n <= 16), JSON.stringify(reach));
 
   // forms
-  const forms = await page.evaluate(() => [...document.querySelectorAll('form')].filter((f) => !f.closest('[hidden]')).map((f) => ({ id: f.id, controls: [...f.querySelectorAll('input:not([type=hidden]), select, textarea')].filter((c) => !c.closest('[hidden]')).map((c) => ({ name: c.name || c.id, label: Boolean(c.labels?.length || c.getAttribute('aria-label') || c.getAttribute('aria-labelledby')), required: c.required, type: c.type })), status: f.querySelector('.form-status') ? { live: f.querySelector('.form-status').getAttribute('aria-live') || f.querySelector('.form-status').getAttribute('role') } : null })));
+  const forms = await page.evaluate(() => [...document.querySelectorAll('form')].filter((f) => !f.closest('[hidden]')).map((f) => ({ id: f.id, controls: [...f.querySelectorAll('input:not([type=hidden]), select, textarea')].filter((c) => !c.closest('[hidden]')).map((c) => ({ name: c.name || c.id, label: Boolean(c.labels?.length || c.getAttribute('aria-label') || c.getAttribute('aria-labelledby')), required: c.required, type: c.type })), status: (f.querySelector('.form-status') || f.closest('.tp-card, .tp-section, section')?.querySelector('.tp-status, .form-status')) ? { live: (f.querySelector('.form-status') || f.closest('.tp-card, .tp-section, section').querySelector('.tp-status, .form-status')).getAttribute('aria-live') || (f.querySelector('.form-status') || f.closest('.tp-card, .tp-section, section').querySelector('.tp-status, .form-status')).getAttribute('role') } : null })));
   const unlabeled = forms.flatMap((f) => f.controls.filter((c) => !c.label).map((c) => `${f.id}:${c.name}`));
   check('F42: every field of every visible form has a label', unlabeled.length === 0, unlabeled.join(' | '));
-  check('F42: every form announces its result through a live status', forms.filter((f) => f.status === null && f.id !== 'appointment-form').length === 0 && forms.every((f) => !f.status || f.status.live), JSON.stringify(forms.filter((f) => !f.status).map((f) => f.id)));
+  check('F42: every form announces its result through a live status', forms.filter((f) => f.status === null && f.id !== 'appointment-form').length === 0 && forms.every((f) => !f.status || f.status.live), JSON.stringify(forms.filter((f) => !f.status).map((f) => f.id + '|' + f.controls.map((c) => c.name).join(','))));
 
   // server error on the message form: submit a valid-looking but rejected report (incident without a long enough location)
   await page.select('#message-kind', 'incident');

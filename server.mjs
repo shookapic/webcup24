@@ -10,8 +10,12 @@ import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from
 import { begin, charge, formSummary, guarded, issue, minAgeMs, note as noteForm } from './guard.mjs';
 import { cityStamp, pickLang, personalHtml, receiptHtml, recapCsv, recapHtml } from './recap.mjs';
 import { groupSimilar } from './similar.mjs';
+import { eraseParticipationUser, handleParticipation, initParticipation } from './participation.mjs';
 import { checkTotp, groupSecret, hashRecovery, looksLikeRecovery, newChallenge, newRecoveryCodes, newSecret, otpauthUri, rpIdOf, verifyAssertion, verifyRegistration } from './factors.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
+
+// F65-F68 / F76 (B's module): additive part_* tables. Demo rows are labelled "Exemple (démonstration)" and carry no votes; TN_PARTICIPATION_DEMO=0 starts with empty tables.
+initParticipation(db, { seedDemo: process.env.TN_PARTICIPATION_DEMO !== '0' });
 
 const root = dirname(fileURLToPath(import.meta.url));
 const apiUrl = 'https://24h.webcup.fr/wp-json/webcup/v1/requests';
@@ -24,6 +28,8 @@ const files = new Map([
   ['/i18n.js', ['i18n.js', 'text/javascript; charset=utf-8']],
   ['/i18n-en.js', ['i18n-en.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
+  ['/participation.js', ['participation.js', 'text/javascript; charset=utf-8']],
+  ['/participation.css', ['participation.css', 'text/css; charset=utf-8']],
   ['/favicon.svg', ['favicon.svg', 'image/svg+xml']],
 ]);
 const worldRoot = join(root, 'dist', 'monde');
@@ -456,6 +462,13 @@ function ownData(user) {
     notices: own('SELECT id, code, ref_id, label, note, at, seen_at FROM notices WHERE user_id = ? ORDER BY id'),
     public_requests: own('SELECT pr.id, pr.message_id, pr.public_title, pr.public_summary, pr.district, pr.created_at, (SELECT COUNT(*) FROM supports WHERE public_request_id = pr.id) AS support_count FROM public_requests pr JOIN messages m ON m.id = pr.message_id WHERE m.user_id = ? ORDER BY pr.id'),
     devices: own('SELECT id, label, first_seen, last_seen FROM devices WHERE user_id = ? ORDER BY id'),
+    // F65-F68 / F76: what the resident did in the participation area. A vote shows that and when they voted, never for which choice (it is not stored).
+    participation: {
+      votes: own('SELECT d.title, v.receipt, v.voted_at FROM part_voters v JOIN part_decisions d ON d.id = v.decision_id WHERE v.user_id = ? ORDER BY v.voted_at'),
+      opinions: own('SELECT c.title, o.rating, o.comment, o.receipt, o.updated_at FROM part_opinions o JOIN part_consultations c ON c.id = o.consultation_id WHERE o.user_id = ? ORDER BY o.id'),
+      ideas: own('SELECT title, body, status, staff_note, receipt, created_at FROM part_ideas WHERE user_id = ? ORDER BY id'),
+      feedback: own('SELECT service_id, rating, comment, receipt, created_at FROM part_feedback WHERE user_id = ? ORDER BY id'),
+    },
     supports: own('SELECT supports.public_request_id, pr.public_title, supports.at FROM supports JOIN public_requests pr ON pr.id = supports.public_request_id WHERE supports.user_id = ? ORDER BY supports.id'),
   };
 }
@@ -495,6 +508,7 @@ function eraseUser(id) {
     db.prepare('DELETE FROM notices WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM concerns WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM devices WHERE user_id = ?').run(id);
+    eraseParticipationUser(db, id);
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
   });
   presence.delete(id);
@@ -1830,6 +1844,10 @@ async function route(request, response) {
     requireUser(request, ['agent', 'admin']);
     return sendJson(response, 200, await loadFeed());
   }
+
+  // B's participation module answers /api/participation/** (roles, validation, duplicates and its own transactions are inside it); the session, Origin, size and
+  // throttle checks above have already run.
+  if (await handleParticipation({ request, response, path, method, user: currentUser(request), db, readJson, sendJson, fail, tx, audit })) return;
 
   if (method === 'GET' && (path === '/monde' || path.startsWith('/monde/'))) return serveWorld(request, path, response);
   if (method === 'GET' && !path.startsWith('/api/')) return serveFile(request, path, response);

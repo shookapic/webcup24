@@ -508,6 +508,7 @@ $('#guide-dismiss').addEventListener('click', () => {
 
 function clearIdentity() {
   user = null;
+  mountParticipation();
   messageCount = 0;
   feed = null;
   knownCodes = null;
@@ -2387,9 +2388,20 @@ function renderCitizens() {
   }
 }
 
+// F65-F68 / F76: the civic participation module (participation.js, owned by B), mounted once and updated when the user or the language changes.
+let participationHandle = null;
+function mountParticipation() {
+  const root = document.getElementById('participation-root');
+  if (!root || !window.TerraParticipation) return;
+  if (participationHandle) participationHandle.update({ user, lang });
+  // the module shows server error messages as they come: they are translated here with the portal's dictionary; it reads /api/services itself when it needs them
+  else participationHandle = window.TerraParticipation.mount(root, { user, lang, api: async (...args) => { try { return await api(...args); } catch (error) { error.message = t(error.message); throw error; } } });
+}
+
 async function afterAuthentication(nextUser) {
   formTokens.clear();
   user = nextUser;
+  mountParticipation();
   if (user) setFormStatus('#account-status', '');
   renderIdentity();
   if (user?.role === 'admin') loadNews();
@@ -3050,6 +3062,7 @@ $('#lang-toggle').addEventListener('click', async () => {
   preference('lang', lang);
   $('#lang-status').hidden = true;
   applyLanguage();
+  mountParticipation();
   renderIdentity();
   renderServices();
   renderTransports();
