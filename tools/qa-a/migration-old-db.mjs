@@ -27,7 +27,7 @@ const check = (name, ok, detail = '') => { if (!ok) failures++; console.log(`${o
 check(`old schema (${oldCommit}) database created with a user and a message`, seed.status === 0, seed.stderr);
 
 const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
-const server = spawn(process.execPath, ['server.mjs'], { cwd: root, env: { ...process.env, DATA_PATH: dataPath, PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '' }, stdio: 'ignore' });
+const server = spawn(process.execPath, ['server.mjs'], { cwd: root, env: { ...process.env, DATA_PATH: dataPath, PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TN_FORM_TOKENS: 'optional', TN_FORM_LIMIT_SCALE: '1000', TN_FORM_MIN_AGE_MS: '0' }, stdio: 'ignore' });
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 await wait(2000);
 const call = async (path, options) => fetch(`http://127.0.0.1:${port}${path}`, options);
@@ -63,7 +63,7 @@ try {
   db.close();
   server.kill();
   await wait(500);
-  const second = spawn(process.execPath, ['server.mjs'], { cwd: root, env: { ...process.env, DATA_PATH: dataPath, PORT: String(port + 1), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '' }, stdio: 'ignore' });
+  const second = spawn(process.execPath, ['server.mjs'], { cwd: root, env: { ...process.env, DATA_PATH: dataPath, PORT: String(port + 1), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TN_FORM_TOKENS: 'optional', TN_FORM_LIMIT_SCALE: '1000', TN_FORM_MIN_AGE_MS: '0' }, stdio: 'ignore' });
   await wait(2000);
   const again = await fetch(`http://127.0.0.1:${port + 1}/api/places`);
   check('a second boot on the migrated database is harmless and keeps the same places', again.status === 200 && (await again.json()).places.length === places.length);

@@ -148,6 +148,7 @@ button,a,input,select{-webkit-tap-highlight-color:transparent}
 .status-field{margin:8px 0 0!important}
 .status-field select{width:auto;min-width:160px}
 .list-empty{font-size:.8125rem;color:#a8c1ca}
+.hp{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
 .stale-notice,.status-failure,.lang-status{background:#fbe3c8;border:1px solid #8a4b08;border-radius:8px;color:#2b1700;font-size:.8125rem;line-height:1.5;margin:0 0 12px;padding:8px 12px}
 .status-failure{margin:8px 0 0}
 .lang-status{display:inline-block;margin:0 0 0 8px}

@@ -19,7 +19,7 @@ const outFile = outIndex > 0 ? process.argv[outIndex + 1] : null;
 const dataDir = mkdtempSync(join(tmpdir(), 'terra-perf-'));
 const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const base = `http://127.0.0.1:${port}`;
-const env = { ...process.env, DATA_PATH: join(dataDir, 'a.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TRUST_PROXY: '1' };
+const env = { ...process.env, DATA_PATH: join(dataDir, 'a.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TRUST_PROXY: '1', TN_FORM_TOKENS: 'optional', TN_FORM_LIMIT_SCALE: '1000', TN_FORM_MIN_AGE_MS: '0' }; // form protection relaxed for fixtures (tools/qa-a/form-protection.mjs tests the real settings)
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const profiles = {
   'slow-3g': { latency: 400, downloadThroughput: 400 * 1024 / 8, uploadThroughput: 400 * 1024 / 8, cpu: 4, note: '400 kbit/s, 400 ms round trip, CPU 4x slower' },

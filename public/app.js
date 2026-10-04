@@ -64,6 +64,8 @@ function translateError(message) {
   if (range) return t('Le mot de passe doit contenir entre {min} et {max} caractères.', { min: range[2], max: range[3] });
   const wait = /^Trop de tentatives\. Réessayez dans (\d+) min\.$/.exec(message);
   if (wait) return t('Trop de tentatives. Réessayez dans {n} min.', { n: wait[1] });
+  const quota = /^(.+\.) Réessayez dans (\d+) min\.$/.exec(message);
+  if (quota) return t('{reason} Réessayez dans {n} min.', { reason: t(quota[1]), n: quota[2] });
   return t(message);
 }
 
@@ -120,6 +122,43 @@ function listFailed(list, error) {
   notice.textContent = `⚠ ${t('Erreur :')} ${error.message} ${t('La liste affichée date de {time} et peut ne pas être à jour.', { time })}`;
 }
 
+// F81 / F82: forms that create records carry a signed single-use token (asked for when the person starts using the form, so it is old enough by the time
+// they have typed) and a hidden field a person never sees. A send that is "too fast" (autofill) is retried by itself, an expired token is replaced, and the
+// same form sent twice is answered once by the server (it says "déjà reçue" instead of creating a second record).
+const formTokens = new Map();
+function formToken(name) {
+  if (!formTokens.has(name)) {
+    const pending = api(`/api/forms/token?form=${name}`).then((data) => data.token);
+    formTokens.set(name, pending);
+    pending.catch(() => formTokens.delete(name));
+  }
+  return formTokens.get(name);
+}
+function warmFormToken(name) {
+  formToken(name).catch(() => {});
+}
+async function guardedSend(name, form, send) {
+  for (let attempt = 0; ; attempt++) {
+    const token = await formToken(name);
+    try {
+      const data = await send({ form_token: token, fax_ref: form.elements.fax_ref?.value || '' });
+      formTokens.delete(name);
+      return data;
+    } catch (error) {
+      if (attempt >= 2) throw error;
+      if (error.code === 'form-too-fast') {
+        await new Promise((resolve) => setTimeout(resolve, (error.retryAfterMs || 1000) + 150));
+        continue;
+      }
+      if (error.code === 'form-expired') {
+        formTokens.delete(name);
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 async function api(path, method = 'GET', body) {
   let response;
   try {
@@ -136,7 +175,7 @@ async function api(path, method = 'GET', body) {
   }
   setConnection(false);
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(translateError(data.error || 'Une erreur est survenue.')), { status: response.status, retryAfter: data.retryAfter, attemptsLeft: data.attemptsLeft, field: fieldsOf(data.error || '') });
+  if (!response.ok) throw Object.assign(new Error(translateError(data.error || 'Une erreur est survenue.')), { status: response.status, retryAfter: data.retryAfter, retryAfterMs: data.retryAfterMs, code: data.code, attemptsLeft: data.attemptsLeft, field: fieldsOf(data.error || '') });
   if (method !== 'GET') auditSoon();
   return data;
 }
@@ -474,6 +513,7 @@ function clearIdentity() {
   $('#staff-messages').replaceChildren();
   $('#requests-list').replaceChildren();
   for (const list of [$('#citizen-messages'), $('#staff-messages'), $('#dashboard-todo')]) forgetLoaded(list);
+  formTokens.clear();
   citizens = [];
   pendingDelete = null;
   pendingCitizen = null;
@@ -886,7 +926,7 @@ $('#concern-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    const data = await api('/api/concerns', 'POST', { topic: formValue(form, 'topic'), body: formValue(form, 'body') });
+    const data = await guardedSend('concern', form, (guard) => api('/api/concerns', 'POST', { topic: formValue(form, 'topic'), body: formValue(form, 'body'), ...guard }));
     form.reset();
     setFormStatus('#concern-status', t('{confirmation} Référence {reference}.', { confirmation: t(data.confirmation), reference: data.reference }));
     await loadConcerns();
@@ -1210,6 +1250,7 @@ function dismissTip(name, refocus) {
 }
 $('#service-search').addEventListener('focus', () => showTip('search'));
 $('#message-form').addEventListener('focusin', () => showTip('message'));
+for (const [selector, name] of [['#register-form', 'register'], ['#message-form', 'message'], ['#concern-form', 'concern']]) $(selector).addEventListener('focusin', () => warmFormToken(name));
 $('#message-kind').addEventListener('change', () => { if ($('#message-kind').value === 'incident') showTip('report'); });
 
 // F34: staff administer citizen accounts (the server enforces the role and protects staff accounts).
@@ -1335,9 +1376,10 @@ async function loadSecurity() {
 
 function renderSecurity() {
   if (!security) return;
-  const unusual = security.blockedAttempts > 0 || security.failedLogins >= 10 || security.targeted.length > 0;
+  const forms = security.forms || { automated: 0, tooFast: 0, rateLimited: 0, duplicates: 0 };
+  const unusual = security.blockedAttempts > 0 || security.failedLogins >= 10 || security.targeted.length > 0 || forms.automated >= 3 || forms.rateLimited >= 3;
   $('#security-panel').classList.toggle('security-alert', unusual);
-  $('#security-summary').textContent = `${t('{failed} échecs de connexion et {blocked} tentatives bloquées sur les {m} dernières minutes.', { failed: security.failedLogins, blocked: security.blockedAttempts, m: security.windowMinutes })} ${t(unusual ? 'Activité inhabituelle : la protection est active.' : 'Aucune activité inhabituelle.')}`;
+  $('#security-summary').textContent = `${t('{failed} échecs de connexion et {blocked} tentatives bloquées sur les {m} dernières minutes.', { failed: security.failedLogins, blocked: security.blockedAttempts, m: security.windowMinutes })} ${t(unusual ? 'Activité inhabituelle : la protection est active.' : 'Aucune activité inhabituelle.')} ${t('Formulaires (dernière heure) : {automated} envois refusés comme automatiques, {fast} envois trop rapides, {quota} refus pour quota, {dup} doublons évités.', { automated: forms.automated, fast: forms.tooFast, quota: forms.rateLimited, dup: forms.duplicates })}`;
   const list = $('#security-targets');
   list.replaceChildren(...security.targeted.map((item) => element('li', '', t('Compte visé : {account} ({n} échecs)', { account: item.account, n: item.failures }))));
   if (security.unknownAddresses) list.append(element('li', '', t('Adresses inexistantes visées : {n}', { n: security.unknownAddresses })));
@@ -2063,6 +2105,7 @@ function renderCitizens() {
 }
 
 async function afterAuthentication(nextUser) {
+  formTokens.clear();
   user = nextUser;
   if (user) setFormStatus('#account-status', '');
   renderIdentity();
@@ -2088,9 +2131,9 @@ $('#register-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    const data = await api('/api/auth/register', 'POST', {
-      name: formValue(form, 'name'), email: formValue(form, 'email'), password: passwordValue(form),
-    });
+    const data = await guardedSend('register', form, (guard) => api('/api/auth/register', 'POST', {
+      name: formValue(form, 'name'), email: formValue(form, 'email'), password: passwordValue(form), ...guard,
+    }));
     form.reset();
     setFormStatus('#register-status', t('Compte créé. Bienvenue !'));
     await afterAuthentication(data.user);
@@ -2131,7 +2174,7 @@ $('#message-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    const data = await api('/api/messages', 'POST', { kind: formValue(form, 'kind'), subject: formValue(form, 'subject'), location: formValue(form, 'location'), body: formValue(form, 'body'), service_id: formValue(form, 'service_id') });
+    const data = await guardedSend('message', form, (guard) => api('/api/messages', 'POST', { kind: formValue(form, 'kind'), subject: formValue(form, 'subject'), location: formValue(form, 'location'), body: formValue(form, 'body'), service_id: formValue(form, 'service_id'), ...guard }));
     form.reset();
     renderServiceNotice();
     updateLocationField();

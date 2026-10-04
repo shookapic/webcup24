@@ -285,4 +285,12 @@ db.exec(`
   CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 `);
 
+// F82: a durable fingerprint of what a resident sent (messages and concerns), so the same text sent again within minutes (a retry, a script) is recognised
+// even after a restart. Additive: old rows keep an empty fingerprint and are never matched.
+for (const table of ['messages', 'concerns']) {
+  const columns = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));
+  if (!columns.has('fingerprint')) db.exec(`ALTER TABLE ${table} ADD COLUMN fingerprint TEXT`);
+  db.exec(`CREATE INDEX IF NOT EXISTS ${table}_fingerprint ON ${table}(user_id, fingerprint)`);
+}
+
 db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());

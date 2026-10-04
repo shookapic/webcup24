@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,7 @@ import { dirname, extname, join, sep } from 'node:path';
 import { db } from './store.mjs';
 import { clearSession, createSession, currentDeviceId, currentUser, hashPassword, publicUser, recognizeDevice, verifyPassword } from './security.mjs';
 import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from './throttle.mjs';
+import { begin, charge, formSummary, guarded, issue, minAgeMs, note as noteForm } from './guard.mjs';
 import { pickLang, personalHtml, recapCsv, recapHtml } from './recap.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
 
@@ -98,6 +99,9 @@ function nextPassages(passages, now) {
     .map((minute) => `${String(Math.floor(minute / 60) % 24).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`);
 }
 const deletions = new Limiter(5);
+// F82: what a resident sent, reduced to a stable fingerprint (case, accents and spacing ignored) so the same text sent again within minutes is recognised.
+const DUPLICATE_WINDOW = '-10 minutes';
+const fingerprintOf = (...parts) => createHash('sha256').update(parts.map((part) => String(part ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim()).join('\u0001')).digest('hex');
 let cachedFeed;
 let pendingFeed;
 
@@ -440,6 +444,20 @@ async function route(request, response) {
     if (origin.host !== request.headers.host) fail(403, 'Origine non autorisée.');
   }
 
+  // F81 / F82: the page asks for a form token when the person starts using a form. Registration is public (bound to the address); the others need a citizen session.
+  if (path === '/api/forms/token' && method === 'GET') {
+    const form = new URL(request.url, 'http://localhost').searchParams.get('form');
+    if (!guarded.includes(form)) fail(400, 'Formulaire inconnu.');
+    const address = clientIp(request);
+    let subject = `ip:${address}`;
+    let account = null;
+    if (form !== 'register') {
+      const citizen = requireUser(request, ['citizen']);
+      subject = `u${citizen.id}`;
+      account = String(citizen.id);
+    }
+    return sendJson(response, 200, { token: issue(form, { address, account }, subject), minAgeMs });
+  }
   if (path === '/api/me' && method === 'GET') return sendJson(response, 200, { user: currentUser(request) });
   if (path === '/api/me' && method === 'PATCH') {
     const user = requireUser(request);
@@ -506,21 +524,34 @@ async function route(request, response) {
 
   if (path === '/api/auth/register' && method === 'POST') {
     const body = await readJson(request);
-    const name = text(body.name, 2, 80, 'Le nom');
-    const address = email(body.email);
-    const secret = password(body.password, 12);
-    if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(address)) fail(409, 'Cette adresse est déjà utilisée.');
-    const hash = await hashPassword(secret);
-    let result;
+    const ip = clientIp(request);
+    // F81 / F82: hidden field, signed single-use token, quota per address. The token is held while the password is hashed, so a second send of the
+    // same form waits (409 form-busy) instead of racing; once created, the same token gets the same answer.
+    const guard = begin({ form: 'register', subject: `ip:${ip}`, body, pending: true });
+    if (guard.replay) return sendJson(response, guard.replay.status, guard.replay.body);
     try {
-      result = db.prepare('INSERT INTO users (email, name, password_hash, role) VALUES (?, ?, ?, ?)').run(address, name, hash, 'citizen');
+      const name = text(body.name, 2, 80, 'Le nom');
+      const address = email(body.email);
+      const secret = password(body.password, 12);
+      if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(address)) fail(409, 'Cette adresse est déjà utilisée.');
+      charge('register', { address: ip });
+      const hash = await hashPassword(secret);
+      let result;
+      try {
+        result = db.prepare('INSERT INTO users (email, name, password_hash, role) VALUES (?, ?, ?, ?)').run(address, name, hash, 'citizen');
+      } catch (error) {
+        if (error.message.includes('UNIQUE constraint failed')) fail(409, 'Cette adresse est déjà utilisée.');
+        throw error;
+      }
+      clearSession(request, response);
+      createSession(response, Number(result.lastInsertRowid), recognizeDevice(request, Number(result.lastInsertRowid), deviceLabel(request)));
+      const reply = { user: publicUser({ id: Number(result.lastInsertRowid), email: address, name, role: 'citizen' }) };
+      guard.done(201, reply);
+      return sendJson(response, 201, reply);
     } catch (error) {
-      if (error.message.includes('UNIQUE constraint failed')) fail(409, 'Cette adresse est déjà utilisée.');
+      guard.abandon();
       throw error;
     }
-    clearSession(request, response);
-    createSession(response, Number(result.lastInsertRowid), recognizeDevice(request, Number(result.lastInsertRowid), deviceLabel(request)));
-    return sendJson(response, 201, { user: publicUser({ id: Number(result.lastInsertRowid), email: address, name, role: 'citizen' }) });
   }
 
   if (path === '/api/auth/login' && method === 'POST') {
@@ -623,7 +654,7 @@ async function route(request, response) {
       if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(account)) targeted.push({ account: account.replace(/^(.).*(@.*)$/, '$1***$2'), failures: count });
       else unknown += 1;
     }
-    return sendJson(response, 200, { windowMinutes, failedLogins, blockedAttempts, targeted: targeted.sort((a, b) => b.failures - a.failures).slice(0, 20), unknownAddresses: unknown });
+    return sendJson(response, 200, { forms: formSummary(), windowMinutes, failedLogins, blockedAttempts, targeted: targeted.sort((a, b) => b.failures - a.failures).slice(0, 20), unknownAddresses: unknown });
   }
 
   if (path === '/api/admin/citizens' && method === 'GET') {
@@ -695,6 +726,12 @@ async function route(request, response) {
     const titleEn = body.title_en ? text(body.title_en, 3, 100, 'Le titre') : null;
     const descriptionEn = body.description_en ? text(body.description_en, 5, 180, 'La description') : null;
     const detailsEn = body.details_en ? text(body.details_en, 10, 2000, 'Les informations') : null;
+    // F82: a service with the same title, description and details already exists: answer with it instead of creating a twin.
+    const sameService = db.prepare('SELECT id FROM services WHERE title = ? AND description = ? AND details = ? ORDER BY id DESC LIMIT 1').get(title, description, details);
+    if (sameService) {
+      noteForm('duplicate', 'service');
+      return sendJson(response, 200, { id: sameService.id, duplicate: true });
+    }
     const result = tx(() => {
       const inserted = db.prepare('INSERT INTO services (title, description, details, featured, title_en, description_en, details_en) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .run(title, description, details, body.featured ? 1 : 0, titleEn, descriptionEn, detailsEn);
@@ -757,6 +794,12 @@ async function route(request, response) {
     const audience = body.audience ? text(body.audience, 2, 80, 'Le public concerné') : 'Tous';
     const titleEn = body.title_en ? text(body.title_en, 3, 120, 'Le titre') : null;
     const contentEn = body.body_en ? text(body.body_en, 10, 4000, 'Le contenu') : null;
+    // F82: the same notice sent twice within minutes (a double click, a retry) is published once.
+    const sameNotice = db.prepare("SELECT id FROM announcements WHERE title = ? AND body = ? AND audience = ? AND urgent = ? AND published_at > datetime('now', ?) ORDER BY id DESC LIMIT 1").get(title, content, audience, body.urgent ? 1 : 0, DUPLICATE_WINDOW);
+    if (sameNotice) {
+      noteForm('duplicate', 'announcement');
+      return sendJson(response, 200, { id: sameNotice.id, duplicate: true });
+    }
     const result = tx(() => {
       const inserted = db.prepare('INSERT INTO announcements (title, body, audience, urgent, title_en, body_en) VALUES (?, ?, ?, ?, ?, ?)')
         .run(title, content, audience, body.urgent ? 1 : 0, titleEn, contentEn);
@@ -860,6 +903,7 @@ async function route(request, response) {
       if (user.role !== 'citizen') fail(403, 'Accès réservé.');
       const body = await readJson(request);
       const reason = body.reason ? text(body.reason, 5, 200, 'Le motif') : null;
+      charge('book', { address: clientIp(request), account: String(user.id) });
       const taken = 'Cet horaire n’est plus disponible. Choisissez-en un autre.';
       if (!row || row.status !== 'open' || row.starts_at <= now) fail(409, taken);
       const mine = db.prepare("SELECT starts_at, duration_min FROM appointments WHERE citizen_id = ? AND status = 'booked' AND starts_at > ?").all(user.id, now);
@@ -923,6 +967,9 @@ async function route(request, response) {
   if (path === '/api/messages' && method === 'POST') {
     const user = requireUser(request, ['citizen']);
     const body = await readJson(request);
+    // F81 / F82: hidden field, signed single-use token, quotas; the same token sent again gets the first answer, and the same text within minutes is not created twice.
+    const guard = begin({ form: 'message', subject: `u${user.id}`, body });
+    if (guard.replay) return sendJson(response, guard.replay.status, guard.replay.body);
     const subject = text(body.subject, 4, 120, 'Le sujet');
     const content = text(body.body, 10, 4000, 'Le message');
     const kind = body.kind || 'contact';
@@ -933,8 +980,19 @@ async function route(request, response) {
       serviceId = Number(body.service_id);
       if (!Number.isInteger(serviceId) || !db.prepare('SELECT 1 FROM services WHERE id = ?').get(serviceId)) fail(400, 'Service inconnu.');
     }
-    const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location, service_id) VALUES (?, ?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location, serviceId);
-    return sendJson(response, 201, { id: Number(result.lastInsertRowid), status: 'new', confirmation: 'Votre message a bien été transmis.' });
+    const fingerprint = fingerprintOf(kind, subject, content, location, serviceId);
+    const same = db.prepare("SELECT id, status FROM messages WHERE user_id = ? AND fingerprint = ? AND created_at > datetime('now', ?) ORDER BY id DESC LIMIT 1").get(user.id, fingerprint, DUPLICATE_WINDOW);
+    if (same) {
+      noteForm('duplicate', 'message');
+      const reply = { id: same.id, status: same.status, duplicate: true, confirmation: 'Cette demande avait déjà été reçue : aucun doublon n’a été créé.' };
+      guard.done(200, reply);
+      return sendJson(response, 200, reply);
+    }
+    charge('message', { address: clientIp(request), account: String(user.id) });
+    const result = db.prepare('INSERT INTO messages (user_id, subject, body, kind, location, service_id, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)').run(user.id, subject, content, kind, location, serviceId, fingerprint);
+    const reply = { id: Number(result.lastInsertRowid), status: 'new', confirmation: 'Votre message a bien été transmis.' };
+    guard.done(201, reply);
+    return sendJson(response, 201, reply);
   }
   // F51: what the portal holds about the caller, as a file. Only their own civic data: no password hash, no session value, nobody else's data.
   if (path === '/api/me/export' && method === 'GET') {
@@ -990,12 +1048,25 @@ async function route(request, response) {
   if (path === '/api/concerns' && method === 'POST') {
     const user = requireUser(request, ['citizen']);
     const body = await readJson(request);
+    const guard = begin({ form: 'concern', subject: `u${user.id}`, body });
+    if (guard.replay) return sendJson(response, guard.replay.status, guard.replay.body);
     if (!concernTopics.includes(body.topic)) fail(400, 'Choisissez le sujet de votre inquiétude.');
     const content = text(body.body, 10, 1000, 'Votre message');
     if (db.prepare("SELECT COUNT(*) AS n FROM concerns WHERE user_id = ? AND created_at > datetime('now', '-1 day')").get(user.id).n >= 5) fail(429, 'Vous avez déjà envoyé 5 préoccupations aujourd’hui. Réessayez demain.');
-    const created = db.prepare('INSERT INTO concerns (user_id, topic, body) VALUES (?, ?, ?)').run(user.id, body.topic, content);
+    const fingerprint = fingerprintOf(body.topic, content);
+    const same = db.prepare("SELECT id, topic, status, created_at FROM concerns WHERE user_id = ? AND fingerprint = ? AND created_at > datetime('now', ?) ORDER BY id DESC LIMIT 1").get(user.id, fingerprint, DUPLICATE_WINDOW);
+    if (same) {
+      noteForm('duplicate', 'concern');
+      const reply = { ...same, reference: `C-${same.id}`, duplicate: true, confirmation: 'Cette préoccupation avait déjà été reçue : aucun doublon n’a été créé.' };
+      guard.done(200, reply);
+      return sendJson(response, 200, reply);
+    }
+    charge('concern', { address: clientIp(request) });
+    const created = db.prepare('INSERT INTO concerns (user_id, topic, body, fingerprint) VALUES (?, ?, ?, ?)').run(user.id, body.topic, content, fingerprint);
     const row = db.prepare('SELECT id, topic, status, created_at FROM concerns WHERE id = ?').get(Number(created.lastInsertRowid));
-    return sendJson(response, 201, { ...row, reference: `C-${row.id}`, confirmation: 'Votre préoccupation a bien été reçue. Un agent la lira ; vous serez prévenu dans « Nouvelles de mes demandes » dès qu’elle sera lue ou qu’une réponse sera donnée.' });
+    const reply = { ...row, reference: `C-${row.id}`, confirmation: 'Votre préoccupation a bien été reçue. Un agent la lira ; vous serez prévenu dans « Nouvelles de mes demandes » dès qu’elle sera lue ou qu’une réponse sera donnée.' };
+    guard.done(201, reply);
+    return sendJson(response, 201, reply);
   }
   // staff side: the author is shown masked (first name, initial, masked e-mail); an answer reaches the author as a notice
   if (path === '/api/admin/concerns' && method === 'GET') {

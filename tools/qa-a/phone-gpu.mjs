@@ -24,7 +24,7 @@ mkdirSync(shots, { recursive: true });
 const dataDir = mkdtempSync(join(tmpdir(), 'terra-gpu-'));
 const port = 3200 + Math.floor(Math.random() * 10); // A test ports 3200-3209
 const base = `http://127.0.0.1:${port}`;
-const env = { ...process.env, DATA_PATH: join(dataDir, 'g.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '' };
+const env = { ...process.env, DATA_PATH: join(dataDir, 'g.sqlite'), PORT: String(port), HOST: '127.0.0.1', TERRA_NOVA_API_KEY: '', TN_FORM_TOKENS: 'optional', TN_FORM_LIMIT_SCALE: '1000', TN_FORM_MIN_AGE_MS: '0' };
 const server = spawn(process.execPath, ['server.mjs'], { cwd: root, env, stdio: 'ignore' });
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 await wait(1500);
