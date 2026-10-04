@@ -200,7 +200,7 @@ export async function handleParticipation(ctx) {
       const code = receipt('V');
       const at = iso();
       db.prepare('INSERT INTO part_voters (decision_id, user_id, receipt, voted_at) VALUES (?, ?, ?, ?)').run(decisionId, me.id, code, at);
-      db.prepare('UPDATE part_choices SET votes = votes + 1 WHERE id = ?').run(choice.id); // counter only: the ballot is never linked to the voter
+      db.prepare('UPDATE part_choices SET votes = votes + 1 WHERE id = ?').run(choice.id); // counter only: no voter-to-choice relation is stored (running totals and voter timestamps are not absolute anonymity)
       return { receipt: code, votedAt: at };
     });
     return sendJson(ctx.response, 201, outcome), true;
@@ -209,15 +209,19 @@ export async function handleParticipation(ctx) {
   if (area === 'consultations' && b === 'opinion' && (method === 'PUT' || method === 'POST' || method === 'GET')) {
     const me = citizen();
     const consultationId = id(a);
-    const row = db.prepare('SELECT * FROM part_consultations WHERE id = ?').get(consultationId);
-    if (!row || row.status === 'draft') fail(404, 'Consultation introuvable.', { code: 'not_found' });
-    if (method === 'GET') return sendJson(ctx.response, 200, { opinion: consultationView(row).myOpinion }), true;
-    if (effective(row) !== 'open') fail(409, 'Cette consultation est close.', { code: 'closed' });
-    const input = await body();
+    if (method === 'GET') {
+      const row = db.prepare('SELECT * FROM part_consultations WHERE id = ?').get(consultationId);
+      if (!row || row.status === 'draft') fail(404, 'Consultation introuvable.', { code: 'not_found' });
+      return sendJson(ctx.response, 200, { opinion: consultationView(row).myOpinion }), true;
+    }
+    const input = await body(); // the row is read again INSIDE the write transaction below: staff may close it, or its deadline may pass, while the body arrives
     const rating = input.rating === undefined || input.rating === null ? null : integer(input.rating, 1, 5, 'La note');
     const comment = clean(input.comment, 2, 1000, 'Le commentaire', true);
     if (rating === null && !comment) fail(400, 'Donnez une note ou un commentaire.', { code: 'invalid' });
     const result = tx(() => {
+      const row = db.prepare('SELECT * FROM part_consultations WHERE id = ?').get(consultationId);
+      if (!row || row.status === 'draft') fail(404, 'Consultation introuvable.', { code: 'not_found' });
+      if (effective(row) !== 'open') fail(409, 'Cette consultation est close.', { code: 'closed' });
       const existing = db.prepare('SELECT receipt FROM part_opinions WHERE consultation_id = ? AND user_id = ?').get(consultationId, me.id);
       const at = iso();
       if (existing) {
@@ -347,23 +351,29 @@ export async function handleParticipation(ctx) {
     if (table && b && !c && method === 'PATCH') {
       staff();
       const rowId = id(b);
-      const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(rowId);
-      if (!row) fail(404, 'Introuvable.', { code: 'not_found' });
       const input = await body();
-      if (a === 'projects') {
-        const status = input.status === undefined ? row.status : (STATUS_PROJECT.includes(input.status) ? input.status : fail(400, 'Statut invalide.', { code: 'invalid' }));
-        const progress = input.progress === undefined ? row.progress : integer(input.progress, 0, 100, 'L’avancement');
-        db.prepare('UPDATE part_projects SET status = ?, progress = ?, summary = ?, summary_en = ?, updated_at = ? WHERE id = ?')
-          .run(status, progress, input.summary === undefined ? row.summary : clean(input.summary, 10, 1000, 'Le résumé'), input.summary_en === undefined ? row.summary_en : clean(input.summary_en, 10, 1000, 'Le résumé anglais', true), iso(), rowId);
-      } else {
-        const next = input.status === undefined ? row.status : input.status;
+      // Fresh row inside the write transaction (after the body arrived): a delayed PATCH never acts on a stale row and never reopens what another request closed.
+      const row = tx(() => {
+        const current = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(rowId);
+        if (!current) fail(404, 'Introuvable.', { code: 'not_found' });
+        if (a === 'projects') {
+          const status = input.status === undefined ? current.status : (STATUS_PROJECT.includes(input.status) ? input.status : fail(400, 'Statut invalide.', { code: 'invalid' }));
+          const progress = input.progress === undefined ? current.progress : integer(input.progress, 0, 100, 'L’avancement');
+          db.prepare('UPDATE part_projects SET status = ?, progress = ?, summary = ?, summary_en = ?, updated_at = ? WHERE id = ?')
+            .run(status, progress, input.summary === undefined ? current.summary : clean(input.summary, 10, 1000, 'Le résumé'), input.summary_en === undefined ? current.summary_en : clean(input.summary_en, 10, 1000, 'Le résumé anglais', true), iso(), rowId);
+          return current;
+        }
+        const next = input.status === undefined ? current.status : input.status;
         if (!STATUS_DECISION.includes(next)) fail(400, 'Statut invalide.', { code: 'invalid' });
-        if (row.status === 'closed' && next !== 'closed') fail(409, 'Un vote clos ne peut pas être rouvert.', { code: 'closed' });
-        if (row.status === 'open' && next === 'draft') fail(409, 'Une publication ne repasse pas en brouillon.', { code: 'invalid' });
-        const closedAt = next === 'closed' ? (row.closed_at ?? iso()) : null;
-        if (a === 'decisions') db.prepare('UPDATE part_decisions SET status = ?, closes_at = ?, closed_at = ?, outcome_note = ? WHERE id = ?').run(next, input.closesAt === undefined ? row.closes_at : when(input.closesAt), closedAt, input.outcomeNote === undefined ? row.outcome_note : clean(input.outcomeNote, 2, 500, 'La note de décision', true), rowId);
-        else db.prepare('UPDATE part_consultations SET status = ?, closes_at = ?, closed_at = ? WHERE id = ?').run(next, input.closesAt === undefined ? row.closes_at : when(input.closesAt), closedAt, rowId);
-      }
+        const closedNow = effective(current) === 'closed'; // includes auto-closure by date, even when the stored status still says open
+        if (closedNow && (next !== 'closed' || (input.closesAt !== undefined && when(input.closesAt) !== current.closes_at))) fail(409, a === 'decisions' ? 'Un vote clos ne peut pas être rouvert.' : 'Une consultation close ne peut pas être rouverte.', { code: 'closed' });
+        if (current.status === 'open' && next === 'draft') fail(409, 'Une publication ne repasse pas en brouillon.', { code: 'invalid' });
+        const closedAt = next === 'closed' ? (current.closed_at ?? (closedNow ? current.closes_at : iso())) : null;
+        const closesAt = input.closesAt === undefined ? current.closes_at : when(input.closesAt);
+        if (a === 'decisions') db.prepare('UPDATE part_decisions SET status = ?, closes_at = ?, closed_at = ?, outcome_note = ? WHERE id = ?').run(next, closesAt, closedAt, input.outcomeNote === undefined ? current.outcome_note : clean(input.outcomeNote, 2, 500, 'La note de décision', true), rowId);
+        else db.prepare('UPDATE part_consultations SET status = ?, closes_at = ?, closed_at = ? WHERE id = ?').run(next, closesAt, closedAt, rowId);
+        return current;
+      });
       audit({ action: `participation.${a.slice(0, -1)}.update`, target: { type: a.slice(0, -1), id: rowId, label: row.title }, summary: `a modifié « ${row.title.slice(0, 60)} »` });
       return sendJson(ctx.response, 200, { ok: true }), true;
     }
