@@ -19,20 +19,30 @@ const adminCall = (method, path, body) => adminPage.evaluate(async (method, path
 }, method, path, body);
 const login = await adminCall('POST', '/api/auth/login', { email: adminEmail, password: adminPassword });
 check('admin login', login.status === 200, { status: login.status });
-const publish = async (title) => (await adminCall('POST', '/api/announcements', { title, body: 'Message de test pour le téléphone, assez long pour être valide.', urgent: true, audience: 'Tous' })).data.id;
+const publish = async (title) => {
+  const r = await adminCall('POST', '/api/announcements', { title, body: 'Message de test pour le téléphone, assez long pour être valide.', urgent: true, audience: 'Tous' });
+  check(`publish "${title}" (fixture)`, r.status === 201 && Number.isInteger(r.data?.id), { status: r.status, id: r.data?.id });
+  return r.data.id;
+};
 // Make sure no stale urgent items from earlier runs are active.
 const existing = await adminCall('GET', '/api/announcements');
-for (const item of existing.data.announcements.filter((a) => a.urgent)) await adminCall('PATCH', `/api/announcements/${item.id}`, { urgent: false });
+for (const item of existing.data.announcements.filter((a) => a.urgent)) {
+  const cleanup = await adminCall('PATCH', `/api/announcements/${item.id}`, { urgent: false, reason: 'Fin de l’exercice local de test' });
+  check(`cleanup withdraws stale urgent item ${item.id}`, cleanup.status === 200, { status: cleanup.status, body: cleanup.data });
+}
 
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 800 });
 page.on('pageerror', (e) => console.log('pageerror', e.message));
 await page.goto(base + '/', { waitUntil: 'networkidle0' });
-await page.evaluate(async () => {
-  const post = (u, m, b) => fetch(u, { method: m, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
-  await post('/api/auth/register', 'POST', { name: 'Probe', email: `p${Date.now()}${Math.random()}@example.org`, password: 'motdepasse-solide-123' });
-  await post('/api/me/avatar', 'PUT', { skin: '#e0ac69', outfit: '#3a6ea5', accent: '#ff4fa3' });
+const setup = await page.evaluate(async () => {
+  const post = (u, m, b) => fetch(u, { method: m, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+  const reg = await post('/api/auth/register', 'POST', { name: 'Probe', email: `p${Date.now()}${Math.random()}@example.org`, password: 'motdepasse-solide-123' });
+  const av = await post('/api/me/avatar', 'PUT', { skin: '#e0ac69', outfit: '#3a6ea5', accent: '#ff4fa3' });
+  return { reg, av };
 });
+check('citizen registration (fixture)', setup.reg.status === 200 || setup.reg.status === 201, setup.reg);
+check('avatar save (fixture)', setup.av.status === 200, setup.av);
 await page.goto(`${base}/monde/?debug&fps=30`, { waitUntil: 'networkidle0' });
 await page.waitForFunction(() => window.__tn?.run, { timeout: 60000 });
 const run = (s) => page.evaluate((s) => window.__tn.run(s), s);
@@ -67,13 +77,13 @@ await page.click('.phone-ack'); await wait(900); await run(1);
 check('acknowledge keeps a manual phone open', await up() && (await cam()) < 0.05);
 await page.keyboard.press('KeyT'); await wait(900); await run(1.5);
 check('manual phone closes afterwards, third person restored', !(await up()) && (await cam()) > 8);
-await adminCall('PATCH', `/api/announcements/${id1}`, { urgent: false });
+await adminCall('PATCH', `/api/announcements/${id1}`, { urgent: false, reason: 'Fin de l’exercice local de test' });
 
 // 4. alert raises the phone, then is withdrawn while displayed
 const id2 = await publish('Alerte retirée');
 await page.waitForSelector('.phone-host, .phone-sheet', { timeout: 25000 }); await wait(700); await run(1);
 check('alert raised the phone', await up() && (await cam()) < 0.05);
-await adminCall('PATCH', `/api/announcements/${id2}`, { urgent: false });
+await adminCall('PATCH', `/api/announcements/${id2}`, { urgent: false, reason: 'Fin de l’exercice local de test' });
 await page.waitForFunction(() => !document.querySelector('.phone-host, .phone-sheet'), { timeout: 25000 }); await wait(500); await run(1.5);
 check('withdrawal puts the phone away and restores the view', !(await up()) && (await cam()) > 8, { cam: (await cam()).toFixed(2) });
 
