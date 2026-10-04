@@ -13,12 +13,6 @@
   </head>
   <body>
     <a class="skip-link" href="#contenu">Aller au contenu</a>
-    <div id="alert-banner" class="alert-banner" role="alert" data-content></div>
-    <div id="reminder-banner" class="reminder-banner" role="status" data-content hidden></div>
-    <div id="notice-banner" class="notice-banner" role="status" data-content hidden></div>
-    <div id="light-banner" class="notice-banner" role="status" data-content hidden></div>
-    <div id="saved-banner" class="notice-banner connection-banner" role="status" data-content hidden></div>
-    <div id="connection-banner" class="notice-banner connection-banner" role="status" data-content hidden></div>
     <header class="site-header" id="haut">
       <a class="brand" href="#haut" aria-label="Terra Nova, accueil">
         <span class="brand-mark" aria-hidden="true"><span></span></span>
@@ -37,6 +31,12 @@
         <a class="account-link" href="#espace">Mon espace</a>
       </div>
     </header>
+    <div id="alert-banner" class="alert-banner" role="alert" data-content></div>
+    <div id="reminder-banner" class="reminder-banner" role="status" data-content hidden></div>
+    <div id="notice-banner" class="notice-banner" role="status" data-content hidden></div>
+    <div id="light-banner" class="notice-banner" role="status" data-content hidden></div>
+    <div id="saved-banner" class="notice-banner connection-banner" role="status" data-content hidden></div>
+    <div id="connection-banner" class="notice-banner connection-banner" role="status" data-content hidden></div>
 
     <main id="contenu" tabindex="-1">
       <section class="emergency-strip" id="urgences" aria-labelledby="urgences-title" tabindex="-1">
@@ -171,7 +171,7 @@
           <div id="security-notice" class="security-notice" role="alert" hidden><p id="security-notice-text" data-content></p><button id="security-notice-dismiss" type="button">J’ai compris</button></div>
           <div class="identity-bar"><div><span class="section-kicker">CONNECTÉ</span><h3 id="member-name" tabindex="-1" data-content></h3><p id="member-role"></p></div><button id="logout-button" type="button">Se déconnecter</button></div>
           <div id="citizen-area" hidden>
-            <nav class="jump-nav" aria-label="Dans mon espace"><a href="#message-form">Écrire à la ville</a><a href="#appointments-panel">Rendez-vous</a><a href="#profile-form">Mon profil</a><a href="#delete-form">Supprimer mon compte</a><a href="#privacy-panel">Mes données</a><a href="#public-panel">Soutenir une demande</a><a href="#devices-panel">Mes appareils</a><a href="#factors-panel">Sécurité du compte</a></nav>
+            <nav class="jump-nav" aria-label="Dans mon espace"><a href="#message-form">Écrire à la ville</a><a href="#appointments-panel">Rendez-vous</a><a class="jump-minor" href="#profile-form">Mon profil</a><a class="jump-minor jump-danger" href="#delete-form">Supprimer mon compte</a><a class="jump-minor" href="#privacy-panel">Mes données</a><a href="#public-panel">Soutenir une demande</a><a class="jump-minor" href="#devices-panel">Mes appareils</a><a class="jump-minor" href="#factors-panel">Sécurité du compte</a></nav>
             <section id="notices-panel" class="panel" aria-labelledby="notices-title" tabindex="-1">
               <div class="panel-title-row"><h3 id="notices-title">Nouvelles de mes demandes</h3><button id="notices-read" type="button" hidden>Tout marquer comme lu</button></div>
               <p class="reminder-help">Vous êtes prévenu ici quand l’état d’une de vos demandes change. Ces nouvelles s’affichent quand vous êtes connecté, sur le portail et dans le monde 3D : aucun e-mail ni SMS n’est envoyé.</p>
