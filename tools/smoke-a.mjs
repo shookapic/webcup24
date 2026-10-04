@@ -577,6 +577,34 @@ try {
   check('F56 a resident with no request gets a clear sentence and a header-only CSV; wrong format 400, visitors 401, staff 403', (await r55_empty.call('/api/me/recap')).data.includes('Vous n’avez encore envoyé aucune demande.') && (await r55_empty.call('/api/me/recap?format=csv')).data.split('\r\n').filter(Boolean).length === 1 && (await visitor.call('/api/me/recap')).status === 401 && (await agent.call('/api/me/recap')).status === 403 && (await citizen.call('/api/me/recap?format=xml')).status === 400);
   check('F56 another resident\'s requests never appear in my r55_recap or personal page', !(await r55_empty.call('/api/me/recap')).data.includes('Lampadaire') && !(await r55_empty.call('/api/me/export?format=html')).data.includes('citizen@smoke.test'));
 
+  // F57-F60: the portal's own files are compressed, revalidated and byte-identical, with every security header kept
+  const { readFileSync: readDisk } = await import('node:fs');
+  const { gunzipSync, brotliDecompressSync } = await import('node:zlib');
+  const rawGet = async (path, headers = {}) => { const res = await fetch(base + path, { headers, redirect: 'manual' }); const buf = Buffer.from(await res.arrayBuffer()); return { res, buf }; };
+  const portalFiles = [['/', 'public/index.html'], ['/app.js', 'public/app.js'], ['/i18n-en.js', 'public/i18n-en.js'], ['/styles.css', 'public/styles.css']];
+  const sizes = {};
+  let allOk = true;
+  for (const [url, disk] of portalFiles) {
+    const original = readDisk(join(root, disk));
+    const gz = await new Promise((resolve, reject) => { import('node:http').then(({ request }) => { const r = request(base + url, { headers: { 'Accept-Encoding': 'gzip' } }, (res) => { const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => resolve({ res, body: Buffer.concat(chunks) })); }); r.on('error', reject); r.end(); }); });
+    const br = await new Promise((resolve, reject) => { import('node:http').then(({ request }) => { const r = request(base + url, { headers: { 'Accept-Encoding': 'br, gzip' } }, (res) => { const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => resolve({ res, body: Buffer.concat(chunks) })); }); r.on('error', reject); r.end(); }); });
+    const plain = await new Promise((resolve, reject) => { import('node:http').then(({ request }) => { const r = request(base + url, { headers: { 'Accept-Encoding': 'identity' } }, (res) => { const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => resolve({ res, body: Buffer.concat(chunks) })); }); r.on('error', reject); r.end(); }); });
+    sizes[url] = { raw: original.length, gzip: gz.body.length, br: br.body.length };
+    allOk = allOk && gz.res.headers['content-encoding'] === 'gzip' && gunzipSync(gz.body).equals(original) && br.res.headers['content-encoding'] === 'br' && brotliDecompressSync(br.body).equals(original) && !plain.res.headers['content-encoding'] && plain.body.equals(original) && gz.body.length < original.length * 0.4 && br.body.length <= gz.body.length && Number(gz.res.headers['content-length']) === gz.body.length;
+  }
+  check('F57/F59 the portal HTML, JS and CSS are served compressed (gzip, or brotli when accepted), decode to the exact file bytes, plain when no encoding is accepted, and are under 40 % of the raw size', allOk, JSON.stringify(sizes));
+  const tiny = await rawGet('/i18n.js', { 'Accept-Encoding': 'gzip' });
+  check('F57 the French visitor no longer downloads the English dictionary: i18n.js is a stub of a few hundred bytes and the dictionary is a separate file', tiny.buf.length < 1024 && !tiny.res.headers.get('content-encoding') && (await rawGet('/i18n-en.js')).res.status === 200 && readDisk(join(root, 'public/i18n-en.js'), 'utf8').includes('Object.assign(english'));
+  const etagged = await rawGet('/app.js', { 'Accept-Encoding': 'gzip' });
+  const etag = etagged.res.headers.get('etag');
+  const revalidated = await rawGet('/app.js', { 'If-None-Match': etag, 'Accept-Encoding': 'gzip' });
+  check('F57/F59 an unchanged file costs a 304 with no body (ETag), a different validator gets the file, a list of validators and * are understood', Boolean(etag) && revalidated.res.status === 304 && revalidated.buf.length === 0 && (await rawGet('/app.js', { 'If-None-Match': 'W/"0-0"' })).res.status === 200 && (await rawGet('/app.js', { 'If-None-Match': `W/"0-0", ${etag}` })).res.status === 304 && (await rawGet('/app.js', { 'If-None-Match': '*' })).res.status === 304);
+  const hdr = etagged.res.headers;
+  check('F57 the security headers and the strict CSP are unchanged on compressed responses, and the file is always revalidated so a deploy is picked up at once', hdr.get('cache-control') === 'no-cache' && /Accept-Encoding/.test(hdr.get('vary')) && hdr.get('x-content-type-options') === 'nosniff' && hdr.get('x-frame-options') === 'DENY' && hdr.get('referrer-policy') === 'no-referrer' && hdr.get('content-security-policy') === "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'" && hdr.get('content-type').startsWith('text/javascript'));
+  const icon = await rawGet('/favicon.svg', { 'Accept-Encoding': 'gzip' });
+  check('F60 the portal ships no raster image, video or iframe: the only media is a tiny SVG icon (not worth compressing), and the HTML has no img/video/picture/iframe/source tag and no web font', icon.res.status === 200 && icon.buf.length < 1024 && !icon.res.headers.get('content-encoding') && !/<(img|video|picture|iframe|source|audio|object|embed)\b/i.test(readDisk(join(root, 'public/index.html'), 'utf8')) && !/url\((?!['"]?#)/.test(readDisk(join(root, 'public/styles.css'), 'utf8')) && !/@font-face/.test(readDisk(join(root, 'public/styles.css'), 'utf8')));
+  check('F57 unknown portal paths are still real 404s and a missing file never leaks a path', (await rawGet('/nope.js')).res.status === 404 && (await rawGet('/..%2Fserver.mjs')).res.status === 404);
+
   // F54: a notice when the account is signed in from a device it has not used before
   const EDGE_WINDOWS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36 Edg/120.0' };
   const FIREFOX_LINUX = { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0' };

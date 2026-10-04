@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
+import { brotliCompressSync, gzipSync } from 'node:zlib';
 import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, sep } from 'node:path';
@@ -19,6 +19,7 @@ const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/i18n.js', ['i18n.js', 'text/javascript; charset=utf-8']],
+  ['/i18n-en.js', ['i18n-en.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
   ['/favicon.svg', ['favicon.svg', 'image/svg+xml']],
 ]);
@@ -199,20 +200,45 @@ async function loadFeed() {
   }
 }
 
-async function serveFile(path, response) {
+// The portal's own files (index.html, app.js, i18n.js, styles.css): compressed once per file version and kept in memory (brotli for clients that
+// accept it over HTTPS, otherwise gzip), always revalidated with an ETag so a deploy is picked up at once and an unchanged file costs a 304.
+const portalCache = new Map();
+const etagMatches = (header, etag) => String(header || '').split(',').some((candidate) => candidate.trim() === etag || candidate.trim() === '*');
+async function serveFile(request, path, response) {
   const file = files.get(path);
   if (!file) fail(404, 'Page introuvable.');
-  const body = await readFile(join(root, 'public', file[0]));
-  response.writeHead(200, {
+  const full = join(root, 'public', file[0]);
+  const info = await stat(full);
+  const etag = `W/"${info.size.toString(16)}-${Math.floor(info.mtimeMs).toString(16)}"`;
+  const headers = {
     'Content-Type': file[1],
-    'Cache-Control': 'no-store',
+    'Cache-Control': 'no-cache',
+    ETag: etag,
+    Vary: 'Accept-Encoding',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
     'X-Frame-Options': 'DENY',
     'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'",
-  });
+  };
+  if (etagMatches(request.headers['if-none-match'], etag)) {
+    response.writeHead(304, headers);
+    return response.end();
+  }
+  let entry = portalCache.get(full);
+  if (entry?.etag !== etag) {
+    const raw = await readFile(full);
+    entry = { etag, raw, gzip: raw.length > 1024 ? gzipSync(raw, { level: 9 }) : null, br: raw.length > 1024 ? brotliCompressSync(raw) : null };
+    portalCache.set(full, entry);
+  }
+  const accepted = String(request.headers['accept-encoding'] || '');
+  let body = entry.raw;
+  if (entry.br && /\bbr\b/.test(accepted)) { body = entry.br; headers['Content-Encoding'] = 'br'; }
+  else if (entry.gzip && /\bgzip\b/.test(accepted)) { body = entry.gzip; headers['Content-Encoding'] = 'gzip'; }
+  headers['Content-Length'] = body.length;
+  response.writeHead(200, headers);
   response.end(body);
 }
+
 
 // Vite names built files name-<8+ char hash>.ext; those never change. Anything else (models, textures
 // copied from world/public) can be replaced in place, so it is revalidated with an ETag instead.
@@ -1153,7 +1179,7 @@ async function route(request, response) {
   }
 
   if (method === 'GET' && (path === '/monde' || path.startsWith('/monde/'))) return serveWorld(request, path, response);
-  if (method === 'GET' && !path.startsWith('/api/')) return serveFile(path, response);
+  if (method === 'GET' && !path.startsWith('/api/')) return serveFile(request, path, response);
   fail(404, 'Route introuvable.');
 }
 

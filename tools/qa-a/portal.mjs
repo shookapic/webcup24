@@ -150,7 +150,9 @@ try {
   check('F38 service card shows badge, reason, return date (Terra Nova time) and what to do meanwhile', card?.classList.contains('service-unavailable') && card.querySelector('.availability-badge')?.textContent === 'Indisponible' && card.textContent.includes('Maintenance du système') && card.textContent.includes('Retour prévu') && card.textContent.includes('heure de Terra Nova') && card.textContent.includes('En attendant'), card?.textContent);
   check('F38 service list option marked unavailable', [...doc.querySelector('#message-service').options].some((o) => o.textContent.includes('Centre de santé (indisponible)')));
   // F39: staff publish slots starting in ~90 minutes (so the 24 h reminder applies) and tomorrow
-  const soon = new Date(Date.now() + 4 * 3600_000 + 90 * 60_000).toISOString();
+  // ~90 minutes from now (city time); late in the evening that would run past midnight (a slot series must end the same day), so use 09:00 tomorrow then
+  let soon = new Date(Date.now() + 4 * 3600_000 + 90 * 60_000).toISOString();
+  if (soon.slice(11, 16) >= '23:20' || soon.slice(0, 10) !== new Date(Date.now() + 4 * 3600_000).toISOString().slice(0, 10)) soon = `${new Date(Date.now() + 4 * 3600_000 + 86_400_000).toISOString().slice(0, 10)}T09:00:00.000Z`;
   const sf = $(staff, '#slots-form');
   sf.elements.date.value = soon.slice(0, 10);
   sf.elements.start.value = soon.slice(11, 16);

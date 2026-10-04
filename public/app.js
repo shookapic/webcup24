@@ -23,6 +23,20 @@ function preference(key, value) {
 
 let lang = preference('lang') === 'en' ? 'en' : 'fr';
 
+// The English dictionary (about 60 KB) is fetched only when English is wanted. French visitors never download it.
+let englishLoading = null;
+function ensureEnglish() {
+  if (lang !== 'en' || Object.keys(english).length) return Promise.resolve();
+  englishLoading ||= new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = '/i18n-en.js';
+    script.onload = resolve;
+    script.onerror = () => { englishLoading = null; resolve(); }; // still usable in French; the next switch tries again
+    document.head.append(script);
+  });
+  return englishLoading;
+}
+
 // Translate a French interface string; {name} placeholders are filled from vars.
 function t(text, vars = {}) {
   const value = lang === 'en' ? english[text] ?? text : text;
@@ -45,15 +59,42 @@ function element(tag, className, value) {
   return node;
 }
 
+// F59: on a slow or cut connection the page says so, shows when the data was last good, and offers a retry; it recovers by itself.
+let lastGoodAt = null;
+let connectionLost = false;
+function showConnection() {
+  const banner = $('#connection-banner');
+  banner.hidden = !connectionLost;
+  if (!connectionLost) return banner.replaceChildren();
+  const time = lastGoodAt ? new Date(lastGoodAt).toLocaleTimeString(lang === 'en' ? 'en-GB' : 'fr-FR', { hour: '2-digit', minute: '2-digit' }) : null;
+  const retry = element('button', '', t('Réessayer maintenant'));
+  retry.type = 'button';
+  retry.addEventListener('click', () => refreshAll());
+  banner.replaceChildren(element('strong', '', `${t('Connexion lente ou coupée')} · `), `${time ? t('Ce que vous voyez peut ne pas être à jour (dernière mise à jour : {time}).', { time }) : t('Les informations ne sont pas encore chargées.')} `, retry);
+}
+function setConnection(lost) {
+  if (!lost) lastGoodAt = Date.now();
+  if (lost === connectionLost) return;
+  connectionLost = lost;
+  showConnection();
+}
+
 async function api(path, method = 'GET', body) {
-  const response = await fetch(path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-    credentials: 'same-origin',
-    signal: AbortSignal.timeout(10_000),
-  });
-  const data = await response.json();
+  let response;
+  try {
+    response = await fetch(path, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    setConnection(true);
+    throw Object.assign(new Error(t('Connexion lente ou coupée. Réessayez dans un instant.')), { status: 0, network: true });
+  }
+  setConnection(false);
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) throw Object.assign(new Error(translateError(data.error || 'Une erreur est survenue.')), { status: response.status, retryAfter: data.retryAfter, attemptsLeft: data.attemptsLeft, field: fieldsOf(data.error || '') });
   if (method !== 'GET') auditSoon();
   return data;
@@ -125,6 +166,13 @@ document.addEventListener('submit', (event) => {
   const form = event.target;
   const status = form.querySelector?.('.form-status');
   if (!status) return;
+  // A second submit while the first is still in flight (a slow link invites it) is ignored, so nothing is sent twice. A stuck form frees itself after 25 s.
+  if (form.getAttribute('aria-busy') === 'true' && Date.now() - Number(form.dataset.busySince || 0) < 25_000) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
+  form.dataset.busySince = String(Date.now());
   form.setAttribute('aria-busy', 'true');
   status.dataset.error = 'false';
   status.textContent = t('Envoi en cours…');
@@ -2162,9 +2210,10 @@ function applyLanguage() {
   toggle.textContent = lang === 'en' ? 'Français' : 'English';
   toggle.lang = lang === 'en' ? 'fr' : 'en';
 }
-$('#lang-toggle').addEventListener('click', () => {
+$('#lang-toggle').addEventListener('click', async () => {
   lang = lang === 'en' ? 'fr' : 'en';
   preference('lang', lang);
+  await ensureEnglish();
   applyLanguage();
   renderIdentity();
   renderServices();
@@ -2188,12 +2237,40 @@ $('#lang-toggle').addEventListener('click', () => {
   loadMessages();
   loadFeed();
 });
-applyLanguage();
-updateDocumentLinks();
+ensureEnglish().then(() => { applyLanguage(); updateDocumentLinks(); });
 
 $('#contrast-toggle').addEventListener('click', () => { preference('highContrast', String(document.documentElement.dataset.contrast !== 'high')); applyContrast(); });
 applyContrast();
 
-setInterval(() => { loadTransports(); loadServices(); loadAppointments(); loadPlaces(); }, 60_000);
-Promise.allSettled([loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]);
-setInterval(() => { if (!document.activeElement?.closest?.('.reason-form')) loadNews(); if (user) { loadMessages(); loadNotices(); loadConcerns(); loadStaffConcerns(); loadPublic(); } if (['agent', 'admin'].includes(user?.role)) { loadFeed(); loadStaffSlots(); loadSecurity(); } }, 30_000);
+// Polling (nothing live exists on this host). While the tab is hidden nothing is fetched, except what exists to alert someone who opted into browser
+// notifications (urgent alerts, notices, appointment reminders). When the tab is visible again, or the network is back, stale data refreshes at once.
+// With the browser's "data saver" on, every other tick is skipped.
+const tabHidden = () => document.visibilityState === 'hidden';
+const optedIn = () => 'Notification' in window && Notification.permission === 'granted';
+let saverTick = 0;
+const skipForSaver = () => Boolean(navigator.connection?.saveData) && saverTick++ % 2 === 1;
+let lastFullRefresh = Date.now();
+const staffRole = () => ['agent', 'admin'].includes(user?.role);
+
+function refreshSlow() { loadTransports(); loadServices(); loadAppointments(); loadPlaces(); }
+function refreshFast() {
+  if (!document.activeElement?.closest?.('.reason-form')) loadNews();
+  if (user) { loadMessages(); loadNotices(); loadConcerns(); loadStaffConcerns(); loadPublic(); }
+  if (staffRole()) { loadFeed(); loadStaffSlots(); loadSecurity(); }
+}
+function refreshAll() { lastFullRefresh = Date.now(); refreshSlow(); refreshFast(); }
+setInterval(() => {
+  if (skipForSaver()) return;
+  if (tabHidden()) { if (optedIn()) loadAppointments(); return; }
+  lastFullRefresh = Date.now();
+  refreshSlow();
+}, 60_000);
+setInterval(() => {
+  if (skipForSaver()) return;
+  if (tabHidden()) { if (optedIn()) { loadNews(); loadNotices(); } return; }
+  refreshFast();
+}, 30_000);
+document.addEventListener('visibilitychange', () => { if (!tabHidden() && Date.now() - lastFullRefresh > 15_000) refreshAll(); });
+window.addEventListener('online', () => refreshAll());
+window.addEventListener('offline', () => setConnection(true));
+ensureEnglish().then(() => Promise.allSettled([loadServices(), loadTransports(), loadPlaces(), loadNews(), api('/api/me').then(({ user: savedUser }) => afterAuthentication(savedUser))]));

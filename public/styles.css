@@ -473,3 +473,6 @@ html[data-contrast=high] .notice-unread,html[data-contrast=high] .dashboard-todo
 .notice-banner a:focus-visible{outline:3px solid #0b2a44;outline-offset:2px}
 html[data-contrast=high] .notice-item a{color:#ffeb00}
 html[data-contrast=high] .notice-item a:focus-visible{outline-color:#ffeb00}
+.connection-banner{background:#fbe3c8;border-bottom-color:#8a4b08;color:#2b1700}
+.connection-banner button{margin-left:8px;min-height:24px}
+html[data-contrast=high] .connection-banner{background:#000;color:#ffeb00;border-bottom-color:#ffeb00}
