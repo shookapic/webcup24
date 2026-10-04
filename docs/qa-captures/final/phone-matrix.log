@@ -1,0 +1,6 @@
+PASS open: phone host visible with text 
+PASS close: phone host hidden/gone 
+PASS avatar editor opens 
+PASS phone does not open while avatar editor is open (no dual overlay) 
+PASS movement restored after open+close cycle 1 -> 0.9378736019134521
+ALL PASS

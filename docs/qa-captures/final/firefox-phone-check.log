@@ -1,0 +1,4 @@
+firefox firefox/157.0
+t=2ms opacity=null hasText=false (len -1)
+t=52ms opacity=0 hasText=true (len 388)
+t=163ms opacity=1 hasText=true (len 476)
