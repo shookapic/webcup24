@@ -10,7 +10,10 @@ await page.setViewport({ width: 960, height: 540 });
 page.on('pageerror', (e) => console.log('pageerror', e.message));
 const missing = [];
 page.on('response', (r) => r.status() >= 400 && !r.url().includes('/api/presence') && missing.push(`${r.status()} ${r.url()}`));
+const t0 = Date.now(); const stage = (s) => console.error(`STAGE ${s} at ${Date.now()-t0}ms`);
+stage('launch-ok');
 await page.goto(base + '/', { waitUntil: 'networkidle0' });
+stage('portal-loaded');
 await page.evaluate(async () => {
   const post = (u, m, b) => fetch(u, { method: m, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
   await post('/api/auth/register', 'POST', { name: 'Probe', email: `p${Date.now()}${Math.random()}@example.org`, password: 'motdepasse-solide-123' });
@@ -18,9 +21,15 @@ await page.evaluate(async () => {
   const { user } = await (await fetch('/api/me')).json();
   localStorage.setItem(`world-seen-alerts:${user.id}`, JSON.stringify(Array.from({ length: 200 }, (_, i) => i)));
 });
+stage('auth-done');
 await page.goto(base + '/monde/?debug&fps=30', { waitUntil: 'networkidle0' });
+stage('world-page-loaded');
 await page.waitForFunction(() => window.__tn?.run, { timeout: 60000 });
+stage('tn-ready');
 await page.evaluate(async () => { const tn = window.__tn; for (let i = 0; i < 60 && !tn.ecctrl; i++) await tn.run(0.5); await tn.run(1); });
+stage('ecctrl-ready');
+const tramsReady = await page.evaluate(() => typeof window.__tn.trams === 'object' && Object.keys(window.__tn.trams || {}));
+stage(`trams-object: ${JSON.stringify(tramsReady)}`);
 const results = [];
 const check = (name, ok, info = {}) => { results.push(ok); console.log(ok ? 'PASS' : 'FAIL', name, JSON.stringify(info)); };
 // Per-frame geometry probe inside the page.
@@ -54,7 +63,9 @@ const probe = () => page.evaluate(() => {
 });
 const seen = { T1: { dwell: new Set(), dirs: new Set(), minS: 1e9, maxS: -1, offPath: 0, railGap: 0, spacing: 1e9, centre: 0 }, T2: { dwell: new Set(), dirs: new Set(), minS: 1e9, maxS: -1, offPath: 0, railGap: 0, spacing: 1e9, centre: 0 } };
 let last;
+stage('entering-150-loop');
 for (let t = 0; t < 150; t += 1) {
+  if (t % 25 === 0) stage(`loop iter ${t}`);
   await page.evaluate(() => window.__tn.run(1));
   last = await probe();
   for (const code of ['T1', 'T2']) {
@@ -65,6 +76,7 @@ for (let t = 0; t < 150; t += 1) {
     if (r.dwell > 0) r.arcs.forEach((a, i) => Math.abs(a - r.s) < 0.6 && o.dwell.add(i));
   }
 }
+stage('loop-done, checking');
 for (const code of ['T1', 'T2']) {
   const o = seen[code];
   const span = last[code].range[1] - last[code].range[0];
