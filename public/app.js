@@ -475,6 +475,7 @@ function renderIdentity() {
   renderNotices(true);
   renderDashboard();
   fillTopicSelects();
+  renderFactors();
   renderStaffConcerns();
   renderPublic();
   renderDevices();
@@ -516,6 +517,10 @@ function clearIdentity() {
   for (const list of [$('#citizen-messages'), $('#staff-messages'), $('#dashboard-todo')]) forgetLoaded(list);
   formTokens.clear();
   drafts.clear();
+  securityState = null;
+  factorsView = { mode: 'status' };
+  $('#factors-body').replaceChildren();
+  $('#factors-state').textContent = '';
   citizens = [];
   pendingDelete = null;
   pendingCitizen = null;
@@ -884,6 +889,9 @@ const noticeLines = {
   'public.resolved': ['La demande « {label} » que vous soutenez est résolue.', 'Merci de votre soutien.'],
   'public.new': ['La demande « {label} » que vous soutenez est de nouveau à traiter.', 'Vous n’avez rien à faire.'],
   'device.new': ['Connexion à votre compte depuis un nouvel appareil : {label}.', 'Si c’était vous, il n’y a rien à faire. Sinon, retirez cet appareil dans « Mes appareils » : ses connexions sont fermées. Les services municipaux peuvent aussi changer votre mot de passe.'],
+  'security.recovery_used': ['Un code de secours a servi à vous connecter. Il vous en reste {label}.', 'Si ce n’était pas vous, changez votre mot de passe et générez de nouveaux codes dans « Sécurité de mon compte ».'],
+  'security.2fa_off': ['La vérification en deux étapes de votre compte a été désactivée.', 'Si ce n’était pas vous, changez votre mot de passe et réactivez-la dans « Sécurité de mon compte ».'],
+  'security.2fa_reset': ['Un agent de la ville a retiré la vérification en deux étapes de votre compte après une demande de récupération.', 'Vous pouvez la réactiver dans « Sécurité de mon compte ».'],
   'concern.read': ['Votre inquiétude {label} a été lue par un agent.', 'Vous n’avez rien à faire : une réponse peut suivre.'],
   'concern.answered': ['Votre inquiétude {label} a reçu une réponse.', 'Lisez la réponse ci-dessous ou dans « Mes inquiétudes envoyées ».'],
 };
@@ -1534,12 +1542,14 @@ async function citizenAction(citizen, kind, reason) {
   try {
     if (kind === 'deactivate') await api(`/api/admin/citizens/${citizen.id}`, 'PATCH', { active: false, reason });
     else if (kind === 'reactivate') await api(`/api/admin/citizens/${citizen.id}`, 'PATCH', { active: true });
+    else if (kind === 'reset2fa') await api(`/api/admin/citizens/${citizen.id}/2fa-reset`, 'POST', { reason });
     else if (kind === 'reset') showTemporaryPassword(citizen, (await api(`/api/admin/citizens/${citizen.id}/password`, 'POST', { reason })).password);
     else await api(`/api/admin/citizens/${citizen.id}`, 'DELETE', { reason });
     pendingCitizen = null;
     await loadCitizens();
     if (kind === 'deactivate' || kind === 'reactivate') setCitizensStatus(t(kind === 'reactivate' ? 'Compte de {name} réactivé.' : 'Compte de {name} désactivé.', { name: citizen.name }));
     if (kind === 'delete') setCitizensStatus(t('Compte de {name} supprimé.', { name: citizen.name }));
+    if (kind === 'reset2fa') { setCitizensStatus(t('Vérification en deux étapes retirée pour {name}. Ses sessions sont fermées.', { name: citizen.name })); focusCitizen(citizen.id); }
     if (kind === 'deactivate' || kind === 'reactivate') focusCitizen(citizen.id);
     if (kind === 'delete') $('#citizen-search').focus();
   } catch (error) {
@@ -2313,10 +2323,11 @@ function renderCitizens() {
     if (pending) {
       const prompts = {
         deactivate: t('Désactiver le compte de {name} ? Ses sessions sont fermées. Le motif est conservé dans le journal.', { name: citizen.name }),
+        reset2fa: t('Retirer la vérification en deux étapes de {name} ? À faire seulement pour une personne qui a perdu son téléphone et ses codes de secours. Ses sessions sont fermées. Le motif est conservé dans le journal.', { name: citizen.name }),
         reset: t('Réinitialiser le mot de passe de {name} ? Un mot de passe temporaire sera affiché une seule fois. Le motif est conservé dans le journal.', { name: citizen.name }),
         delete: t('Supprimer définitivement le compte de {name} ? Ses messages et signalements seront aussi effacés. Le motif est conservé dans le journal.', { name: citizen.name }),
       };
-      const labels = { deactivate: 'Confirmer la désactivation', reset: 'Confirmer la réinitialisation', delete: 'Confirmer la suppression de {name}' };
+      const labels = { deactivate: 'Confirmer la désactivation', reset2fa: 'Confirmer le retrait pour {name}', reset: 'Confirmer la réinitialisation', delete: 'Confirmer la suppression de {name}' };
       item.append(reasonForm({
         prompt: prompts[pending], confirmLabel: t(labels[pending], { name: citizen.name }), danger: true,
         onConfirm: (reason) => citizenAction(citizen, pending, reason),
@@ -2334,6 +2345,7 @@ function renderCitizens() {
       actions.append(
         citizen.active ? action('Désactiver {name}', ask('deactivate')) : action('Réactiver {name}', () => citizenAction(citizen, 'reactivate')),
         action('Réinitialiser le mot de passe de {name}', ask('reset')),
+        ...(citizen.second_step ? [action('Retirer la vérification en deux étapes de {name}', ask('reset2fa'))] : []),
         action('Supprimer {name}', ask('delete'), true),
         historyButton('user', citizen.id, citizen.name),
       );
@@ -2356,6 +2368,7 @@ async function afterAuthentication(nextUser) {
   loadStaffConcerns();
   loadPublic();
   loadDevices();
+  loadFactors();
   await loadFeed();
   loadCitizens();
   loadAppointments();
@@ -2364,6 +2377,178 @@ async function afterAuthentication(nextUser) {
   loadAudit();
   renderPlaces();
   renderEmergency();
+}
+
+// ---- F53: "Sécurité de mon compte": the second verification step, for every signed-in role.
+let securityState = null;
+let factorsView = { mode: 'status' };
+async function loadFactors() {
+  if (!user) return;
+  try {
+    securityState = await api('/api/me/security');
+    renderFactors();
+  } catch (error) {
+    if (error.status === 401) clearIdentity();
+  }
+}
+function factorField(label, name, { type = 'text', hint, inputmode, autocomplete, maxlength } = {}) {
+  const field = element('label', '', `${t(label)} `);
+  const input = element('input');
+  input.name = name;
+  input.type = type;
+  input.required = true;
+  if (inputmode) input.inputMode = inputmode;
+  if (autocomplete) input.autocomplete = autocomplete;
+  if (maxlength) input.maxLength = maxlength;
+  field.append(input);
+  if (hint) field.append(element('small', 'field-hint', t(hint)));
+  return { field, input };
+}
+function factorForm(fields, submitLabel, onSubmit, onCancel) {
+  const form = element('form', 'factors-form');
+  form.noValidate = false;
+  for (const { field } of fields) form.append(field);
+  const actions = element('div', 'factors-actions');
+  const submit = element('button', 'button button-primary', t(submitLabel));
+  submit.type = 'submit';
+  actions.append(submit);
+  if (onCancel) {
+    const cancel = element('button', 'button', t('Annuler'));
+    cancel.type = 'button';
+    cancel.addEventListener('click', onCancel);
+    actions.append(cancel);
+  }
+  form.append(actions);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    form.setAttribute('aria-busy', 'true');
+    try {
+      await onSubmit(Object.fromEntries(fields.map(({ input }) => [input.name, input.value.trim()])));
+    } catch (error) {
+      if (error.status === 401) return clearIdentity();
+      reportError('#factors-status', error);
+      submit.disabled = false;
+      form.removeAttribute('aria-busy');
+      (fields.find(({ input }) => input.name === 'code') || fields[0])?.input.focus();
+    }
+  });
+  return form;
+}
+const setFactorsView = (view, status = '') => {
+  factorsView = view;
+  setFormStatus('#factors-status', status);
+  renderFactors();
+  const focus = $('#factors-body [data-first]') || $('#factors-body input') || $('#factors-body button');
+  focus?.focus();
+};
+function renderFactors() {
+  if (!securityState || !user) return;
+  const body = $('#factors-body');
+  body.replaceChildren();
+  const { enabled, since, recovery_left: left } = securityState.totp;
+  const staff = user.role !== 'citizen';
+  $('#factors-state').textContent = enabled
+    ? t('Vérification en deux étapes : activée depuis le {date}. Codes de secours restants : {n}.', { date: cityTime(since).split(' ')[0] || '', n: left })
+    : t(staff ? 'Vérification en deux étapes : désactivée. Elle est fortement conseillée pour un compte d’agent ou d’administrateur.' : 'Vérification en deux étapes : désactivée.');
+  const needPassword = securityState.has_password;
+  const passwordField = () => factorField('Mot de passe', 'password', { type: 'password', autocomplete: 'current-password' });
+  const mode = factorsView.mode;
+  if (mode === 'status') {
+    if (enabled && left <= 2) body.append(element('p', 'factors-warning', `⚠ ${t(left === 0 ? 'Il ne vous reste aucun code de secours : générez-en de nouveaux.' : 'Il ne vous reste que {n} code(s) de secours : générez-en de nouveaux.', { n: left })}`));
+    const actions = element('div', 'factors-actions');
+    const button = (label, handler) => { const b = element('button', 'button', t(label)); b.type = 'button'; b.addEventListener('click', handler); actions.append(b); return b; };
+    if (!enabled) {
+      const first = button('Activer la vérification en deux étapes', async () => { if (needPassword) setFactorsView({ mode: 'setup-password' }); else await startFactorSetup({}); });
+      first.classList.add('button-primary');
+      first.dataset.first = '';
+    } else {
+      button('Générer de nouveaux codes de secours', () => setFactorsView({ mode: 'renew' }));
+      button('Désactiver la vérification en deux étapes', () => setFactorsView({ mode: 'disable' }));
+    }
+    body.append(actions);
+    return;
+  }
+  if (mode === 'setup-password') {
+    const password = passwordField();
+    password.input.dataset.first = '';
+    body.append(element('p', '', t('Pour votre sécurité, saisissez d’abord votre mot de passe.')), factorForm([password], 'Continuer', (values) => startFactorSetup(values), () => setFactorsView({ mode: 'status' })));
+    return;
+  }
+  if (mode === 'setup') {
+    const { secret, grouped, otpauth } = factorsView;
+    const steps = element('ol', 'factors-steps');
+    steps.append(element('li', '', t('Installez une application d’authentification sur votre téléphone (par exemple Google Authenticator, Microsoft Authenticator, Aegis ou FreeOTP).')));
+    const second = element('li', '', `${t('Ajoutez un compte : ouvrez le lien ci-dessous depuis votre téléphone, ou saisissez cette clé dans l’application.')} `);
+    const link = element('a', 'receipt-link', t('Ouvrir dans mon application'));
+    link.href = otpauth;
+    second.append(link, element('br'), element('code', 'factors-secret', grouped));
+    second.querySelector('code').setAttribute('aria-label', t('Clé secrète : {key}', { key: secret.split('').join(' ') }));
+    steps.append(second, element('li', '', t('Saisissez le code à 6 chiffres que l’application affiche, pour vérifier que tout fonctionne.')));
+    const code = factorField('Code à 6 chiffres', 'code', { inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: 8 });
+    code.input.dataset.first = '';
+    body.append(steps, factorForm([code], 'Activer', async (values) => {
+      const data = await api('/api/me/2fa/enable', 'POST', { code: values.code });
+      await loadFactors();
+      setFactorsView({ mode: 'codes', codes: data.recovery_codes }, t('La vérification en deux étapes est activée.'));
+    }, () => setFactorsView({ mode: 'status' })));
+    return;
+  }
+  if (mode === 'codes') {
+    const { codes } = factorsView;
+    body.append(element('h4', '', t('Vos codes de secours')), element('p', '', t('Notez-les maintenant, à part de votre téléphone : ils ne seront plus jamais affichés. Chacun ne sert qu’une fois, si vous perdez l’application.')));
+    const list = element('ol', 'recovery-codes');
+    for (const item of codes) list.append(element('li', '', item));
+    body.append(list);
+    const actions = element('div', 'factors-actions');
+    const copy = element('button', 'button', t('Copier les codes'));
+    copy.type = 'button';
+    copy.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(codes.join('\n')); setFormStatus('#factors-status', t('Codes copiés.')); } catch { setFormStatus('#factors-status', t('La copie n’est pas possible ici : recopiez les codes à la main ou enregistrez-les dans un fichier.'), true); }
+    });
+    const save = element('button', 'button', t('Enregistrer dans un fichier'));
+    save.type = 'button';
+    save.addEventListener('click', () => {
+      const link = element('a');
+      link.href = URL.createObjectURL(new Blob([`Terra Nova — codes de secours\n${codes.join('\n')}\n`], { type: 'text/plain' }));
+      link.download = 'terra-nova-codes-de-secours.txt';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    });
+    actions.append(copy, save);
+    const confirm = element('label', 'check-field');
+    const check = element('input');
+    check.type = 'checkbox';
+    confirm.append(check, ` ${t('J’ai noté mes codes de secours.')}`);
+    const done = element('button', 'button button-primary', t('Terminer'));
+    done.type = 'button';
+    done.disabled = true;
+    check.addEventListener('change', () => { done.disabled = !check.checked; });
+    done.addEventListener('click', () => setFactorsView({ mode: 'status' }, t('C’est fait. Vos codes de secours ne sont plus affichés.')));
+    body.append(actions, confirm, done);
+    return;
+  }
+  // 'disable' and 'renew': the password and a code prove who is asking
+  const fields = [...(needPassword ? [passwordField()] : []), factorField('Code de l’application ou code de secours', 'code', { autocomplete: 'one-time-code', maxlength: 14 })];
+  fields[0].input.dataset.first = '';
+  const renew = mode === 'renew';
+  body.append(element('p', '', t(renew ? 'Les anciens codes de secours seront annulés. Prouvez que c’est bien vous.' : 'La protection sera retirée de votre compte : un mot de passe suffira de nouveau pour vous connecter. Prouvez que c’est bien vous.')),
+    factorForm(fields, renew ? 'Générer de nouveaux codes' : 'Désactiver', async (values) => {
+      const data = await api(renew ? '/api/me/2fa/recovery-codes' : '/api/me/2fa/disable', 'POST', values);
+      await loadFactors();
+      if (renew) setFactorsView({ mode: 'codes', codes: data.recovery_codes }, t('Nouveaux codes de secours : les anciens ne fonctionnent plus.'));
+      else setFactorsView({ mode: 'status' }, t('La vérification en deux étapes est désactivée.'));
+    }, () => setFactorsView({ mode: 'status' })));
+}
+async function startFactorSetup(values) {
+  try {
+    const data = await api('/api/me/2fa/setup', 'POST', values);
+    setFactorsView({ mode: 'setup', ...data });
+  } catch (error) {
+    if (error.status === 401) return clearIdentity();
+    reportError('#factors-status', error);
+    throw error;
+  }
 }
 
 // F83: anyone holding a reference and its code can ask whether the city received the request, and when. The answer never carries the content.
@@ -2396,19 +2581,64 @@ $('#register-form').addEventListener('submit', async (event) => {
   }
 });
 
+// F53: an account with a second step gets a ticket after the right password; the code (or a recovery code) then opens the session.
+let loginTicket = null;
+function setLoginStep(second) {
+  const form = $('#login-form');
+  $('#login-first').hidden = second;
+  $('#login-second').hidden = !second;
+  for (const input of form.querySelectorAll('#login-first input')) input.disabled = second;
+  const code = form.elements.code;
+  code.disabled = !second;
+  code.required = second;
+  code.value = '';
+  form.querySelector('button[type=submit]').textContent = t(second ? 'Vérifier le code' : 'Se connecter');
+  $('#login-second-help').textContent = t('Votre mot de passe est correct. Saisissez maintenant le code à 6 chiffres affiché par votre application d’authentification.');
+  $('#login-recovery-toggle').hidden = false;
+  if (!second) loginTicket = null;
+}
+$('#login-recovery-toggle').addEventListener('click', () => {
+  $('#login-second-help').textContent = t('Saisissez un de vos codes de secours (il ne sert qu’une fois), par exemple ABCDE-FGH23.');
+  $('#login-recovery-toggle').hidden = true;
+  $('#login-form').elements.code.value = '';
+  $('#login-form').elements.code.focus();
+});
+$('#login-second-cancel').addEventListener('click', () => {
+  setLoginStep(false);
+  setFormStatus('#login-status', '');
+  $('#login-form').elements.password.focus();
+});
 $('#login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    const data = await api('/api/auth/login', 'POST', { email: formValue(form, 'email'), password: passwordValue(form) });
+    const data = loginTicket
+      ? await api('/api/auth/second-step', 'POST', { ticket: loginTicket, code: formValue(form, 'code') })
+      : await api('/api/auth/login', 'POST', { email: formValue(form, 'email'), password: passwordValue(form) });
+    if (data.second_step) {
+      loginTicket = data.second_step.ticket;
+      form.elements.password.value = '';
+      setLoginStep(true);
+      setFormStatus('#login-status', t('Mot de passe correct. Il reste à saisir le code de vérification.'));
+      form.elements.code.focus();
+      return;
+    }
+    setLoginStep(false);
     form.reset();
     setFormStatus('#login-status', t('Connexion réussie.'));
     await afterAuthentication(data.user);
     showSecurityNotice(data.notice);
     $('#member-name').focus();
   } catch (error) {
+    if (error.code === 'second-step-expired') {
+      setLoginStep(false);
+      reportError('#login-status', error);
+      $('#login-form').elements.password.focus();
+      return;
+    }
     reportError('#login-status', error, loginErrorMessage(error));
     if (error.status === 429 && error.retryAfter) lockLogin(error.retryAfter);
+    if (loginTicket) $('#login-form').elements.code.select();
   }
 });
 

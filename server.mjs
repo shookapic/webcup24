@@ -10,6 +10,7 @@ import { Limiter, loginFailed, loginSucceeded, loginWait, record, summary } from
 import { begin, charge, formSummary, guarded, issue, minAgeMs, note as noteForm } from './guard.mjs';
 import { cityStamp, pickLang, personalHtml, receiptHtml, recapCsv, recapHtml } from './recap.mjs';
 import { groupSimilar } from './similar.mjs';
+import { checkTotp, groupSecret, hashRecovery, looksLikeRecovery, newRecoveryCodes, newSecret, otpauthUri } from './factors.mjs';
 import { audit, auditCsv, auditFacets, citizenLabel, listAudit, tx, verifyChain } from './audit.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -133,6 +134,12 @@ function receiptCode(message) {
   return `${code.slice(0, 5)}-${code.slice(5)}`;
 }
 const verifies = new Limiter(60, 10 * 60_000);
+// F53: after the right password, an account with a second step gets a short-lived, single-purpose ticket (never a session). In memory, five wrong codes burn it.
+const secondSteps = new Map(); // ticket -> { userId, address, expires, tries }
+const SECOND_STEP_MS = 5 * 60_000;
+setInterval(() => { const now = Date.now(); for (const [key, value] of secondSteps) if (value.expires < now) secondSteps.delete(key); }, 60_000).unref();
+const factorLimit = new Limiter(10, 10 * 60_000); // set-up, activation, removal and new recovery codes, per account
+const ISSUER = 'Terra Nova';
 function receiptView(message, user, lang) {
   const service = message.service_id ? db.prepare('SELECT title, title_en FROM services WHERE id = ?').get(message.service_id) : null;
   return {
@@ -444,6 +451,22 @@ const concernTopics = ['usage', 'sharing', 'storage', 'access', 'other'];
 const reasonOf = (body, required) => (required || body.reason ? text(body.reason, 5, 200, 'Le motif') : null);
 
 // F34: staff manage citizens only; staff accounts are never reachable from these routes.
+// F53: a code from the authenticator app (accepted once) or an unused recovery code (consumed). Returns 'totp', 'recovery' or null. The comparison and the
+// consumption are atomic, so one code cannot be used twice by two simultaneous requests.
+function proveSecondStep(user, input) {
+  const code = String(input ?? '').trim();
+  const compact = code.replace(/\s/g, '');
+  if (/^\d{6}$/.test(compact) && user.totp_secret) {
+    const step = checkTotp(user.totp_secret, compact, user.totp_last_step);
+    if (step !== null && db.prepare('UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ?').run(step, user.id, step).changes === 1) return 'totp';
+    return null;
+  }
+  if (looksLikeRecovery(code)) {
+    const row = db.prepare('SELECT id FROM recovery_codes WHERE user_id = ? AND code_hash = ? AND used_at IS NULL').get(user.id, hashRecovery(code));
+    if (row && db.prepare('UPDATE recovery_codes SET used_at = CURRENT_TIMESTAMP WHERE id = ? AND used_at IS NULL').run(row.id).changes === 1) return 'recovery';
+  }
+  return null;
+}
 function citizenTarget(id) {
   const target = db.prepare('SELECT id, role, name, email FROM users WHERE id = ?').get(id);
   if (!target) fail(404, 'Compte introuvable.');
@@ -603,6 +626,18 @@ async function route(request, response) {
     }
   }
 
+  // Everything that follows a proven identity: a fresh session, device recognition (residents), the staff journal line.
+  function completeLogin(request, response, user, earlierFailures = 0) {
+    clearSession(request, response);
+    // F54: residents only. A sign-in from a device they have not used before leaves them a notice (same channel as F49).
+    const device = user.role === 'citizen' ? recognizeDevice(request, user.id, deviceLabel(request)) : null;
+    if (device?.isNew) db.prepare('INSERT INTO notices (user_id, code, ref_id, label) VALUES (?, ?, ?, ?)').run(user.id, 'device.new', device.id, deviceLabel(request));
+    createSession(response, user.id, device);
+    if (user.role !== 'citizen') audit(user, { category: 'security', action: 'auth.staff_login', summary: 's’est connecté à l’espace de travail' });
+    // The account owner is told about failed attempts made while they were away.
+    return sendJson(response, 200, { user: publicUser(user), ...(earlierFailures >= 3 ? { notice: { failedAttempts: earlierFailures } } : {}) });
+  }
+
   if (path === '/api/auth/login' && method === 'POST') {
     const body = await readJson(request);
     const address = email(body.email);
@@ -625,15 +660,46 @@ async function route(request, response) {
     }
     // Said only after the password is right, so it does not reveal which addresses have accounts.
     if (!user.active) fail(403, 'Ce compte est désactivé. Contactez les services municipaux.');
-    const earlierFailures = loginSucceeded(ip, address);
-    clearSession(request, response);
-    // F54: residents only. A sign-in from a device they have not used before leaves them a notice (same channel as F49).
-    const device = user.role === 'citizen' ? recognizeDevice(request, user.id, deviceLabel(request)) : null;
-    if (device?.isNew) db.prepare('INSERT INTO notices (user_id, code, ref_id, label) VALUES (?, ?, ?, ?)').run(user.id, 'device.new', device.id, deviceLabel(request));
-    createSession(response, user.id, device);
-    if (user.role !== 'citizen') audit(user, { category: 'security', action: 'auth.staff_login', summary: 's’est connecté à l’espace de travail' });
-    // The account owner is told about failed attempts made while they were away.
-    return sendJson(response, 200, { user: publicUser(user), ...(earlierFailures >= 3 ? { notice: { failedAttempts: earlierFailures } } : {}) });
+    // F53: a right password is not enough for an account that asked for a second step. The failure counters are NOT cleared here, so guessing the code is limited too.
+    if (user.totp_enabled_at) {
+      const ticket = randomBytes(24).toString('base64url');
+      secondSteps.set(ticket, { userId: user.id, address, expires: Date.now() + SECOND_STEP_MS, tries: 0 });
+      return sendJson(response, 200, { second_step: { ticket, expires_in: SECOND_STEP_MS / 1000, methods: ['totp', 'recovery'] } });
+    }
+    return completeLogin(request, response, user, loginSucceeded(ip, address));
+  }
+
+  // F53: the second step of a sign-in: a 6-digit code from the authenticator app, or one of the single-use recovery codes.
+  if (path === '/api/auth/second-step' && method === 'POST') {
+    const body = await readJson(request);
+    const ip = clientIp(request);
+    const ticket = typeof body.ticket === 'string' ? secondSteps.get(body.ticket) : null;
+    if (!ticket || ticket.expires < Date.now()) {
+      if (typeof body.ticket === 'string') secondSteps.delete(body.ticket);
+      fail(401, 'La vérification a expiré. Recommencez la connexion avec votre mot de passe.', { code: 'second-step-expired' });
+    }
+    const wait = loginWait(ip, ticket.address);
+    if (wait) {
+      record('blocked', ticket.address);
+      const retryAfter = Math.ceil(wait / 1000);
+      fail(429, `Trop de tentatives. Réessayez dans ${Math.ceil(retryAfter / 60)} min.`, { retryAfter });
+    }
+    const user = db.prepare('SELECT * FROM users WHERE id = ? AND active = 1').get(ticket.userId);
+    if (!user || !user.totp_enabled_at) { secondSteps.delete(body.ticket); fail(401, 'La vérification a expiré. Recommencez la connexion avec votre mot de passe.', { code: 'second-step-expired' }); }
+    const proof = proveSecondStep(user, body.code);
+    if (!proof) {
+      ticket.tries += 1;
+      const attemptsLeft = loginFailed(ip, ticket.address);
+      if (ticket.tries >= 5) { secondSteps.delete(body.ticket); fail(401, 'Trop de codes incorrects. Recommencez la connexion avec votre mot de passe.', { code: 'second-step-expired', attemptsLeft }); }
+      fail(401, 'Code incorrect ou déjà utilisé.', { attemptsLeft: Math.min(attemptsLeft, 5 - ticket.tries) });
+    }
+    secondSteps.delete(body.ticket);
+    const earlierFailures = loginSucceeded(ip, ticket.address);
+    if (proof === 'recovery' && user.role === 'citizen') {
+      const left = db.prepare('SELECT COUNT(*) AS n FROM recovery_codes WHERE user_id = ? AND used_at IS NULL').get(user.id).n;
+      db.prepare('INSERT INTO notices (user_id, code, ref_id, label) VALUES (?, ?, ?, ?)').run(user.id, 'security.recovery_used', user.id, String(left));
+    }
+    return completeLogin(request, response, user, earlierFailures);
   }
 
   // F50: the staff dashboard. Every figure is counted from the database at request time; the payload holds numbers and service/line names only.
@@ -712,7 +778,7 @@ async function route(request, response) {
     requireUser(request, ['agent', 'admin']);
     const query = (new URL(request.url, 'http://localhost').searchParams.get('q') || '').trim().slice(0, 80);
     const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
-    const citizens = db.prepare(`SELECT id, email, name, district, active, created_at FROM users
+    const citizens = db.prepare(`SELECT id, email, name, district, active, created_at, (totp_enabled_at IS NOT NULL) AS second_step FROM users
       WHERE role = 'citizen' AND (name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\') ORDER BY name COLLATE NOCASE, id LIMIT 200`).all(pattern, pattern);
     return sendJson(response, 200, { citizens });
   }
@@ -756,6 +822,83 @@ async function route(request, response) {
       });
       return sendJson(response, 200, { ok: true });
     }
+  }
+
+  // F53: the person's own second step: status, set-up (secret + link for the app), activation with a first code, removal and new recovery codes.
+  // Every route re-checks who is asking (the password, and for removal a code too), so a stolen open session cannot quietly remove the protection.
+  if (path === '/api/me/security' && method === 'GET') {
+    const me = requireUser(request);
+    const row = db.prepare('SELECT password_hash, totp_enabled_at FROM users WHERE id = ?').get(me.id);
+    const left = db.prepare('SELECT COUNT(*) AS n FROM recovery_codes WHERE user_id = ? AND used_at IS NULL').get(me.id).n;
+    return sendJson(response, 200, { totp: { enabled: Boolean(row.totp_enabled_at), since: row.totp_enabled_at || null, recovery_left: row.totp_enabled_at ? left : 0 }, has_password: row.password_hash.includes(':') });
+  }
+  const factorMatch = /^\/api\/me\/2fa\/(setup|enable|disable|recovery-codes)$/.exec(path);
+  if (factorMatch && method === 'POST') {
+    const me = requireUser(request);
+    const wait = factorLimit.waitMs(String(me.id));
+    if (wait) fail(429, `Trop de tentatives. Réessayez dans ${Math.ceil(wait / 60_000)} min.`, { retryAfter: Math.ceil(wait / 1000) });
+    factorLimit.add(String(me.id));
+    const body = await readJson(request);
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id);
+    const hasPassword = row.password_hash.includes(':');
+    const checkPassword = async () => { if (hasPassword && !(await verifyPassword(typeof body.password === 'string' ? body.password : '', row.password_hash))) fail(403, 'Mot de passe incorrect.'); };
+    const newCodes = () => {
+      const codes = newRecoveryCodes();
+      db.prepare('DELETE FROM recovery_codes WHERE user_id = ?').run(me.id);
+      const insert = db.prepare('INSERT INTO recovery_codes (user_id, code_hash) VALUES (?, ?)');
+      for (const { hash } of codes) insert.run(me.id, hash);
+      return codes.map(({ code }) => code);
+    };
+    if (factorMatch[1] === 'setup') {
+      await checkPassword();
+      if (row.totp_enabled_at) fail(409, 'La vérification en deux étapes est déjà activée.');
+      const secret = newSecret();
+      db.prepare('UPDATE users SET totp_pending = ? WHERE id = ?').run(secret, me.id);
+      return sendJson(response, 200, { secret, grouped: groupSecret(secret), otpauth: otpauthUri({ secret, account: row.email, issuer: ISSUER }), issuer: ISSUER });
+    }
+    if (factorMatch[1] === 'enable') {
+      if (row.totp_enabled_at) fail(409, 'La vérification en deux étapes est déjà activée.');
+      if (!row.totp_pending) fail(409, 'Commencez par la configuration : aucune clé n’est en attente.');
+      const step = checkTotp(row.totp_pending, String(body.code ?? '').replace(/\s/g, ''), 0);
+      if (step === null) fail(400, 'Ce code n’est pas bon. Vérifiez l’heure de votre téléphone et saisissez le code actuel de l’application.');
+      const codes = tx(() => {
+        db.prepare('UPDATE users SET totp_secret = totp_pending, totp_pending = NULL, totp_enabled_at = CURRENT_TIMESTAMP, totp_last_step = ? WHERE id = ?').run(step, me.id);
+        const made = newCodes();
+        if (me.role !== 'citizen') audit(me, { category: 'security', action: 'auth.2fa_enabled', summary: 'a activé la vérification en deux étapes de son compte' });
+        return made;
+      });
+      return sendJson(response, 200, { recovery_codes: codes });
+    }
+    if (!row.totp_enabled_at) fail(409, 'La vérification en deux étapes n’est pas activée.');
+    await checkPassword();
+    if (!proveSecondStep(row, body.code)) fail(403, 'Code incorrect ou déjà utilisé.');
+    if (factorMatch[1] === 'recovery-codes') return sendJson(response, 200, { recovery_codes: tx(() => newCodes()) });
+    tx(() => {
+      db.prepare('UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_enabled_at = NULL, totp_last_step = 0 WHERE id = ?').run(me.id);
+      db.prepare('DELETE FROM recovery_codes WHERE user_id = ?').run(me.id);
+      if (me.role === 'citizen') db.prepare('INSERT INTO notices (user_id, code, ref_id, label) VALUES (?, ?, ?, ?)').run(me.id, 'security.2fa_off', me.id, '');
+      else audit(me, { category: 'security', action: 'auth.2fa_disabled', summary: 'a désactivé la vérification en deux étapes de son compte' });
+    });
+    return sendJson(response, 200, { ok: true });
+  }
+  // An agent or an administrator helps a resident who lost both the app and the recovery codes: the step is removed (reason kept in the journal), their sessions end,
+  // and the resident finds a notice at the next sign-in.
+  const resetMatch = /^\/api\/admin\/citizens\/(\d+)\/2fa-reset$/.exec(path);
+  if (resetMatch && method === 'POST') {
+    const actor = requireUser(request, ['agent', 'admin']);
+    const id = Number(resetMatch[1]);
+    const target = citizenTarget(id);
+    const reason = reasonOf(await readJson(request), true);
+    if (!db.prepare('SELECT totp_enabled_at FROM users WHERE id = ?').get(id).totp_enabled_at) fail(409, 'Cet habitant n’a pas activé la vérification en deux étapes.');
+    tx(() => {
+      db.prepare('UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_enabled_at = NULL, totp_last_step = 0 WHERE id = ?').run(id);
+      db.prepare('DELETE FROM recovery_codes WHERE user_id = ?').run(id);
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+      db.prepare('INSERT INTO notices (user_id, code, ref_id, label) VALUES (?, ?, ?, ?)').run(id, 'security.2fa_reset', id, '');
+      audit(actor, { category: 'account', action: 'account.reset_2fa', target: { type: 'user', id, label: citizenLabel(target) }, summary: 'a retiré la vérification en deux étapes d’un habitant qui ne pouvait plus l’utiliser (ses sessions sont terminées)', details: { reason } });
+    });
+    presence.delete(id);
+    return sendJson(response, 200, { ok: true });
   }
 
   if (path === '/api/auth/logout' && method === 'POST') {

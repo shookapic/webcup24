@@ -670,7 +670,7 @@ try {
   check('F51 claim: the session cookie lasts 7 days, is HttpOnly and SameSite=Strict', /Max-Age=604800/.test(loginResponse.headers.get('set-cookie')) && /HttpOnly/.test(loginResponse.headers.get('set-cookie')) && /SameSite=Strict/.test(loginResponse.headers.get('set-cookie')));
   const claims = new DatabaseSync(env.DATA_PATH);
   const tables = claims.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name);
-  const expectedTables = ['announcements', 'appointments', 'audit_log', 'concerns', 'devices', 'message_replies', 'messages', 'notices', 'places', 'public_requests', 'services', 'sessions', 'settings', 'supports', 'transport_status', 'users'];
+  const expectedTables = ['announcements', 'appointments', 'audit_log', 'concerns', 'devices', 'message_replies', 'messages', 'notices', 'places', 'public_requests', 'recovery_codes', 'services', 'sessions', 'settings', 'supports', 'transport_status', 'users'];
   check('F51 claim: the database holds exactly the tables the "Vos données" page describes (a new table means that page must be updated)', JSON.stringify(tables) === JSON.stringify(expectedTables), JSON.stringify(tables));
   const cookieValue = citizen.cookie.split('=')[1];
   check('F51 claim: passwords and session values are stored scrambled, not readable', claims.prepare('SELECT COUNT(*) AS n FROM sessions WHERE token_hash = ?').get(cookieValue).n === 0 && claims.prepare('SELECT COUNT(*) AS n FROM sessions').get().n >= 1 && !claims.prepare("SELECT password_hash FROM users WHERE email = 'citizen@smoke.test'").get().password_hash.includes('a-long-password-1'));

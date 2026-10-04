@@ -145,6 +145,14 @@ button,a,input,select{-webkit-tap-highlight-color:transparent}
 .similar-item{display:grid;gap:6px}
 .message-similar{font-size:.75rem;color:#ffe4dc;margin:4px 0}
 .link-button{background:none;border:0;padding:0;color:#7fe2cf;text-decoration:underline;font:inherit;cursor:pointer;min-height:24px}
+.factors-panel .factors-state{font-weight:700}
+.factors-form{display:grid;gap:12px;max-width:420px;margin:12px 0}
+.factors-actions{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0}
+.factors-steps{padding-left:22px;display:grid;gap:12px;line-height:1.6}
+.factors-secret{display:inline-block;margin-top:6px;padding:8px 12px;border:1px solid #ffffff44;background:#050f1b;font-family:ui-monospace,Consolas,monospace;font-size:1.0625rem;letter-spacing:.06em;user-select:all;overflow-wrap:anywhere}
+.recovery-codes{list-style:decimal inside;columns:2;gap:24px;font-family:ui-monospace,Consolas,monospace;font-size:1.0625rem;line-height:2;margin:10px 0;padding:12px;border:1px solid #ffffff44;background:#050f1b}
+.factors-warning{padding:10px 12px;border:2px solid #ffda87;color:#ffe9ae;font-weight:700}
+.second-links{display:grid;gap:6px;margin:6px 0}
 .message-badges{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
 .message-priority{font-size:.6875rem;white-space:nowrap;padding:5px 7px;border-radius:3px;font-weight:800;background:#102539;color:#ffe4dc;border:2px solid #ffe4dc}
 .priority-urgent{background:#8a1f11;color:#fff;border-color:#fff}

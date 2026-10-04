@@ -313,6 +313,24 @@ db.exec(`
   db.exec('CREATE INDEX IF NOT EXISTS messages_priority ON messages(priority)');
 }
 
+// F53: second verification step. The secret of the authenticator app (active, or pending until the first code is checked), when it was switched on and the last
+// 30-second step accepted (a code works once). Recovery codes are kept only as hashes and are single-use.
+{
+  const columns = new Set(db.prepare('PRAGMA table_info(users)').all().map((column) => column.name));
+  if (!columns.has('totp_secret')) db.exec('ALTER TABLE users ADD COLUMN totp_secret TEXT');
+  if (!columns.has('totp_pending')) db.exec('ALTER TABLE users ADD COLUMN totp_pending TEXT');
+  if (!columns.has('totp_enabled_at')) db.exec('ALTER TABLE users ADD COLUMN totp_enabled_at TEXT');
+  if (!columns.has('totp_last_step')) db.exec('ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0');
+  db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS recovery_codes_user ON recovery_codes(user_id)');
+}
+
 // F82: a durable fingerprint of what a resident sent (messages and concerns), so the same text sent again within minutes (a retry, a script) is recognised
 // even after a restart. Additive: old rows keep an empty fingerprint and are never matched.
 for (const table of ['messages', 'concerns']) {
