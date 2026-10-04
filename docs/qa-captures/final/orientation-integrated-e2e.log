@@ -1,0 +1,16 @@
+PASS real index: services, places, emergency numbers from the real places table 6 services, 7 places, phones 112
+PASS real index: every action anchor exists in the real portal page 
+PASS real index: whitelisted public columns only (no user, session or contact data) 
+PASS real index: reviewed explanations are attached only to services whose title matches 
+PASS portal CSP forbids inline script and still serves the module (same-origin external script) 
+PASS real portal, guest: the report procedure is found, with its reason AND the required sign-in hint/action (both independently true) 
+PASS real data: the health centre service is found for a vaccination request, official text shown, explanation on demand 
+PASS real data: the emergency path comes first with the number taken from the real places table, and lists the real emergency places 
+PASS real data: the covered market place is found (hours + stop) 
+PASS portal language switch remounts the helper in English without a reload 
+PASS signed in: the destination focuses the real appointments panel 
+PASS signed in: the human fallback leads to the real message form 
+PASS the helper stays mounted after the resident signed in (update, not a second instance) 
+PASS no page error, console error or failing orientation request while using the helper in the real portal 
+INFO portal requests answered 4xx during the run (not orientation): 429 /api/auth/register
+ALL PASS

@@ -1,0 +1,27 @@
+PASS site mairie: inside the playable square and outside every solid footprint 0,-14.6
+PASS site mairie: route from its path node to the entrance avoids solid buildings 
+PASS site hopital-terra-nova: inside the playable square and outside every solid footprint 34.4,-6
+PASS site hopital-terra-nova: route from its path node to the entrance avoids solid buildings 
+PASS site urgences-hopital: inside the playable square and outside every solid footprint 48,-6
+PASS site urgences-hopital: route from its path node to the entrance avoids solid buildings 
+PASS site centre-sante: inside the playable square and outside every solid footprint 33.5,9
+PASS site centre-sante: route from its path node to the entrance avoids solid buildings 
+PASS site secours-quartier-sud: inside the playable square and outside every solid footprint 17.5,31
+PASS site secours-quartier-sud: route from its path node to the entrance avoids solid buildings 
+PASS site point-accueil-habitat: inside the playable square and outside every solid footprint -33.5,-30
+PASS site point-accueil-habitat: route from its path node to the entrance avoids solid buildings 
+PASS site marche-couvert: inside the playable square and outside every solid footprint -36,-2.5
+PASS site marche-couvert: route from its path node to the entrance avoids solid buildings 
+PASS all seven seeded place codes of the API have a site 
+PASS unknown place codes fall back to their stop shelter 
+PASS place labels exist for the 7 API places (name + kind text, aria-hidden layer) 7 labels
+PASS emergency button is visible and labelled (keyboard alternative: G) 
+PASS G starts guidance to the nearest hospital/emergency place with name, distance, kind and stop Guidage vers Hôpital de Terra Novaà environ 40 m · Hôpital · Arrêt Santé · Ouvert 24 h sur 24Appeler le 112Détails dans le téléphone (T)Arrêter le guidageÉchap 
+PASS start is announced once in the polite live region Guidage vers Hôpital de Terra Nova, à environ 40 mètres. Suivez la ligne au sol.
+PASS target is an emergency-kind place hopital-terra-nova 40 m
+PASS walking the drawn route reaches the entrance and the panel says arrived end 34.4,-6.0 in 44 steps; route [[0,1],[0,-3],[7.1,-4.2],[9.9,-4.2],[15,-3],[28,-3],[30.2,-3.9],[32.9,-3.9],[32.7,-4.9],[34.4,-6]] trace [[11.8,-3.7,4],[30.2,-3.7,7]]
+PASS Escape stops guidance and announces it 
+PASS onLocate-style start for another place (marché couvert) shows its name and stop 
+PASS proximity prompt appears near a place (Mairie) with a phone-details action {"prompt":"mairie","ui":"Urgences : où aller ? (G)À proximité : MairieDu lundi au vendredi, de 8 h à 17 hDétails dans le téléphone (T)× Arrêter le guidage","guide":false}
+PASS no page errors / failing requests during the run 
+ALL PASS
